@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react";
-import torre from '../assets/torre_eifield.mp4';
+import torre from '../assets/videos/torre_eifield.mp4';
 
 export default function TorreBackground({ onEnded }) {
   const videoRef = useRef(null);

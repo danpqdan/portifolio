@@ -1,0 +1,18 @@
+/* Styles specific to Home page */
+.home-header h1 { margin-top: 0; }
+
+.home-footer { padding: 28px; display: flex; justify-content: space-evenly; align-items: center; }
+
+.tech-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: #0b1220;
+  color: #fff;
+  padding: 10px 14px;
+  border-radius: 8px;
+  text-decoration: none;
+  font-weight: 700;
+}
+
+.tech-btn svg { width: 28px; height: 28px; border-radius: 6px; }
