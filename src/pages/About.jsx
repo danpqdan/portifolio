@@ -5,6 +5,7 @@ import { SiSpring, SiPython, SiDjango, SiReact } from 'react-icons/si';
 import '../styles/cards.css';
 import '../styles/about.css';
 import analytics from '../lib/analyticsCache';
+import { querySums } from '../lib/useAnalyticsQuery';
 import { useEffect, useRef } from 'react';
 
 export default function About() {
@@ -99,8 +100,65 @@ export default function About() {
           </div>
 
           <div className="card-actions">
-            <button onClick={() => { analytics.increment('clicks_info'); analytics.increment('clicks_geral'); window.location.reload(); }} className="primary-btn">Visualizar estatistica</button>
-            <button onClick={() => { analytics.recordEvent('reiniciar_projeto'); window.location.reload(); }} className="primary-btn">reiniciar projeto</button>
+            <button
+              onClick={async () => {
+                // increment counters
+                analytics.increment('clicks_info');
+                analytics.increment('clicks_geral');
+
+                  // build summary from snapshot without clearing cache
+                  const snap = analytics.snapshot();
+
+                  // start with timers (snapshot.lastTimers is computed dynamically)
+                  const totals = {};
+                  for (const [page, secs] of Object.entries(snap.lastTimers || {})) {
+                    totals[page] = (totals[page] || 0) + Number(secs || 0);
+                  }
+
+                  // add counters: treat keys as page identifiers when possible
+                  for (const [k, v] of Object.entries(snap.counters || {})) {
+                    // if counter key contains a page-like token (e.g., 'view_about' or 'about_views'), try to map
+                    const parts = k.split(/[_.-]/).filter(Boolean);
+                    const maybePage = parts.length ? parts[parts.length - 1] : k;
+                    const pageKey = maybePage === 'view' ? parts[parts.length - 2] || maybePage : maybePage;
+                    const normalized = pageKey || k;
+                    totals[normalized] = (totals[normalized] || 0) + Number(v || 0);
+                  }
+
+                  // add events: each event counts as 1 unless payload.count provided
+                  for (const e of snap.events || []) {
+                    const name = e.name || 'event';
+                    const cnt = e.payload && typeof e.payload.count === 'number' ? e.payload.count : 1;
+                    // try to map event name to a page token if it contains one (fallback to event name)
+                    const parts = name.split(/[_.-]/).filter(Boolean);
+                    const maybePage = parts.length ? parts[parts.length - 1] : name;
+                    const pageKey = maybePage || name;
+                    totals[pageKey] = (totals[pageKey] || 0) + Number(cnt);
+                  }
+
+                  // print structured table to console for inspection
+                  console.log('Analytics aggregated totals (client snapshot):');
+                  console.table(Object.entries(totals).map(([page, count]) => ({ page, count })));
+
+                  // fetch sums from Influx (server-side aggregation)
+                  try {
+                    const influxMap = await querySums('24h');
+                    const influxArr = Object.entries(influxMap).map(([page, count]) => ({ page, count }));
+                    console.log('Influx summary (SUM(count) GROUP BY page) — last 24h:');
+                    console.table(influxArr);
+                  } catch (err) {
+                    console.warn('Erro ao consultar InfluxDB:', err);
+                  }
+
+                  // return the totals object so it can be inspected by automated tests or devtools
+                  return totals;
+
+              }}
+              className="primary-btn"
+            >
+              Visualizar estatistica
+            </button>
+            <button onClick={() => { analytics.recordEvent('reiniciar_projeto');window.location.reload(); }} className="primary-btn">reiniciar projeto</button>
           </div>
         </div>
       </div>

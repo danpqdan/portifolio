@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import analytics from '../lib/analyticsCache';
 import { createPortal } from 'react-dom';
 
 // Horizontal carousel using translateX; slides have no visible scroll (overflow: hidden)
@@ -95,6 +96,41 @@ export default function SlidesCarousel({ slides }) {
         w.style.transform = `translateX(${-index * 100}vw)`;
         indexRef.current = index;
     }, [index]);
+
+    // start/stop analytics timers based on visible slide
+    const visiblePageRef = useRef(null);
+    useEffect(() => {
+        const slide = slides && slides[index];
+        // derive a stable page key: prefer slide.path or slide.id, normalize it
+        let pageKey = slide && (slide.path || slide.id || `slide_${index}`);
+        if (typeof pageKey === 'string') {
+            // remove query/hash
+            pageKey = pageKey.split(/[?#]/)[0];
+            // strip leading slash
+            if (pageKey.startsWith('/')) pageKey = pageKey.slice(1);
+            // if root (''), treat as 'home'
+            if (!pageKey) pageKey = 'home';
+            // if it's a path with segments, use the last segment (e.g. 'foo/bar' -> 'bar')
+            const parts = pageKey.split('/').filter(Boolean);
+            pageKey = parts.length ? parts[parts.length - 1] : 'home';
+        }
+        const prev = visiblePageRef.current;
+        if (prev && prev !== pageKey) {
+            try { analytics.stopPageTimer(prev); } catch (err) { console.debug('stopPageTimer failed', err); }
+        }
+        if (pageKey) {
+            try { analytics.startPageTimer(pageKey); } catch (err) { console.debug('startPageTimer failed', err); }
+        }
+        visiblePageRef.current = pageKey;
+
+        return () => {
+            // on unmount stop the currently running timer
+            const cur = visiblePageRef.current;
+            if (cur) {
+                try { analytics.stopPageTimer(cur); } catch (err) { console.debug('stopPageTimer failed', err); }
+            }
+        };
+    }, [index, slides]);
 
     // keyboard navigation (left/right) and focus management
     useEffect(() => {
