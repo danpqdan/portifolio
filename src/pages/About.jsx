@@ -141,17 +141,21 @@ export default function About() {
                   console.table(Object.entries(totals).map(([page, count]) => ({ page, count })));
 
                   // fetch sums from Influx (server-side aggregation)
+                  let influxResp = { events: {}, timers: {} };
                   try {
-                    const influxMap = await querySums('24h');
-                    const influxArr = Object.entries(influxMap).map(([page, count]) => ({ page, count }));
-                    console.log('Influx summary (SUM(count) GROUP BY page) — last 24h:');
-                    console.table(influxArr);
+                    influxResp = await querySums('24h');
+                    const influxEventsArr = Object.entries(influxResp.events || {}).map(([page, count]) => ({ page, count }));
+                    const influxTimersArr = Object.entries(influxResp.timers || {}).map(([page, val]) => ({ page, seconds: val }));
+                    console.log('Influx events summary (SUM(count) GROUP BY page) — last 24h:');
+                    console.table(influxEventsArr);
+                    console.log('Influx timers snapshot (LAST(seconds) GROUP BY page) — last 24h:');
+                    console.table(influxTimersArr);
                   } catch (err) {
                     console.warn('Erro ao consultar InfluxDB:', err);
                   }
 
-                  // return the totals object so it can be inspected by automated tests or devtools
-                  return totals;
+                  // return both client totals and influx totals for callers/tests
+                  return { totals, influx: influxResp };
 
               }}
               className="primary-btn"
