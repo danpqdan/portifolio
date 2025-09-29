@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import rotacao from './assets/videos/earth_light.mp4';
 import entrada from './assets/videos/entrada.mp4';
 import TorreBackground from './components/TorreBackground';
+import GrafanaPanel from './components/GrafanaPanel';
 
 export default function BackGround() {
     const videoRef = useRef(null);
@@ -11,6 +12,8 @@ export default function BackGround() {
     const [blackFadeOut, setBlackFadeOut] = useState(false);
     const [showTorre, setShowTorre] = useState(false);
     const [blackTimeout, setBlackTimeout] = useState(null);
+    const [showGrafanaOverlay, setShowGrafanaOverlay] = useState(false);
+    const [grafanaDetail, setGrafanaDetail] = useState(null);
 
     useEffect(() => {
         const video = videoRef.current;
@@ -26,6 +29,29 @@ export default function BackGround() {
         return () => {
             video.removeEventListener('loadedmetadata', onLoadedMetadata);
         };
+    }, []);
+
+    // listen for grafana:show events
+    useEffect(() => {
+        const onGrafanaShow = (ev) => {
+            setGrafanaDetail(ev && ev.detail ? ev.detail : null);
+            setShowGrafanaOverlay(true);
+        };
+        window.addEventListener('grafana:show', onGrafanaShow);
+        // also check sessionStorage on mount so a reload can trigger the overlay
+        try {
+            const raw = sessionStorage.getItem('grafana_show');
+            if (raw) {
+                const parsed = JSON.parse(raw);
+                setGrafanaDetail(parsed || null);
+                setShowGrafanaOverlay(true);
+                sessionStorage.removeItem('grafana_show');
+            }
+        } catch {
+            // ignore
+        }
+
+        return () => window.removeEventListener('grafana:show', onGrafanaShow);
     }, []);
 
     // cleanup black timeout if component unmounts
@@ -159,6 +185,26 @@ export default function BackGround() {
                         transition: 'opacity 1s ease'
                     }}
                 />
+            )}
+
+            {/* Grafana overlay */}
+            {showGrafanaOverlay && (
+                <div style={{ position: 'fixed', inset: 0, zIndex: 20000, background: 'rgba(0,0,0,0.75)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <div style={{ position: 'relative', width: '90%', maxWidth: 1200, height: '80%', background: '#fff', borderRadius: 8, overflow: 'hidden' }}>
+                        <button onClick={() => setShowGrafanaOverlay(false)} style={{ position: 'absolute', right: 8, top: 8, zIndex: 20100, padding: '6px 10px' }}>Fechar</button>
+                        {
+                            grafanaDetail && grafanaDetail.influx && grafanaDetail.influx.gotoUrl
+                                ? <GrafanaPanel fullSrc={grafanaDetail.influx.gotoUrl} />
+                                : <GrafanaPanel
+                                    dashboardUid={grafanaDetail && grafanaDetail.influx && grafanaDetail.influx.dashboardUid ? grafanaDetail.influx.dashboardUid : 'adtkx5l'}
+                                    dashboardSlug={grafanaDetail && grafanaDetail.influx && grafanaDetail.influx.dashboardSlug ? grafanaDetail.influx.dashboardSlug : 'influx'}
+                                    panelId={grafanaDetail && grafanaDetail.influx && grafanaDetail.influx.panelId ? grafanaDetail.influx.panelId : 1}
+                                    from="now-24h"
+                                    to="now"
+                                />
+                        }
+                    </div>
+                </div>
             )}
 
             {showTorre && (

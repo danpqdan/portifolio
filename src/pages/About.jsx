@@ -154,7 +154,28 @@ export default function About() {
                     console.warn('Erro ao consultar InfluxDB:', err);
                   }
 
-                  // return both client totals and influx totals for callers/tests
+                  // persist request across reload and then reload page so BackGround can show panel
+                  try {
+                    sessionStorage.setItem('grafana_show', JSON.stringify({ totals, influx: influxResp }));
+                  } catch {
+                    // ignore
+                  }
+
+                  // optionally dispatch immediately (if overlay listener present)
+                  try {
+                    window.dispatchEvent(new CustomEvent('grafana:show', { detail: { totals, influx: influxResp } }));
+                  } catch {
+                    // ignore
+                  }
+
+                  // reload page so the panel is shown in the BackGround component
+                  try {
+                    window.location.reload();
+                  } catch {
+                    // ignore
+                  }
+
+                  // return both client totals and influx totals for callers/tests (may not be observed due to reload)
                   return { totals, influx: influxResp };
 
               }}

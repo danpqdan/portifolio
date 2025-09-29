@@ -1,0 +1,41 @@
+{
+  "dashboard": {
+    "id": null,
+    "uid": "abcd1234",
+    "title": "Frontend Metrics",
+    "timezone": "browser",
+    "schemaVersion": 27,
+    "version": 1,
+    "panels": [
+      {
+        "type": "table",
+        "title": "Events (SUM count by page)",
+        "id": 1,
+        "datasource": "DS_FRONTEND_METRICS_INFLUX",
+        "targets": [
+          {
+            "refId": "A",
+            "policy": "default",
+            "query": "SELECT SUM(\"count\") FROM \"frontend_events\" WHERE $timeFilter GROUP BY \"page\" fill(0)"
+          }
+        ],
+        "gridPos": { "h": 6, "w": 12, "x": 0, "y": 0 }
+      },
+      {
+        "type": "table",
+        "title": "Timers (LAST seconds by page)",
+        "id": 2,
+        "datasource": "DS_FRONTEND_METRICS_INFLUX",
+        "targets": [
+          {
+            "refId": "A",
+            "policy": "default",
+            "query": "SELECT LAST(\"seconds\") FROM \"lastTimers\" WHERE $timeFilter GROUP BY \"page\""
+          }
+        ],
+        "gridPos": { "h": 6, "w": 12, "x": 12, "y": 0 }
+      }
+    ]
+  },
+  "overwrite": false
+}
