@@ -9,15 +9,11 @@ export default function SlidesCarousel({ slides }) {
     const containerRef = useRef(null);
     const lastTimeRef = useRef(0);
     const indexRef = useRef(index);
-    // Carousel is now a route-free SPA controller: it manages its own index internally
-
-    // sync on mount: start at first slide (route-free behavior)
     useEffect(() => {
         indexRef.current = 0;
         setIndex(0);
     }, [slides]);
 
-    // ensure start at first slide when 'torre:started' fires (keeps behavior consistent)
     useEffect(() => {
         const onTorreStarted = () => {
             indexRef.current = 0;
@@ -27,7 +23,6 @@ export default function SlidesCarousel({ slides }) {
         return () => window.removeEventListener('torre:started', onTorreStarted);
     }, [slides]);
 
-    // wheel handler with timestamp throttle -> map vertical wheel to horizontal slides
     useEffect(() => {
         const el = containerRef.current;
         if (!el) return;

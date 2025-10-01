@@ -78,20 +78,17 @@ export default function AnalyticsManager({ children }) {
         const { counters, events, lastTimers } = snap;
         const lines = [];
         let nowSec = String(Math.floor(Date.now() / 1000));
-        // send current counters (best-effort: send full current values as delta by comparing to in-memory lastSentCounters)
         for (const [k, v] of Object.entries(counters)) {
           const last = lastSentCounters[k] || 0;
           const delta = v - last;
           if (delta > 0) lines.push(`frontend_events,page=${k} count=${delta} ${nowSec}`);
         }
 
-        // events: send only new events since lastSentEventsIndex
         if (events && events.length > lastSentEventsIndex) {
           let newEvents = events.slice(lastSentEventsIndex);
           for (let e of newEvents) {
             let name = e.name;
             let cnt = e.payload && typeof e.payload.count === 'number' ? e.payload.count : 1;
-            // normalizar ts conforme acima
             let tsSec;
             if (e.ts) {
               if (e.ts > 1e12) tsSec = String(Math.floor(e.ts / 1000));
