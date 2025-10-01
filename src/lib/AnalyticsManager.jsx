@@ -1,56 +1,59 @@
 import React, { useEffect } from 'react';
 import analyticsCache from './analyticsCache';
 import { useAnalytics } from './analyticsContext';
-import { INFLUX_URL } from './useAnalyticsSender';
+import { INFLUX_URL, INFLUX_TOKEN } from './useAnalyticsSender';
 
-// flush interval in ms
+// intervalo de envio (flush) em ms
 const FLUSH_INTERVAL = 5000;
 
 export default function AnalyticsManager({ children }) {
-  const { sendBatch } = useAnalytics();
+  let { sendBatch } = useAnalytics();
 
   useEffect(() => {
-    let mounted = true;
+  let mounted = true;
 
-  // keep last sent state in memory so we send only deltas and don't clear cache
-  // Initialize from current snapshot so persisted values are not resent on first flush
-  const initial = analyticsCache.snapshot();
-  const lastSentCounters = Object.assign({}, initial.counters || {});
-  // events: assume we've already 'sent' existing events up to current length
+  // snapshot inicial para evitar reenvio de valores persistidos
+  let initial = analyticsCache.snapshot();
+  let lastSentCounters = Object.assign({}, initial.counters || {});
   let lastSentEventsIndex = (initial.events && initial.events.length) || 0;
 
-    const flush = async () => {
+    let flush = async () => {
       try {
-        const snap = analyticsCache.snapshot();
-  const { counters, events, lastTimers } = snap;
+        let snap = analyticsCache.snapshot();
+        let { counters, events, lastTimers } = snap;
 
-        const lines = [];
+        let lines = [];
 
-        // counters: send deltas (current - lastSent)
-        for (const [k, v] of Object.entries(counters)) {
-          const last = lastSentCounters[k] || 0;
-          const delta = v - last;
+        let nowSec = String(Math.floor(Date.now() / 1000));
+        for (let [k, v] of Object.entries(counters)) {
+          let last = lastSentCounters[k] || 0;
+          let delta = v - last;
           if (delta > 0) {
-            lines.push(`frontend_events,page=${k} count=${delta}`);
+            lines.push(`frontend_events,page=${k} count=${delta} ${nowSec}`);
             lastSentCounters[k] = v;
           }
         }
 
-        // events: send only new events since lastSentEventsIndex
         if (events && events.length > lastSentEventsIndex) {
-          const newEvents = events.slice(lastSentEventsIndex);
-          for (const e of newEvents) {
-            const name = e.name;
-            const cnt = e.payload && typeof e.payload.count === 'number' ? e.payload.count : 1;
-            lines.push(`frontend_events,page=${name} count=${cnt}`);
+          let newEvents = events.slice(lastSentEventsIndex);
+          for (let e of newEvents) {
+            let name = e.name;
+            let cnt = e.payload && typeof e.payload.count === 'number' ? e.payload.count : 1;
+            let tsSec;
+            if (e.ts) {
+              if (e.ts > 1e12) tsSec = String(Math.floor(e.ts / 1000));
+              else tsSec = String(Math.floor(e.ts));
+            } else {
+              tsSec = nowSec;
+            }
+            lines.push(`frontend_events,page=${name} count=${cnt} ${tsSec}`);
           }
           lastSentEventsIndex = events.length;
         }
 
-        // include lastTimers (current elapsed seconds per page)
         if (lastTimers) {
-          for (const [p, sec] of Object.entries(lastTimers)) {
-            // only send if numeric
+          for (let [p, sec] of Object.entries(lastTimers)) {
+            // enviar apenas se for numérico
             if (typeof sec === 'number') lines.push(`lastTimers,page=${p} seconds=${sec}`);
           }
         }
@@ -63,54 +66,62 @@ export default function AnalyticsManager({ children }) {
       }
     };
 
-    const interval = setInterval(() => {
+    let interval = setInterval(() => {
       if (!mounted) return;
       flush();
     }, FLUSH_INTERVAL);
 
-    // also flush on unload
-    const onBeforeUnload = () => {
+    // também enviar ao descarregar a página
+    let onBeforeUnload = () => {
       try {
         const snap = analyticsCache.snapshot();
-  const { counters, events, lastTimers } = snap;
+        const { counters, events, lastTimers } = snap;
         const lines = [];
-
+        let nowSec = String(Math.floor(Date.now() / 1000));
         // send current counters (best-effort: send full current values as delta by comparing to in-memory lastSentCounters)
         for (const [k, v] of Object.entries(counters)) {
           const last = lastSentCounters[k] || 0;
           const delta = v - last;
-          if (delta > 0) lines.push(`frontend_events,page=${k} count=${delta}`);
+          if (delta > 0) lines.push(`frontend_events,page=${k} count=${delta} ${nowSec}`);
         }
 
         // events: send only new events since lastSentEventsIndex
         if (events && events.length > lastSentEventsIndex) {
-          const newEvents = events.slice(lastSentEventsIndex);
-          for (const e of newEvents) {
-            const name = e.name;
-            const cnt = e.payload && typeof e.payload.count === 'number' ? e.payload.count : 1;
-            lines.push(`frontend_events,page=${name} count=${cnt}`);
+          let newEvents = events.slice(lastSentEventsIndex);
+          for (let e of newEvents) {
+            let name = e.name;
+            let cnt = e.payload && typeof e.payload.count === 'number' ? e.payload.count : 1;
+            // normalizar ts conforme acima
+            let tsSec;
+            if (e.ts) {
+              if (e.ts > 1e12) tsSec = String(Math.floor(e.ts / 1000));
+              else tsSec = String(Math.floor(e.ts));
+            } else {
+              tsSec = nowSec;
+            }
+            lines.push(`frontend_events,page=${name} count=${cnt} ${tsSec}`);
           }
         }
 
-        // include lastTimers as best-effort
+        // incluir lastTimers como tentativa final
         if (lastTimers) {
-          for (const [p, sec] of Object.entries(lastTimers)) {
+          for (let [p, sec] of Object.entries(lastTimers)) {
             if (typeof sec === 'number') lines.push(`lastTimers,page=${p} seconds=${sec}`);
           }
         }
 
         if (!lines.length) return;
         const payload = lines.join('\n');
-        if (navigator.sendBeacon) {
-          try {
-            navigator.sendBeacon(INFLUX_URL, payload);
-          } catch (e) {
-            console.warn('navigator.sendBeacon failed, falling back to fetch keepalive', e);
-            fetch(INFLUX_URL, { method: 'POST', headers: { 'Content-Type': 'text/plain' }, body: payload, keepalive: true }).catch(() => {});
-          }
-        } else {
-          fetch(INFLUX_URL, { method: 'POST', headers: { 'Content-Type': 'text/plain' }, body: payload, keepalive: true }).catch(() => {});
-        }
+        // Best-effort: use fetch keepalive with Authorization header (use Token for v2 API)
+        fetch(INFLUX_URL, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'text/plain',
+            'Authorization': `Token ${INFLUX_TOKEN}`
+          },
+          body: payload,
+          keepalive: true
+        }).catch(() => { });
       } catch (err) {
         console.warn('beforeunload send failed', err);
       }
