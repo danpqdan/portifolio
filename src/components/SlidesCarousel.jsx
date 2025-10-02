@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import analytics from '../lib/analyticsCache';
+
 import { createPortal } from 'react-dom';
 
 // Horizontal carousel using translateX; slides have no visible scroll (overflow: hidden)
@@ -109,22 +109,8 @@ export default function SlidesCarousel({ slides }) {
             const parts = pageKey.split('/').filter(Boolean);
             pageKey = parts.length ? parts[parts.length - 1] : 'home';
         }
-        const prev = visiblePageRef.current;
-        if (prev && prev !== pageKey) {
-            try { analytics.stopPageTimer(prev); } catch (err) { console.debug('stopPageTimer failed', err); }
-        }
-        if (pageKey) {
-            try { analytics.startPageTimer(pageKey); } catch (err) { console.debug('startPageTimer failed', err); }
-        }
         visiblePageRef.current = pageKey;
 
-        return () => {
-            // on unmount stop the currently running timer
-            const cur = visiblePageRef.current;
-            if (cur) {
-                try { analytics.stopPageTimer(cur); } catch (err) { console.debug('stopPageTimer failed', err); }
-            }
-        };
     }, [index, slides]);
 
     // keyboard navigation (left/right) and focus management
