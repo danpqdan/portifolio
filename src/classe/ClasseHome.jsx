@@ -1,12 +1,35 @@
 import { HeatmapUtils } from '../utils/HeatmapUtils';
 
-
 export default class ClasseHome {
     constructor(root) {
         this.root = root;
         this.executando = false;
-        this.heatmap = new HeatmapUtils(root, '.tech-btn, .card-header, .card-content');
+
+        // Definindo seletores específicos usando os IDs padronizados
+        const seletoresInteresse = [
+            '#home_header',
+            '#home_content',
+            '#home_footer',
+            '#home_title',
+            '.tech-btn',  // Mantém classes quando fizer sentido
+            '#home_btn_grafana',
+            '#home_btn_react',
+            '#home_btn_redux',
+            '#home_btn_reacticons',
+            '#home_btn_vite'
+        ].join(', ');
+        
+        // Especificar o tipo de página como 'home'
+        this.heatmap = new HeatmapUtils(root, seletoresInteresse, 'home');
         console.info('[ClasseHome] construído', { temRoot: !!root });
+
+        // Mapeia elementos específicos para uso direto
+        this.elementos = {
+            header: root?.querySelector('#home_header'),
+            content: root?.querySelector('#home_content'),
+            footer: root?.querySelector('#home_footer'),
+            techButtons: Array.from(root?.querySelectorAll('.tech-btn') || [])
+        };
     }
 
     iniciar() {
@@ -25,6 +48,6 @@ export default class ClasseHome {
 
         // Parar o HeatmapUtils e registrar os dados coletados
         this.heatmap.parar();
-        console.info('[ClasseHome] heatmap dados', this.heatmap.getDados());
+        console.info('[ClasseHome] heatmap dados', HeatmapUtils.getDadosGlobais());
     }
 }
