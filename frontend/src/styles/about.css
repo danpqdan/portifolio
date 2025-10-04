@@ -1,0 +1,59 @@
+/* Styles specific to About page (moved from inline styles) */
+.about-text-center {
+    text-align: center;
+}
+
+.about-h3-large {
+    margin: 0;
+    font-size: 24px;
+}
+
+.about-meta {
+    margin: 6px 0 0 0;
+    color: #000000ff;
+    font-size: 18px;
+}
+
+.about-info-strong {
+    display: block;
+    margin-bottom: 6px;
+    font-size: 24px;
+}
+
+.about-info-text {
+    color: #000000ff;
+    font-size: 16px;
+}
+
+.about-paragraph {
+    color: #000000ff;
+    line-height: 1.6;
+    margin-top: 6px;
+}
+
+.about-h4-small {
+    margin-bottom: 8px;
+}
+
+.skill-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 10px;
+    background: white;
+    border: 1px solid rgba(15, 23, 42, 0.04);
+    border-radius: 999px;
+    box-shadow: rgb(0 0 0 / 33%) 0px 8px 24px;
+    color: #0f172a;
+    font-weight: 600;
+}
+
+.skill-badge .skill-icon {
+    display: inline-flex;
+    align-items: center;
+    font-size: 18px;
+}
+
+.skill-badge .skill-label {
+    font-size: 13px;
+}
