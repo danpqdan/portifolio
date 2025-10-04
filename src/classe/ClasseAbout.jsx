@@ -1,32 +1,52 @@
-// Simple class responsible for About page lifecycle
+import { HeatmapUtils } from '../utils/HeatmapUtils.js';
+
 export default class ClasseAbout {
     constructor(root) {
         this.root = root;
-        this.running = false;
-        this._interval = null;
+        this.executando = false;
+        
+        // Usando os IDs padronizados para seletores específicos
+        const seletoresInteresse = [
+            '#about_title', 
+            '#about_paragraph1', 
+            '#about_paragraph2', 
+            '#about_paragraph3',
+            '#about_skill_badges',
+            '.skill-badge',  // Mantém classe para compatibilidade
+            '#about_avatar',
+            '#about_contact_list a',  // Seletor combinado
+            '#about_btn_stats',
+            '#about_btn_restart'
+        ].join(', ');
+        
+        // Especificar o tipo de página como 'about'
+        this.heatmap = new HeatmapUtils(root, seletoresInteresse, 'about');
+        console.info('[ClasseAbout] construído', { temRoot: !!root });
+        
+        // Mapeia elementos de interesse específicos
+        this.elementos = {
+            avatar: root?.querySelector('#about_avatar'),
+            skills: Array.from(root?.querySelectorAll('.skill-badge') || []),
+            paragrafos: Array.from(root?.querySelectorAll('.about-paragraph') || []),
+            botoes: {
+                stats: root?.querySelector('#about_btn_stats'),
+                restart: root?.querySelector('#about_btn_restart')
+            }
+        };
     }
 
     start() {
-        if (this.running) return;
-        this.running = true;
-        console.info('[ClasseAbout] started');
-        if (this.root) {
-            this._interval = setInterval(() => {
-                try {
-                    this.root.dataset.classeAboutTs = Date.now();
-                } catch (err) { console.debug('[ClasseAbout] write ts failed', err); }
-            }, 1000);
-        }
+        if (this.executando) return;
+        this.executando = true;
+        console.info('[ClasseAbout] iniciado');
+        this.heatmap.iniciar();
     }
 
     stop() {
-        if (!this.running) return;
-        this.running = false;
-        console.info('[ClasseAbout] stopped');
-        if (this._interval) {
-            clearInterval(this._interval);
-            this._interval = null;
-        }
+        if (!this.executando) return;
+        this.executando = false;
+        console.info('[ClasseAbout] parado');
+        this.heatmap.parar();
+        console.info('[ClasseAbout] heatmap dados', HeatmapUtils.getDadosGlobais());
     }
 }
-

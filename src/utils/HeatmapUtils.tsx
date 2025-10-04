@@ -1,5 +1,6 @@
 import { v4 as uuidv4 } from 'uuid';
 
+// Interfaces existentes
 export interface Clique {
     x: number;
     y: number;
@@ -28,25 +29,116 @@ export interface ElementoExposicao {
     [elementId: string]: number; // tempo visível em segundos
 }
 
-export interface HeatmapDados {
-    id_registro: string;
-    visualizacoes: number;
-    segundos: number;
-    timestamp_inicial: number | null; // ms
+// Estrutura de dados para cada página específica
+export interface PaginaDados {
     cliques: Clique[];
     toques: Toque[];
     scrolls: ScrollData[];
     mouseMoves: Clique[];
     hover: HoverData;
     elementosExposicao: ElementoExposicao;
+    visualizacoes: number;
+    segundos: number;
+    timestamp_inicial: number | null;
+    timestamp_final: number | null;
+}
+
+// Nova estrutura que organiza dados por página
+export interface HeatmapDados {
+    id_registro: string;
+    timestamp_inicial: number | null; // timestamp da primeira página vista
+    timestamp_final: number | null;   // timestamp de quando o rastreamento parou
+    home: PaginaDados[];
+    about: PaginaDados[];
+    projects: PaginaDados[];
+}
+
+// Singleton para armazenar estado global entre instâncias
+class HeatmapRegistryGlobal {
+    private static instance: HeatmapRegistryGlobal;
+    private _id_registro: string;
+    private _timestamp_inicial: number | null = null;
+    private _timestamp_final: number | null = null;
+    private _paginas: { [key: string]: PaginaDados[] } = {
+        home: [],
+        about: [],
+        projects: []
+    };
+
+    private constructor() {
+        this._id_registro = uuidv4();
+    }
+
+    public static getInstance(): HeatmapRegistryGlobal {
+        if (!HeatmapRegistryGlobal.instance) {
+            HeatmapRegistryGlobal.instance = new HeatmapRegistryGlobal();
+        }
+        return HeatmapRegistryGlobal.instance;
+    }
+
+    public getIdRegistro(): string {
+        return this._id_registro;
+    }
+
+    public getTimestampInicial(): number | null {
+        return this._timestamp_inicial;
+    }
+
+    public setTimestampInicial(timestamp: number): void {
+        if (this._timestamp_inicial === null) {
+            this._timestamp_inicial = timestamp;
+        }
+    }
+
+    public setTimestampFinal(timestamp: number): void {
+        this._timestamp_final = timestamp;
+    }
+
+    public getTimestampFinal(): number | null {
+        return this._timestamp_final;
+    }
+
+    public addPaginaDados(tipo: 'home' | 'about' | 'projects', dados: PaginaDados): void {
+        if (!this._paginas[tipo]) {
+            this._paginas[tipo] = [];
+        }
+        this._paginas[tipo].push(dados);
+    }
+
+    public getPaginasDados(): { [key: string]: PaginaDados[] } {
+        return this._paginas;
+    }
+
+    public resetarRegistro(): void {
+        this._id_registro = uuidv4();
+        this._timestamp_inicial = null;
+        this._timestamp_final = null;
+        this._paginas = {
+            home: [],
+            about: [],
+            projects: []
+        };
+    }
+
+    public getDados(): HeatmapDados {
+        return {
+            id_registro: this._id_registro,
+            timestamp_inicial: this._timestamp_inicial,
+            timestamp_final: this._timestamp_final,
+            home: this._paginas.home,
+            about: this._paginas.about,
+            projects: this._paginas.projects
+        };
+    }
 }
 
 export class HeatmapUtils {
     root: HTMLElement;
-    private _id_registro: string;
+    private _paginaTipo: 'home' | 'about' | 'projects';
     private _visualizacoes: number;
     private _segundos: number;
     private _timestamp_inicial: number | null;
+    private _timestamp_final: number | null;
     private _intervalo: ReturnType<typeof setInterval> | null;
 
     private _cliques: Clique[];
@@ -59,12 +151,16 @@ export class HeatmapUtils {
     private _observer: IntersectionObserver | null;
     private hoverSelector: string | null;
 
-    constructor(root: HTMLElement = document.body, hoverSelector: string | null = null) {
+    private _registry: HeatmapRegistryGlobal;
+
+    constructor(root: HTMLElement = document.body, hoverSelector: string | null = null, paginaTipo: 'home' | 'about' | 'projects' = 'home') {
         this.root = root;
-        this._id_registro = uuidv4();
+        this._paginaTipo = paginaTipo;
+        this._registry = HeatmapRegistryGlobal.getInstance();
         this._visualizacoes = 0;
         this._segundos = 0;
         this._timestamp_inicial = null;
+        this._timestamp_final = null;
         this._intervalo = null;
 
         this._cliques = [];
@@ -82,11 +178,18 @@ export class HeatmapUtils {
         this._onMouseMove = this._onMouseMove.bind(this);
         this._onTouchMove = this._onTouchMove.bind(this);
         this._onIntersection = this._onIntersection.bind(this);
+
+        console.debug(`[HeatmapUtils] Construído para página ${paginaTipo}`, {
+            id_registro: this._registry.getIdRegistro()
+        });
     }
 
     iniciar() {
         this._visualizacoes += 1;
         this._timestamp_inicial = Date.now();
+
+        // Registrar o timestamp inicial global se for o primeiro
+        this._registry.setTimestampInicial(this._timestamp_inicial);
 
         if (this._intervalo) clearInterval(this._intervalo);
         this._intervalo = setInterval(() => { this._segundos += 1; }, 1000);
@@ -104,13 +207,60 @@ export class HeatmapUtils {
             });
         }
 
-        this._observer = new IntersectionObserver(this._onIntersection, { threshold: [0, 0.25, 0.5, 0.75, 1] });
-        const elementos = Array.from(this.root.querySelectorAll<HTMLElement>('*'));
-        elementos.forEach(el => this._observer?.observe(el));
+        // Inicializar o observer com novas opções
+        this._observer = new IntersectionObserver(this._onIntersection, {
+            threshold: [0, 0.25, 0.5, 0.75, 1],
+            // Adicionar root como viewport de referência
+            root: null, // viewport do browser
+            rootMargin: '0px' // sem margem adicional
+        });
+
+        // Observar elementos importantes (filtrados para reduzir ruído)
+        const elementos = Array.from(this.root.querySelectorAll<HTMLElement>('h1, h2, h3, h4, h5, p, button, a, img, .card-carousel, .skill-badge, .tech-btn, [id^="home_"], [id^="about_"], [id^="projects_"]'));
+        elementos.forEach(el => {
+            this._observer?.observe(el);
+
+            const rect = el.getBoundingClientRect();
+            const isInViewport = (
+                rect.top >= 0 &&
+                rect.left >= 0 &&
+                rect.bottom <= (window.innerHeight || document.documentElement.clientHeight) &&
+                rect.right <= (window.innerWidth || document.documentElement.clientWidth)
+            );
+
+            const id = el.id || el.className || el.tagName;
+            if (!this._elementosVisiveis[id]) {
+                this._elementosVisiveis[id] = { tempo: 0, visivel: false, inicio: 0 };
+            }
+
+            if (isInViewport) {
+                this._elementosVisiveis[id].visivel = true;
+                this._elementosVisiveis[id].inicio = Date.now();
+                console.debug(`[HeatmapUtils:${this._paginaTipo}] Elemento já visível na inicialização: ${id}`);
+            }
+        });
     }
 
     parar() {
-        if (this._intervalo) { clearInterval(this._intervalo); this._intervalo = null; }
+        const now = Date.now();
+        this._timestamp_final = now;
+
+        // Atualizar o timestamp final global
+        this._registry.setTimestampFinal(now);
+
+        // Finalizar o tempo para todos os elementos que ainda estão visíveis
+        Object.keys(this._elementosVisiveis).forEach(id => {
+            const elData = this._elementosVisiveis[id];
+            if (elData.visivel) {
+                elData.tempo += now - elData.inicio;
+                elData.visivel = false;
+            }
+        });
+
+        if (this._intervalo) {
+            clearInterval(this._intervalo);
+            this._intervalo = null;
+        }
 
         this.root.removeEventListener('click', this._onClick);
         this.root.removeEventListener('scroll', this._onScroll);
@@ -126,6 +276,9 @@ export class HeatmapUtils {
         }
 
         if (this._observer) this._observer.disconnect();
+
+        // Armazenar os dados desta sessão no registro global
+        this._registry.addPaginaDados(this._paginaTipo, this.getPaginaDados());
     }
 
     private _onClick(e: MouseEvent) {
@@ -182,34 +335,57 @@ export class HeatmapUtils {
     private _onIntersection(entries: IntersectionObserverEntry[]) {
         const now = Date.now();
         entries.forEach(entry => {
-            const id = entry.target.id || entry.target.className || entry.target.tagName;
-            if (!this._elementosVisiveis[id]) this._elementosVisiveis[id] = { tempo: 0, visivel: false, inicio: 0 };
+            const el = entry.target as HTMLElement;
+            const id = el.id || el.className || el.tagName;
+
+            if (!this._elementosVisiveis[id]) {
+                this._elementosVisiveis[id] = { tempo: 0, visivel: false, inicio: 0 };
+            }
 
             const elData = this._elementosVisiveis[id];
-            if (entry.isIntersecting) {
+
+            // Verifica se mudou de estado (entrou ou saiu da viewport)
+            if (entry.isIntersecting && !elData.visivel) {
+                // Elemento entrou na viewport
                 elData.visivel = true;
                 elData.inicio = now;
-            } else if (elData.visivel) {
+            } else if (!entry.isIntersecting && elData.visivel) {
+                // Elemento saiu da viewport
                 elData.tempo += now - elData.inicio;
                 elData.visivel = false;
             }
         });
     }
 
-    getDados(): HeatmapDados {
+    // Retorna apenas os dados desta sessão da página
+    private getPaginaDados(): PaginaDados {
+        const now = Date.now();
         const elementosExposicao: ElementoExposicao = {};
+
+        // Atualizar o tempo para elementos ainda visíveis
         Object.keys(this._elementosVisiveis).forEach(key => {
-            elementosExposicao[key] = Math.round(this._elementosVisiveis[key].tempo / 1000);
+            const elData = this._elementosVisiveis[key];
+            let tempoTotal = elData.tempo;
+
+            // Se ainda estiver visível, adicionar o tempo desde o início até agora
+            if (elData.visivel) {
+                tempoTotal += (now - elData.inicio);
+            }
+
+            // Converter para segundos
+            elementosExposicao[key] = Math.round(tempoTotal / 1000);
         });
 
         const hoverSegundos: HoverData = {};
-        Object.keys(this._hovers).forEach(key => { hoverSegundos[key] = Math.round(this._hovers[key] / 1000); });
+        Object.keys(this._hovers).forEach(key => {
+            hoverSegundos[key] = Math.round(this._hovers[key] / 1000);
+        });
 
         return {
-            id_registro: this._id_registro,
             visualizacoes: this._visualizacoes,
             segundos: this._segundos,
             timestamp_inicial: this._timestamp_inicial,
+            timestamp_final: this._timestamp_final,
             cliques: this._cliques,
             toques: this._toques,
             scrolls: this._scrolls,
@@ -217,5 +393,20 @@ export class HeatmapUtils {
             hover: hoverSegundos,
             elementosExposicao,
         };
+    }
+
+    // Retorna os dados globais de todas as páginas
+    getDados(): HeatmapDados {
+        return this._registry.getDados();
+    }
+
+    // Método para exportar todos os dados coletados em todas as páginas
+    static getDadosGlobais(): HeatmapDados {
+        return HeatmapRegistryGlobal.getInstance().getDados();
+    }
+
+    // Método para resetar o rastreamento global
+    static resetarRegistro(): void {
+        HeatmapRegistryGlobal.getInstance().resetarRegistro();
     }
 }
