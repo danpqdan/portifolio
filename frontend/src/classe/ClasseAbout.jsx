@@ -1,52 +1,88 @@
-import { HeatmapUtils } from '../utils/HeatmapUtils.js';
+import { HeatmapUtils } from '../utils/HeatmapUtils';
+import WebSocketService from '../utils/WebSocketService.tsx';
+import { DEBUG_ENABLED } from '../config.js';
 
 export default class ClasseAbout {
     constructor(root) {
         this.root = root;
         this.executando = false;
-        
-        // Usando os IDs padronizados para seletores específicos
+
+        // Definindo seletores específicos para About
         const seletoresInteresse = [
-            '#about_title', 
-            '#about_paragraph1', 
-            '#about_paragraph2', 
-            '#about_paragraph3',
-            '#about_skill_badges',
-            '.skill-badge',  // Mantém classe para compatibilidade
-            '#about_avatar',
-            '#about_contact_list a',  // Seletor combinado
-            '#about_btn_stats',
-            '#about_btn_restart'
+            '#about_header',
+            '#about_content',
+            '#about_footer',
+            '.skill-badge',
+            '#about_contact_list a'
         ].join(', ');
-        
-        // Especificar o tipo de página como 'about'
+
         this.heatmap = new HeatmapUtils(root, seletoresInteresse, 'about');
-        console.info('[ClasseAbout] construído', { temRoot: !!root });
-        
-        // Mapeia elementos de interesse específicos
-        this.elementos = {
-            avatar: root?.querySelector('#about_avatar'),
-            skills: Array.from(root?.querySelectorAll('.skill-badge') || []),
-            paragrafos: Array.from(root?.querySelectorAll('.about-paragraph') || []),
-            botoes: {
-                stats: root?.querySelector('#about_btn_stats'),
-                restart: root?.querySelector('#about_btn_restart')
-            }
-        };
+
+        this.intervaloEnvio = null;
     }
 
+    // Renomeando para padronizar com a chamada feita no SlidesCarousel.jsx
     start() {
-        if (this.executando) return;
-        this.executando = true;
-        console.info('[ClasseAbout] iniciado');
-        this.heatmap.iniciar();
+        return this.iniciar();
     }
 
     stop() {
+        return this.parar();
+    }
+
+    iniciar() {
+        if (this.executando) return;
+        this.executando = true;
+
+        this.heatmap.iniciar();
+        WebSocketService.connect();
+
+        this.intervaloEnvio = setInterval(() => {
+            if (this.executando) {
+                this.enviarDados();
+            }
+        }, 30000);
+    }
+
+    parar() {
         if (!this.executando) return;
         this.executando = false;
-        console.info('[ClasseAbout] parado');
+        if (this.intervaloEnvio) {
+            clearInterval(this.intervaloEnvio);
+            this.intervaloEnvio = null;
+        }
+
         this.heatmap.parar();
-        console.info('[ClasseAbout] heatmap dados', HeatmapUtils.getDadosGlobais());
+        this.enviarDados();
+    }
+
+    enviarDados() {
+        if (!this.heatmap) return false;
+
+        const dados = this.heatmap.getDados();
+
+        WebSocketService.sendAnalyticsData(dados);
+        return true;
+    }
+
+    getWebSocketStatus() {
+        return WebSocketService.getConnectionStatus();
+    }
+
+    criarControles() {
+        return {
+            enviarDados: this.enviarDados.bind(this),
+            iniciar: this.iniciar.bind(this),
+            parar: this.parar.bind(this),
+            getWebSocketStatus: this.getWebSocketStatus.bind(this),
+            // Adicionar aliases para compatibilidade
+            start: this.iniciar.bind(this),
+            stop: this.parar.bind(this)
+        };
+    }
+
+    // Propriedade para compatibilidade
+    get running() {
+        return this.executando;
     }
 }

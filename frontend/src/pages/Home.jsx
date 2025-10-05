@@ -1,10 +1,47 @@
 import { SiGrafana, SiRedux } from 'react-icons/si';
-import { FaReact, FaIcons, FaFonticons } from "react-icons/fa";
+import { FaReact, FaFonticons } from "react-icons/fa";
 import { TbBrandVite } from "react-icons/tb";
 import '../styles/cards.css';
 import '../styles/home.css';
+import { useEffect, useRef } from 'react';
+import ClasseHome from '../classe/ClasseHome.jsx';
 
 export default function Home() {
+  const homeRef = useRef(null);
+  const classeHomeRef = useRef(null);
+  const controlesRef = useRef(null);
+
+  // Inicializar a ClasseHome quando o componente for montado
+  useEffect(() => {
+    // Aguardar renderização do DOM
+    setTimeout(() => {
+      const rootElement = homeRef.current;
+      if (rootElement) {
+        try {
+          // Criar instância da ClasseHome
+          const classeHome = new ClasseHome(rootElement);
+          classeHomeRef.current = classeHome;
+
+          // Obter controles para uso no componente React
+          controlesRef.current = classeHome.criarControles();
+
+          // Iniciar o rastreamento
+          classeHome.iniciar();
+        } catch  {
+          // 
+        }
+      }
+    }, 100);
+
+    // Limpeza ao desmontar
+    return () => {
+      if (classeHomeRef.current) {
+        classeHomeRef.current.parar();
+      }
+    };
+  }, []);
+
+  // Função para testar envio de dados
   return (
     <div style={{ display: 'flex', justifyContent: 'flex-start', alignItems: 'center', height: '100%', width: '100%', marginLeft: '12px' }}>
       <div className="card-carousel home-card">

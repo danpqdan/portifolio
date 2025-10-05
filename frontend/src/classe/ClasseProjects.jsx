@@ -1,52 +1,91 @@
 import { HeatmapUtils } from '../utils/HeatmapUtils';
+import WebSocketService from '../utils/WebSocketService.tsx';
+import { DEBUG_ENABLED } from '../config.js';
 
 export default class ClasseProjects {
     constructor(root) {
         this.root = root;
-        this.running = false;
-        
-        // Usando os IDs padronizados para seletores específicos
+        this.executando = false;
+
+        // Definindo seletores específicos para Projects
         const seletoresInteresse = [
-            '#projects_title',
-            '#projects_description',
-            '#projects_list',
-            '.project-item',  // Mantém classe para compatibilidade
-            '#projects_item_1',
-            '#projects_item_2',
-            '#projects_btn_view',
-            '#projects_btn_github'
+            '#projects_header',
+            '#projects_content',
+            '#projects_footer',
+            '.project-item',
+            '.card-actions button'
         ].join(', ');
-        
-        // Especificar o tipo de página como 'projects'
+
         this.heatmap = new HeatmapUtils(root, seletoresInteresse, 'projects');
-        console.info('[ClasseProjects] construído', { temRoot: !!root });
-        
-        // Mapeia elementos de interesse específicos
-        this.elementos = {
-            projetos: Array.from(root?.querySelectorAll('.project-item') || []),
-            botoes: {
-                verTodos: root?.querySelector('#projects_btn_view'),
-                github: root?.querySelector('#projects_btn_github')
-            }
-        };
+
+        this.intervaloEnvio = null;
     }
 
+    // Renomeando para padronizar com a chamada feita no SlidesCarousel.jsx
     start() {
-        if (this.running) return;
-        this.running = true;
-        console.info('[ClasseProjects] started');
-        
-        // Iniciar o HeatmapUtils
-        this.heatmap.iniciar();
+        return this.iniciar();
     }
 
     stop() {
-        if (!this.running) return;
-        this.running = false;
-        console.info('[ClasseProjects] stopped');
-        
-        // Parar o HeatmapUtils e registrar dados
+        return this.parar();
+    }
+
+    // Método original
+    iniciar() {
+        if (this.executando) return;
+        this.executando = true;
+
+        this.heatmap.iniciar();
+        WebSocketService.connect();
+
+        this.intervaloEnvio = setInterval(() => {
+            if (this.executando) {
+                this.enviarDados();
+            }
+        }, 30000);
+    }
+
+    // Método original
+    parar() {
+        if (!this.executando) return;
+        this.executando = false;
+
+        if (this.intervaloEnvio) {
+            clearInterval(this.intervaloEnvio);
+            this.intervaloEnvio = null;
+        }
+
         this.heatmap.parar();
-        console.info('[ClasseProjects] heatmap dados', HeatmapUtils.getDadosGlobais());
+        this.enviarDados();
+    }
+
+    enviarDados() {
+        if (!this.heatmap) return false;
+
+        const dados = this.heatmap.getDados();
+
+        WebSocketService.sendAnalyticsData(dados);
+        return true;
+    }
+
+    getWebSocketStatus() {
+        return WebSocketService.getConnectionStatus();
+    }
+
+    criarControles() {
+        return {
+            enviarDados: this.enviarDados.bind(this),
+            iniciar: this.iniciar.bind(this),
+            parar: this.parar.bind(this),
+            getWebSocketStatus: this.getWebSocketStatus.bind(this),
+            // Adicionar aliases para compatibilidade
+            start: this.iniciar.bind(this),
+            stop: this.parar.bind(this)
+        };
+    }
+
+    // Propriedade para compatibilidade
+    get running() {
+        return this.executando;
     }
 }
