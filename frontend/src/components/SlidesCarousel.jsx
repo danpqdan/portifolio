@@ -110,7 +110,6 @@ export default function SlidesCarousel({ slides }) {
         const slide = slides && slides[index];
         // derive a stable page key: prefer slide.path or slide.id, normalize it
         let pageKey = slide && (slide.path || slide.id || `slide_${index}`);
-        console.debug('[SlidesCarousel] compute pageKey start', { index, slide });
         if (typeof pageKey === 'string') {
             // remove query/hash
             pageKey = pageKey.split(/[?#]/)[0];
@@ -122,14 +121,12 @@ export default function SlidesCarousel({ slides }) {
             const parts = pageKey.split('/').filter(Boolean);
             pageKey = parts.length ? parts[parts.length - 1] : 'home';
         }
-        console.debug('[SlidesCarousel] compute pageKey result', { index, pageKey });
         visiblePageRef.current = pageKey;
 
     }, [index, slides]);
 
     // manage ClasseAbout lifecycle when page becomes 'about'
     useEffect(() => {
-        console.debug('[SlidesCarousel] lifecycle effect run', { index, cardNodesVersion });
         // compute page synchronously from slides[index] to avoid relying on async visiblePageRef
         const slide = slides && slides[index];
         let page = slide && (slide.path || slide.id || `slide_${index}`);
@@ -143,7 +140,6 @@ export default function SlidesCarousel({ slides }) {
         visiblePageRef.current = page;
         // find the card-carousel node for the current slide from the reported map
         const cardNode = cardNodesRef.current.get(index) || null;
-        console.debug('[SlidesCarousel] lifecycle page/card snapshot', { page, index, cardNodeExists: !!cardNode, cardNodeKeys: Array.from(cardNodesRef.current.keys()) });
 
         // manage Home/About/Projects classes based on page key
         if (page === 'home') {
@@ -158,57 +154,124 @@ export default function SlidesCarousel({ slides }) {
                     if (!classeHomeRef.current.executando) {
                         try {
                             classeHomeRef.current.iniciar();
-                        } catch (e) {
-                            console.debug('ClasseHome iniciar falhou', e);
+                        } catch { // pass
                         }
                     }
                 } else {
-                    console.error('classeHomeRef.current não é uma instância de ClasseHome');
+                    //
                 }
             }
         } else {
             if (classeHomeRef.current) {
                 try {
                     classeHomeRef.current.parar();
-                } catch (e) {
-                    console.debug('ClasseHome parar falhou', e);
+                } catch {
+                    //
                 }
             }
         }
+
         if (page === 'about') {
             // only start when we have a real cardNode to attach to
             aboutRootRef.current = cardNode || null;
             if (aboutRootRef.current) {
                 if (!classeAboutRef.current) {
                     classeAboutRef.current = new ClasseAbout(aboutRootRef.current);
-                    try { classeAboutRef.current.start(); } catch (e) { console.debug('ClasseAbout start failed', e); }
+                    try {
+                        // Tentar iniciar - verificando qual método está disponível
+                        if (typeof classeAboutRef.current.iniciar === 'function') {
+                            classeAboutRef.current.iniciar();
+                        } else if (typeof classeAboutRef.current.start === 'function') {
+                            classeAboutRef.current.start();
+                        }
+                    } catch {
+                        //
+                    }
                 } else {
-                    if (classeAboutRef.current.root !== aboutRootRef.current) classeAboutRef.current.root = aboutRootRef.current;
-                    if (!classeAboutRef.current.running) try { classeAboutRef.current.start(); } catch (e) { console.debug('ClasseAbout start failed', e); }
+                    if (classeAboutRef.current.root !== aboutRootRef.current)
+                        classeAboutRef.current.root = aboutRootRef.current;
+
+                    // Verificar se está executando
+                    const isRunning =
+                        (typeof classeAboutRef.current.executando === 'boolean' && classeAboutRef.current.executando) ||
+                        (typeof classeAboutRef.current.running === 'boolean' && classeAboutRef.current.running);
+
+                    if (!isRunning) {
+                        try {
+                            if (typeof classeAboutRef.current.iniciar === 'function') {
+                                classeAboutRef.current.iniciar();
+                            } else if (typeof classeAboutRef.current.start === 'function') {
+                                classeAboutRef.current.start();
+                            }
+                        } catch {
+                            //
+                        }
+                    }
                 }
             }
         } else {
             if (classeAboutRef.current) {
-                try { classeAboutRef.current.stop(); } catch (e) { console.debug('ClasseAbout stop failed', e); }
+                try {
+                    if (typeof classeAboutRef.current.parar === 'function') {
+                        classeAboutRef.current.parar();
+                    } else if (typeof classeAboutRef.current.stop === 'function') {
+                        classeAboutRef.current.stop();
+                    }
+                } catch {
+                    //
+                }
             }
         }
 
         if (page === 'projects') {
             projectsRootRef.current = cardNode || null;
-            if (!classeProjectsRef.current) {
-                classeProjectsRef.current = new ClasseProjects(projectsRootRef.current);
-                try { classeProjectsRef.current.start(); } catch (e) { console.debug('ClasseProjects start failed', e); }
-            } else {
-                if (classeProjectsRef.current.root !== projectsRootRef.current) classeProjectsRef.current.root = projectsRootRef.current;
-                if (!classeProjectsRef.current.running) try { classeProjectsRef.current.start(); } catch (e) { console.debug('ClasseProjects start failed', e); }
+            if (projectsRootRef.current) {
+                if (!classeProjectsRef.current) {
+                    classeProjectsRef.current = new ClasseProjects(projectsRootRef.current);
+                    try {
+                        if (typeof classeProjectsRef.current.iniciar === 'function') {
+                            classeProjectsRef.current.iniciar();
+                        } else if (typeof classeProjectsRef.current.start === 'function') {
+                            classeProjectsRef.current.start();
+                        }
+                    } catch {
+                        //
+                    }
+                } else {
+                    if (classeProjectsRef.current.root !== projectsRootRef.current)
+                        classeProjectsRef.current.root = projectsRootRef.current;
+
+                    // Verificar se está executando
+                    const isRunning =
+                        (typeof classeProjectsRef.current.executando === 'boolean' && classeProjectsRef.current.executando) ||
+                        (typeof classeProjectsRef.current.running === 'boolean' && classeProjectsRef.current.running);
+
+                    if (!isRunning) {
+                        try {
+                            if (typeof classeProjectsRef.current.iniciar === 'function') {
+                                classeProjectsRef.current.iniciar();
+                            } else if (typeof classeProjectsRef.current.start === 'function') {
+                                classeProjectsRef.current.start();
+                            }
+                        } catch {
+                            //
+                        }
+                    }
+                }
             }
         } else {
             if (classeProjectsRef.current) {
-                try { classeProjectsRef.current.stop(); } catch (e) { console.debug('ClasseProjects stop failed', e); }
+                try {
+                    if (typeof classeProjectsRef.current.parar === 'function') {
+                        classeProjectsRef.current.parar();
+                    } else if (typeof classeProjectsRef.current.stop === 'function') {
+                        classeProjectsRef.current.stop();
+                    }
+                } catch {
+                    //
+                }
             }
         }
-
-        // no explicit cleanup here; on unmount we'll stop below
     }, [index, cardNodesVersion, slides]);
 
     const handleNodeReady = useCallback((idx, node) => {
@@ -223,7 +286,6 @@ export default function SlidesCarousel({ slides }) {
 
         if (node) {
             map.set(idx, node);
-            console.debug('[SlidesCarousel] node reported', { idx, hasNode: true });
             setCardNodesVersion(v => v + 1);
             return;
         }
@@ -232,7 +294,6 @@ export default function SlidesCarousel({ slides }) {
         const t = setTimeout(() => {
             try {
                 map.delete(idx);
-                console.debug('[SlidesCarousel] node removed (delayed)', { idx });
                 setCardNodesVersion(v => v + 1);
             } finally {
                 removeTimersRef.current.delete(idx);
@@ -257,13 +318,37 @@ export default function SlidesCarousel({ slides }) {
     useEffect(() => {
         return () => {
             if (classeAboutRef.current) {
-                try { classeAboutRef.current.stop(); } catch (e) { console.debug('ClasseAbout cleanup failed', e); }
+                try {
+                    if (typeof classeAboutRef.current.parar === 'function') {
+                        classeAboutRef.current.parar();
+                    } else if (typeof classeAboutRef.current.stop === 'function') {
+                        classeAboutRef.current.stop();
+                    }
+                } catch {
+                    //
+                }
             }
             if (classeHomeRef.current) {
-                try { classeHomeRef.current.stop(); } catch (e) { console.debug('ClasseHome cleanup failed', e); }
+                try {
+                    if (typeof classeHomeRef.current.parar === 'function') {
+                        classeHomeRef.current.parar();
+                    } else if (typeof classeHomeRef.current.stop === 'function') {
+                        classeHomeRef.current.stop();
+                    }
+                } catch {
+                    //
+                }
             }
             if (classeProjectsRef.current) {
-                try { classeProjectsRef.current.stop(); } catch (e) { console.debug('ClasseProjects cleanup failed', e); }
+                try {
+                    if (typeof classeProjectsRef.current.parar === 'function') {
+                        classeProjectsRef.current.parar();
+                    } else if (typeof classeProjectsRef.current.stop === 'function') {
+                        classeProjectsRef.current.stop();
+                    }
+                } catch {
+                    // 
+                }
             }
         };
     }, []);
@@ -271,9 +356,6 @@ export default function SlidesCarousel({ slides }) {
     return (
         <div ref={containerRef} style={{ position: 'relative', width: '100%', height: '100vh', overflow: 'hidden', touchAction: 'pan-y' }}>
             <div ref={wrapperRef} style={{ display: 'flex', flexDirection: 'row', width: `${slides.length * 100}vw`, height: '100vh', willChange: 'transform' }}>
-                {/*
-                    Use SlideItem to inject prev/next buttons INSIDE the page's `.card-carousel` element
-                */}
                 {slides.map((s, i) => (
                     <SlideItem key={s.path} slide={s} idx={i} total={slides.length}
                         goPrev={() => { setIndex(cur => { const prev = Math.max(cur - 1, 0); indexRef.current = prev; return prev; }); }}
@@ -286,7 +368,6 @@ export default function SlidesCarousel({ slides }) {
     );
 }
 
-// Helper component: renders a slide and injects prev/next buttons inside the first `.card-carousel`
 function SlideItem({ slide, idx, goPrev, goNext, onNodeReady }) {
     const rootRef = useRef(null);
     const [target, setTarget] = useState(null);

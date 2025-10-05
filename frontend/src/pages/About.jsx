@@ -3,9 +3,13 @@ import perfil from '../assets/img/img_perfil.png';
 import { FaJava } from 'react-icons/fa';
 import { SiSpring, SiPython, SiDjango, SiReact, SiGrafana, SiRedux } from 'react-icons/si';
 import { FiGithub, FiMail, FiPhone } from 'react-icons/fi';
+import { useHeatmap } from '../hooks/useHeatmap.tsx';
+
 export default function About() {
   const rootRef = useRef(null);
 
+  // Usar o hook useHeatmap para rastrear interações na página About
+  const { enviarDados } = useHeatmap('about', '.skill-badge, #about_contact_list a');
   return (
     <div className="page-root">
       <div id="about_card" ref={rootRef} className="card-carousel about-card">
@@ -66,23 +70,13 @@ export default function About() {
           </div>
 
           <div id="about_card_actions" className="card-actions">
-            <button id="about_btn_stats" className="primary-btn">
-              Visualizar estatistica
+            <button id="about_btn_stats" className="primary-btn" onClick={enviarDados}>
+              Visualizar estatística
             </button>
             <button id="about_btn_restart" className="primary-btn">reiniciar projeto</button>
           </div>
         </div>
-      </div >
-    </div >
-  );
-}
-
-function SkillBadge({ icon, label }) {
-  return (
-    <div id={`about_skill_${label.toLowerCase().replace(/\s+/g, '_').replace(/\//g, '_')}`}
-      style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '6px 10px', background: 'white', border: '1px solid rgba(15,23,42,0.04)', borderRadius: 999, boxShadow: 'rgb(0 0 0 / 33%) 0px 8px 24px', color: '#0f172a', fontWeight: 600 }}>
-      <span id={`about_skill_icon_${label.toLowerCase().replace(/\s+/g, '_').replace(/\//g, '_')}`} style={{ display: 'inline-flex', alignItems: 'center', fontSize: 18 }}>{icon}</span>
-      <span id={`about_skill_label_${label.toLowerCase().replace(/\s+/g, '_').replace(/\//g, '_')}`} style={{ fontSize: 13 }}>{label}</span>
+      </div>
     </div>
   );
 }

@@ -4,14 +4,30 @@ import SlidesCarousel from './components/SlidesCarousel';
 import Home from './pages/Home';
 import Projects from './pages/Projects';
 import About from './pages/About';
+import WebSocketService from './utils/WebSocketService.tsx';
+import { HeatmapUtils } from './utils/HeatmapUtils.tsx';
 
 export default function App() {
   const [showUi, setShowUi] = useState(false);
 
   useEffect(() => {
+    WebSocketService.connect();
+    
     const onTorreStarted = () => setShowUi(true);
     window.addEventListener('torre:started', onTorreStarted);
-    return () => window.removeEventListener('torre:started', onTorreStarted);
+    
+    const handleBeforeUnload = () => {
+      const dadosFinais = HeatmapUtils.getDadosGlobais();
+      WebSocketService.sendAnalyticsData(dadosFinais);
+    };
+    
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    
+    return () => {
+      window.removeEventListener('torre:started', onTorreStarted);
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+      WebSocketService.disconnect();
+    };
   }, []);
 
   return (

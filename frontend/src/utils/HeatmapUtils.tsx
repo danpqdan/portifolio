@@ -1,11 +1,11 @@
 import { v4 as uuidv4 } from 'uuid';
 
-// Interfaces existentes
+// Interfaces para estruturas de dados
 export interface Clique {
     x: number;
     y: number;
     timestamp: number;  // em ms
-    elemento?: string;   // id, class ou tag
+    elemento?: string;  // id, class ou tag
 }
 
 export interface Toque {
@@ -51,6 +51,70 @@ export interface HeatmapDados {
     home: PaginaDados[];
     about: PaginaDados[];
     projects: PaginaDados[];
+
+    // Métodos auxiliares
+    get_total_visualizacoes?: () => number;
+    get_total_cliques?: () => number;
+    get_total_tempo_segundos?: () => number;
+    get_duracao_sessao_segundos?: () => number | null;
+}
+
+// Implementação do método from_dict para converter objetos JSON para HeatmapDados
+export namespace HeatmapDados {
+    export function from_dict(data: any): HeatmapDados {
+        const result: HeatmapDados = {
+            id_registro: data.id_registro || uuidv4(),
+            timestamp_inicial: data.timestamp_inicial || null,
+            timestamp_final: data.timestamp_final || null,
+            home: data.home || [],
+            about: data.about || [],
+            projects: data.projects || [],
+        };
+
+        // Adicionar métodos auxiliares
+        result.get_total_visualizacoes = function () {
+            let total = 0;
+            for (const pagina of ['home', 'about', 'projects']) {
+                if (result[pagina as keyof typeof result] instanceof Array) {
+                    for (const sessao of (result[pagina as keyof typeof result] as PaginaDados[])) {
+                        total += sessao.visualizacoes;
+                    }
+                }
+            }
+            return total;
+        };
+
+        result.get_total_cliques = function () {
+            let total = 0;
+            for (const pagina of ['home', 'about', 'projects']) {
+                if (result[pagina as keyof typeof result] instanceof Array) {
+                    for (const sessao of (result[pagina as keyof typeof result] as PaginaDados[])) {
+                        total += sessao.cliques.length;
+                    }
+                }
+            }
+            return total;
+        };
+
+        result.get_total_tempo_segundos = function () {
+            let total = 0;
+            for (const pagina of ['home', 'about', 'projects']) {
+                if (result[pagina as keyof typeof result] instanceof Array) {
+                    for (const sessao of (result[pagina as keyof typeof result] as PaginaDados[])) {
+                        total += sessao.segundos;
+                    }
+                }
+            }
+            return total;
+        };
+
+        result.get_duracao_sessao_segundos = function () {
+            if (!result.timestamp_inicial || !result.timestamp_final) return null;
+            return (result.timestamp_final - result.timestamp_inicial) / 1000;
+        };
+
+        return result;
+    }
 }
 
 // Singleton para armazenar estado global entre instâncias
@@ -121,7 +185,7 @@ class HeatmapRegistryGlobal {
     }
 
     public getDados(): HeatmapDados {
-        return {
+        const dados: HeatmapDados = {
             id_registro: this._id_registro,
             timestamp_inicial: this._timestamp_inicial,
             timestamp_final: this._timestamp_final,
@@ -129,6 +193,9 @@ class HeatmapRegistryGlobal {
             about: this._paginas.about,
             projects: this._paginas.projects
         };
+
+        // Adicionar métodos auxiliares
+        return HeatmapDados.from_dict(dados);
     }
 }
 
@@ -140,6 +207,7 @@ export class HeatmapUtils {
     private _timestamp_inicial: number | null;
     private _timestamp_final: number | null;
     private _intervalo: ReturnType<typeof setInterval> | null;
+    private _executando: boolean = false;
 
     private _cliques: Clique[];
     private _toques: Toque[];
@@ -179,12 +247,13 @@ export class HeatmapUtils {
         this._onTouchMove = this._onTouchMove.bind(this);
         this._onIntersection = this._onIntersection.bind(this);
 
-        console.debug(`[HeatmapUtils] Construído para página ${paginaTipo}`, {
-            id_registro: this._registry.getIdRegistro()
-        });
+        console.log(`[HeatmapUtils] Construído para página ${paginaTipo}`, { id_registro: this._registry.getIdRegistro() });
     }
 
     iniciar() {
+        if (this._executando) return;
+        this._executando = true;
+
         this._visualizacoes += 1;
         this._timestamp_inicial = Date.now();
 
@@ -236,12 +305,14 @@ export class HeatmapUtils {
             if (isInViewport) {
                 this._elementosVisiveis[id].visivel = true;
                 this._elementosVisiveis[id].inicio = Date.now();
-                console.debug(`[HeatmapUtils:${this._paginaTipo}] Elemento já visível na inicialização: ${id}`);
             }
         });
     }
 
     parar() {
+        if (!this._executando) return;
+        this._executando = false;
+
         const now = Date.now();
         this._timestamp_final = now;
 
@@ -397,7 +468,34 @@ export class HeatmapUtils {
 
     // Retorna os dados globais de todas as páginas
     getDados(): HeatmapDados {
+        // Atualizar timestamp final
+        const now = Date.now();
+        this._timestamp_final = now;
+        this._registry.setTimestampFinal(now);
+
+        // Atualizar dados da página atual no registro
+        this._registry.addPaginaDados(this._paginaTipo, this.getPaginaDados());
+
+        // Retornar todos os dados coletados
         return this._registry.getDados();
+    }
+
+    // Métodos adicionais para compatibilidade
+    get running(): boolean {
+        return this._executando;
+    }
+
+    get executando(): boolean {
+        return this._executando;
+    }
+
+    // Aliases para compatibilidade com inglês/português
+    start() {
+        return this.iniciar();
+    }
+
+    stop() {
+        return this.parar();
     }
 
     // Método para exportar todos os dados coletados em todas as páginas
