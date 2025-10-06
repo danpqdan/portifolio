@@ -8,6 +8,8 @@ type UseHeatmapOptions = {
     autoSendInterval?: number | null; // Intervalo em ms para envio automático (null para desativar)
     sendOnUnmount?: boolean; // Enviar dados quando o componente for desmontado
     debug?: boolean; // Exibir logs de debug
+    realtimeCollection?: boolean; // Habilitar coleta temporal em tempo real
+    realtimeInterval?: number; // Intervalo para coleta em tempo real em ms
 };
 
 export const useHeatmap = (
@@ -20,9 +22,11 @@ export const useHeatmap = (
     const autoSendIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
     const defaultOptions: UseHeatmapOptions = {
-        autoSendInterval: IS_DEV ? 30000 : 60000, // 30s em dev, 1min em prod
+        autoSendInterval: IS_DEV ? 15000 : 30000, // 15s em dev, 30s em prod
         sendOnUnmount: true,
-        debug: DEBUG_ENABLED
+        debug: DEBUG_ENABLED,
+        realtimeCollection: true, // Habilitar coleta em tempo real por padrão
+        realtimeInterval: 5000 // 5 segundos para tempo real
     };
 
     const mergedOptions = { ...defaultOptions, ...options };
@@ -32,6 +36,12 @@ export const useHeatmap = (
         const connectWebSocket = async () => {
             try {
                 await WebSocketService.connect();
+                
+                // Configurar coleta em tempo real no WebSocket se habilitada
+                if (mergedOptions.realtimeCollection && mergedOptions.realtimeInterval) {
+                    WebSocketService.setRealtimeInterval(mergedOptions.realtimeInterval);
+                }
+                
                 if (mergedOptions.debug) {
                     console.log('🔌 WebSocket conectado para página', paginaTipo);
                 }
@@ -47,7 +57,7 @@ export const useHeatmap = (
         return () => {
             // Não desconectamos aqui para manter a conexão entre páginas
         };
-    }, [paginaTipo, mergedOptions.debug]);
+    }, [paginaTipo, mergedOptions.debug, mergedOptions.realtimeCollection, mergedOptions.realtimeInterval]);
 
     // Inicializar e limpar o rastreamento do Heatmap
     useEffect(() => {
@@ -55,16 +65,42 @@ export const useHeatmap = (
         const heatmap = new HeatmapUtils(document.body, hoverSelector, paginaTipo);
         heatmapRef.current = heatmap;
 
+        // Configurar coleta temporal em tempo real se habilitada
+        if (mergedOptions.realtimeCollection && mergedOptions.realtimeInterval) {
+            heatmap.configurarColecaoTempoReal(
+                (dados) => {
+                    // Enviar dados em tempo real via WebSocket
+                    WebSocketService.sendAnalyticsDataImmediate(dados, false);
+                    
+                    if (mergedOptions.debug) {
+                        console.log(`📊 Dados temporais enviados para ${paginaTipo}:`, {
+                            timestamp: new Date().toISOString(),
+                            tempoPermanciaSegundos: heatmap.getTempoPermanciaSegundos(),
+                            totalVisualizacoes: dados.get_total_visualizacoes ? dados.get_total_visualizacoes() : 0
+                        });
+                    }
+                },
+                mergedOptions.realtimeInterval
+            );
+            
+            // Iniciar coleta temporal
+            heatmap.iniciarColecaoTempoReal();
+        }
+
         // Iniciar rastreamento
         heatmap.iniciar();
         isActiveRef.current = true;
 
-        // Configurar envio automático se habilitado
+        // Configurar envio automático se habilitado (além da coleta temporal)
         if (mergedOptions.autoSendInterval) {
             autoSendIntervalRef.current = setInterval(() => {
                 if (isActiveRef.current && heatmapRef.current) {
                     const dados = heatmapRef.current.getDados();
                     WebSocketService.sendAnalyticsData(dados);
+                    
+                    if (mergedOptions.debug) {
+                        console.log(`📤 Envio automático para ${paginaTipo}`);
+                    }
                 }
             }, mergedOptions.autoSendInterval);
         }
@@ -84,7 +120,7 @@ export const useHeatmap = (
                 // Enviar dados automaticamente quando a página for fechada
                 if (mergedOptions.sendOnUnmount) {
                     const dados = heatmapRef.current.getDados();
-                    WebSocketService.sendAnalyticsData(dados);
+                    WebSocketService.sendAnalyticsDataImmediate(dados, true); // Envio prioritário no unmount
                 }
 
                 isActiveRef.current = false;
@@ -129,11 +165,30 @@ export const useHeatmap = (
         return WebSocketService.getConnectionStatus();
     }, []);
 
+    // Função para obter tempo de permanência atual
+    const getTempoPermancia = useCallback(() => {
+        if (heatmapRef.current) {
+            return heatmapRef.current.getTempoPermanciaSegundos();
+        }
+        return 0;
+    }, []);
+
+    // Função para configurar intervalo de coleta temporal
+    const setRealtimeInterval = useCallback((intervalMs: number) => {
+        WebSocketService.setRealtimeInterval(intervalMs);
+        
+        if (mergedOptions.debug) {
+            console.log(`⏱️ Intervalo de coleta temporal alterado para ${intervalMs}ms`);
+        }
+    }, [mergedOptions.debug]);
+
     return {
         enviarDados,
         pararEEnviarDados,
         reiniciarRastreamento,
         getWebSocketStatus,
+        getTempoPermancia,
+        setRealtimeInterval,
         isActive: isActiveRef.current
     };
 };

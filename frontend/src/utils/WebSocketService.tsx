@@ -10,6 +10,11 @@ class WebSocketService {
     private reconnectTimer: ReturnType<typeof setTimeout> | null;
     private pendingData: HeatmapDados[] = []; // Armazena dados pendentes de envio
     private dataSendInterval: ReturnType<typeof setInterval> | null = null; // Interval para envio periódico
+    
+    // Novos controles para envio temporal
+    private realtimeInterval: ReturnType<typeof setInterval> | null = null;
+    private realtimeCallback: ((dados: HeatmapDados) => void) | null = null;
+    private realtimeIntervalMs: number = 5000; // 5 segundos por padrão
 
     constructor() {
         this.socket = null;
@@ -19,8 +24,7 @@ class WebSocketService {
         this.reconnectTimer = null;
         this.pendingData = [];
 
-
-        // Iniciar envio periódico de dados (a cada 10 segundos)
+        // Iniciar envio periódico de dados (a cada 5 segundos para tempo real)
         this._initPeriodicDataSend();
 
         // Configurar evento para enviar dados pendentes antes de fechar a página
@@ -33,10 +37,10 @@ class WebSocketService {
             clearInterval(this.dataSendInterval);
         }
 
-        // Configurar intervalo para enviar dados pendentes
+        // Configurar intervalo para enviar dados pendentes (mais frequente para tempo real)
         this.dataSendInterval = setInterval(() => {
             this._sendPendingData();
-        }, 10000); // A cada 10 segundos
+        }, this.realtimeIntervalMs); // Usar intervalo configurável
     }
 
     private _handleBeforeUnload = (): void => {
@@ -224,6 +228,9 @@ class WebSocketService {
         // Remover event listener
         window.removeEventListener('beforeunload', this._handleBeforeUnload);
 
+        // Limpar intervalo de coleta em tempo real
+        this.stopRealtimeCollection();
+
         // Limpar intervalo de envio periódico
         if (this.dataSendInterval) {
             clearInterval(this.dataSendInterval);
@@ -253,6 +260,82 @@ class WebSocketService {
             attempts: this.connectionAttempts,
             pendingData: this.pendingData.length
         };
+    }
+
+    /**
+     * Configura coleta temporal automática via callback
+     * @param callback Função a ser chamada a cada intervalo
+     * @param intervalMs Intervalo em milissegundos (padrão: 5000)
+     */
+    configureRealtimeCollection(callback: (dados: HeatmapDados) => void, intervalMs: number = 5000): void {
+        this.realtimeCallback = callback;
+        this.realtimeIntervalMs = intervalMs;
+        
+        // Atualizar intervalo de envio
+        this._initPeriodicDataSend();
+    }
+
+    /**
+     * Inicia coleta temporal automática
+     */
+    startRealtimeCollection(): void {
+        if (this.realtimeInterval) {
+            clearInterval(this.realtimeInterval);
+        }
+
+        if (!this.realtimeCallback) {
+            console.warn('[WebSocketService] Callback não configurado para coleta em tempo real');
+            return;
+        }
+
+        this.realtimeInterval = setInterval(() => {
+            if (this.realtimeCallback) {
+                // O callback deve fornecer os dados atuais para envio
+                // Este será implementado nas classes que usam o serviço
+            }
+        }, this.realtimeIntervalMs);
+    }
+
+    /**
+     * Para coleta temporal automática
+     */
+    stopRealtimeCollection(): void {
+        if (this.realtimeInterval) {
+            clearInterval(this.realtimeInterval);
+            this.realtimeInterval = null;
+        }
+    }
+
+    /**
+     * Envia dados imediatamente (bypass da fila)
+     * @param heatmapDados Dados para enviar
+     * @param priority Se true, envia imediatamente sem fila
+     */
+    async sendAnalyticsDataImmediate(heatmapDados: HeatmapDados, priority: boolean = false): Promise<boolean> {
+        if (priority) {
+            // Envio prioritário - tentar enviar diretamente
+            if (!this.socket || !this.isConnected) {
+                const connected = await this.connect();
+                if (!connected) {
+                    // Se não conseguir conectar, adicionar à fila normal
+                    return this.sendAnalyticsData(heatmapDados);
+                }
+            }
+
+            return this._emitAnalyticsData(heatmapDados);
+        } else {
+            // Usar método normal com fila
+            return this.sendAnalyticsData(heatmapDados);
+        }
+    }
+
+    /**
+     * Configura intervalo de envio temporal
+     * @param intervalMs Novo intervalo em milissegundos
+     */
+    setRealtimeInterval(intervalMs: number): void {
+        this.realtimeIntervalMs = intervalMs;
+        this._initPeriodicDataSend();
     }
 }
 

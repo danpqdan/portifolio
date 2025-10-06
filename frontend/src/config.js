@@ -13,7 +13,7 @@ export const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
 export const WEBSOCKET_URL = import.meta.env.VITE_WEBSOCKET_URL || 'http://localhost:5000';
 
 // Flags
-export const DEBUG_ENABLED = import.meta.env.VITE_DEBUG === 'true';
+export const DEBUG_ENABLED = import.meta.env.VITE_DEBUG === 'true' || IS_DEV; // Habilitar debug em desenvolvimento
 
 export default {
     IS_DEV,

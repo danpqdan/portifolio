@@ -1,15 +1,14 @@
 import React, { useRef } from 'react';
 import perfil from '../assets/img/img_perfil.png';
 import { FaJava } from 'react-icons/fa';
-import { SiSpring, SiPython, SiDjango, SiReact, SiGrafana, SiRedux } from 'react-icons/si';
+import { SiSpring, SiPython, SiDjango, SiReact } from 'react-icons/si';
 import { FiGithub, FiMail, FiPhone } from 'react-icons/fi';
-import { useHeatmap } from '../hooks/useHeatmap.tsx';
 
 export default function About() {
   const rootRef = useRef(null);
 
-  // Usar o hook useHeatmap para rastrear interações na página About
-  const { enviarDados } = useHeatmap('about', '.skill-badge, #about_contact_list a');
+  // Função placeholder para botão de estatísticas (será controlada pelas classes)
+  const enviarDados = () => console.log('📊 Botão estatísticas clicado em About');
   return (
     <div className="page-root">
       <div id="about_card" ref={rootRef} className="card-carousel about-card">

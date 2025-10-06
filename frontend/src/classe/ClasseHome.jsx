@@ -2,10 +2,16 @@ import { HeatmapUtils } from '../utils/HeatmapUtils';
 import WebSocketService from '../utils/WebSocketService.tsx';
 import { DEBUG_ENABLED } from '../config.js';
 
+// Controle global de página ativa para evitar coleta simultânea
+window.__ACTIVE_PAGE_CONTROLLER__ = window.__ACTIVE_PAGE_CONTROLLER__ || null;
+window.__ACTIVE_PAGE_TYPE__ = window.__ACTIVE_PAGE_TYPE__ || null;
+
 export default class ClasseHome {
     constructor(root) {
         this.root = root;
         this.executando = false;
+        this.pageType = 'home';
+        this.isPageVisible = true; // Controle de visibilidade
 
         // Definindo seletores específicos usando os IDs padronizados
         const seletoresInteresse = [
@@ -32,42 +38,103 @@ export default class ClasseHome {
             techButtons: Array.from(root?.querySelectorAll('.tech-btn') || [])
         };
 
-        // Configurar envio periódico dos dados (a cada 30 segundos em DEV)
-        this.intervaloEnvio = null;
+        // Controle para coleta temporal
+        this.colecaoTemporalAtiva = false;
+
+        // Listener para verificar visibilidade da página
+        this.visibilityChangeHandler = () => {
+            this.isPageVisible = !document.hidden;
+            if (DEBUG_ENABLED) {
+                console.log(`🔍 [ClasseHome] Visibilidade alterada: ${this.isPageVisible ? 'visível' : 'oculta'}`);
+            }
+        };
     }
 
     iniciar() {
         if (this.executando) return;
+        
+        // Verificar se há outra página ativa e pará-la
+        if (window.__ACTIVE_PAGE_CONTROLLER__ && window.__ACTIVE_PAGE_CONTROLLER__ !== this) {
+            try {
+                window.__ACTIVE_PAGE_CONTROLLER__.parar();
+            } catch (error) {
+                if (DEBUG_ENABLED) {
+                    console.warn('⚠️ [ClasseHome] Erro ao parar controlador anterior:', error);
+                }
+            }
+        }
+        
+        // Definir como página ativa
+        window.__ACTIVE_PAGE_CONTROLLER__ = this;
+        window.__ACTIVE_PAGE_TYPE__ = this.pageType;
+        
         this.executando = true;
+        
+        // Adicionar listener de visibilidade
+        document.addEventListener('visibilitychange', this.visibilityChangeHandler);
+
+        // Configurar coleta temporal em tempo real (5 segundos)
+        this.heatmap.configurarColecaoTempoReal(
+            (dados) => {
+                // Só enviar se página estiver visível e for a página ativa
+                if (this.isPageVisible && window.__ACTIVE_PAGE_CONTROLLER__ === this) {
+                    WebSocketService.sendAnalyticsDataImmediate(dados, false);
+                    
+                    if (DEBUG_ENABLED) {
+                        console.log('📊 [ClasseHome] Dados temporais enviados:', {
+                            timestamp: new Date().toISOString(),
+                            tempoPermanciaSegundos: this.heatmap.getTempoPermanciaSegundos(),
+                            totalVisualizacoes: dados.get_total_visualizacoes ? dados.get_total_visualizacoes() : 0
+                        });
+                    }
+                } else if (DEBUG_ENABLED) {
+                    console.log('⏸️ [ClasseHome] Dados temporais não enviados - página não visível ou não ativa');
+                }
+            },
+            5000 // 5 segundos
+        );
+
+        // Iniciar coleta temporal
+        this.heatmap.iniciarColecaoTempoReal();
+        this.colecaoTemporalAtiva = true;
 
         // Iniciar o HeatmapUtils para rastrear interações
         this.heatmap.iniciar();
 
         // Conectar ao WebSocket se necessário
         WebSocketService.connect();
-
-        // Configurar envio periódico dos dados
-        this.intervaloEnvio = setInterval(() => {
-            if (this.executando) {
-                this.enviarDados();
-            }
-        }, 30000); // 30 segundos
+        
+        if (DEBUG_ENABLED) {
+            console.log('🚀 [ClasseHome] Iniciado como página ativa - apenas coleta temporal');
+        }
     }
 
     parar() {
         if (!this.executando) return;
         this.executando = false;
-        // Limpar intervalo de envio
-        if (this.intervaloEnvio) {
-            clearInterval(this.intervaloEnvio);
-            this.intervaloEnvio = null;
+        
+        // Limpar controle global se for a página ativa
+        if (window.__ACTIVE_PAGE_CONTROLLER__ === this) {
+            window.__ACTIVE_PAGE_CONTROLLER__ = null;
+            window.__ACTIVE_PAGE_TYPE__ = null;
         }
+        
+        // Remover listener de visibilidade
+        document.removeEventListener('visibilitychange', this.visibilityChangeHandler);
+
+        // Parar coleta temporal
+        this.colecaoTemporalAtiva = false;
 
         // Parar o HeatmapUtils
         this.heatmap.parar();
 
-        // Enviar dados uma última vez antes de parar
-        this.enviarDados();
+        // Enviar dados uma última vez antes de parar (envio prioritário)
+        const dados = this.heatmap.getDados();
+        WebSocketService.sendAnalyticsDataImmediate(dados, true);
+
+        if (DEBUG_ENABLED) {
+            console.log('🛑 [ClasseHome] Coleta parada e dados finais enviados');
+        }
     }
 
     enviarDados() {
@@ -78,6 +145,37 @@ export default class ClasseHome {
         // Enviar dados via WebSocket
         WebSocketService.sendAnalyticsData(dados);
         return true;
+    }
+
+    // Novo método para obter tempo de permanência
+    getTempoPermancia() {
+        if (this.heatmap) {
+            return this.heatmap.getTempoPermanciaSegundos();
+        }
+        return 0;
+    }
+
+    // Novo método para configurar intervalo de coleta temporal
+    setIntervaloColecaoTemporal(intervalMs) {
+        if (this.heatmap && this.colecaoTemporalAtiva) {
+            // Reconfigurar coleta temporal
+            this.heatmap.configurarColecaoTempoReal(
+                (dados) => {
+                    WebSocketService.sendAnalyticsDataImmediate(dados, false);
+                    
+                    if (DEBUG_ENABLED) {
+                        console.log(`📊 [ClasseHome] Dados temporais enviados (${intervalMs}ms):`, {
+                            timestamp: new Date().toISOString(),
+                            tempoPermanciaSegundos: this.heatmap.getTempoPermanciaSegundos()
+                        });
+                    }
+                },
+                intervalMs
+            );
+            
+            // Reiniciar coleta temporal com novo intervalo
+            this.heatmap.iniciarColecaoTempoReal();
+        }
     }
 
     // Este método precisa ser corrigido - a função estava com escopo incorreto
@@ -92,7 +190,9 @@ export default class ClasseHome {
             enviarDados: this.enviarDados.bind(this),
             iniciar: this.iniciar.bind(this),
             parar: this.parar.bind(this),
-            getWebSocketStatus: this.getWebSocketStatus.bind(this)
+            getWebSocketStatus: this.getWebSocketStatus.bind(this),
+            getTempoPermancia: this.getTempoPermancia.bind(this),
+            setIntervaloColecaoTemporal: this.setIntervaloColecaoTemporal.bind(this)
         };
     }
 }
