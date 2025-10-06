@@ -1,8 +1,6 @@
-import { useHeatmap } from '../hooks/useHeatmap.tsx';
-
 export default function Projects() {
-  // Usar o hook useHeatmap para rastrear interações na página Projects
-  const { enviarDados } = useHeatmap('projects', '.project-item, .card-actions button');
+  // Função placeholder para botão GitHub (será controlada pelas classes)
+  const enviarDados = () => console.log('📊 Botão GitHub clicado em Projects');
 
   // Função para debug do WebSocket
   return (

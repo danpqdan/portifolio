@@ -169,6 +169,14 @@ class HeatmapRegistryGlobal {
         this._paginas[tipo].push(dados);
     }
 
+    public setPaginaDados(tipo: 'home' | 'about' | 'projects', dados: PaginaDados): void {
+        if (!this._paginas[tipo]) {
+            this._paginas[tipo] = [];
+        }
+        // Substituir dados da página atual ao invés de acumular
+        this._paginas[tipo] = [dados];
+    }
+
     public getPaginasDados(): { [key: string]: PaginaDados[] } {
         return this._paginas;
     }
@@ -221,6 +229,14 @@ export class HeatmapUtils {
 
     private _registry: HeatmapRegistryGlobal;
 
+    // Novos controles para coleta temporal em tempo real
+    private _tempoRealTimer: ReturnType<typeof setInterval> | null = null;
+    private _intervalColeta: number = 5000; // 5 segundos por padrão
+    private _onTempoRealCallback: ((dados: HeatmapDados) => void) | null = null;
+    private _ultimoTimestamp: number = Date.now();
+    private _tempoAcumulado: number = 0;
+    private _pageVisibilityListener: (() => void) | null = null;
+
     constructor(root: HTMLElement = document.body, hoverSelector: string | null = null, paginaTipo: 'home' | 'about' | 'projects' = 'home') {
         this.root = root;
         this._paginaTipo = paginaTipo;
@@ -262,6 +278,11 @@ export class HeatmapUtils {
 
         if (this._intervalo) clearInterval(this._intervalo);
         this._intervalo = setInterval(() => { this._segundos += 1; }, 1000);
+
+        // Inicializar controle temporal preciso
+        this._ultimoTimestamp = Date.now();
+        this._tempoAcumulado = 0;
+        this._setupPageVisibilityListener();
 
         this.root.addEventListener('click', this._onClick);
         this.root.addEventListener('scroll', this._onScroll, { passive: true });
@@ -350,6 +371,109 @@ export class HeatmapUtils {
 
         // Armazenar os dados desta sessão no registro global
         this._registry.addPaginaDados(this._paginaTipo, this.getPaginaDados());
+
+        // Limpar timer de tempo real se estiver ativo
+        this._stopTempoRealCollection();
+    }
+
+    /**
+     * Configura coleta temporal em tempo real
+     * @param callback Função a ser chamada a cada intervalo com os dados atualizados
+     * @param intervalo Intervalo em milissegundos (padrão: 5000ms)
+     */
+    configurarColecaoTempoReal(callback: (dados: HeatmapDados) => void, intervalo: number = 5000) {
+        this._onTempoRealCallback = callback;
+        this._intervalColeta = intervalo;
+        
+        // Configurar listener para visibilidade da página
+        this._setupPageVisibilityListener();
+    }
+
+    /**
+     * Inicia a coleta temporal em tempo real
+     */
+    iniciarColecaoTempoReal() {
+        if (this._tempoRealTimer) {
+            clearInterval(this._tempoRealTimer);
+        }
+
+        this._ultimoTimestamp = Date.now();
+        this._tempoAcumulado = 0;
+
+        this._tempoRealTimer = setInterval(() => {
+            this._atualizarTempoAcumulado();
+            
+            if (this._onTempoRealCallback) {
+                const dados = this.getDados();
+                this._onTempoRealCallback(dados);
+            }
+        }, this._intervalColeta);
+    }
+
+    /**
+     * Para a coleta temporal em tempo real
+     */
+    private _stopTempoRealCollection() {
+        if (this._tempoRealTimer) {
+            clearInterval(this._tempoRealTimer);
+            this._tempoRealTimer = null;
+        }
+
+        if (this._pageVisibilityListener) {
+            document.removeEventListener('visibilitychange', this._pageVisibilityListener);
+            this._pageVisibilityListener = null;
+        }
+    }
+
+    /**
+     * Atualiza o tempo acumulado baseado na visibilidade da página
+     */
+    private _atualizarTempoAcumulado() {
+        const agora = Date.now();
+        
+        if (!document.hidden) {
+            // Página está visível, acumula o tempo
+            const tempoDecorrido = agora - this._ultimoTimestamp;
+            this._tempoAcumulado += tempoDecorrido;
+        }
+        
+        this._ultimoTimestamp = agora;
+    }
+
+    /**
+     * Configura listener para mudanças de visibilidade da página
+     */
+    private _setupPageVisibilityListener() {
+        if (this._pageVisibilityListener) {
+            document.removeEventListener('visibilitychange', this._pageVisibilityListener);
+        }
+
+        this._pageVisibilityListener = () => {
+            const agora = Date.now();
+            
+            if (document.hidden) {
+                // Página ficou oculta, atualiza tempo acumulado
+                this._atualizarTempoAcumulado();
+            } else {
+                // Página ficou visível, reinicia contagem
+                this._ultimoTimestamp = agora;
+            }
+        };
+
+        document.addEventListener('visibilitychange', this._pageVisibilityListener);
+    }
+
+    /**
+     * Obtém o tempo de permanência na página em segundos (mais preciso)
+     */
+    getTempoPermanciaSegundos(): number {
+        if (!this._executando) {
+            return Math.floor(this._tempoAcumulado / 1000);
+        }
+
+        // Se ainda está executando, adiciona o tempo desde a última atualização
+        this._atualizarTempoAcumulado();
+        return Math.floor(this._tempoAcumulado / 1000);
     }
 
     private _onClick(e: MouseEvent) {
@@ -452,9 +576,12 @@ export class HeatmapUtils {
             hoverSegundos[key] = Math.round(this._hovers[key] / 1000);
         });
 
+        // Usar tempo de permanência mais preciso que considera visibilidade da página
+        const tempoPermanciaSegundos = this.getTempoPermanciaSegundos();
+
         return {
             visualizacoes: this._visualizacoes,
-            segundos: this._segundos,
+            segundos: Math.max(tempoPermanciaSegundos, this._segundos), // Usar o maior entre os dois
             timestamp_inicial: this._timestamp_inicial,
             timestamp_final: this._timestamp_final,
             cliques: this._cliques,
@@ -473,8 +600,8 @@ export class HeatmapUtils {
         this._timestamp_final = now;
         this._registry.setTimestampFinal(now);
 
-        // Atualizar dados da página atual no registro
-        this._registry.addPaginaDados(this._paginaTipo, this.getPaginaDados());
+        // Substituir dados da página atual no registro (não acumular)
+        this._registry.setPaginaDados(this._paginaTipo, this.getPaginaDados());
 
         // Retornar todos os dados coletados
         return this._registry.getDados();
