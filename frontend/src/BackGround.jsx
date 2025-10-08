@@ -43,7 +43,7 @@ export default function BackGround() {
         try { bg.pause(); } catch { /* ignore */ }
         setPlayingEntrada(true);
         try { ent.currentTime = 0; } catch { /* ignore */ }
-        ent.muted = false;
+        ent.muted = true; // ✅ VÍDEO DE ENTRADA TAMBÉM MUDO
         try { await ent.play(); } catch { /* ignore */ }
 
         const onEnded = () => {
@@ -117,7 +117,7 @@ export default function BackGround() {
                 ref={videoRef}
                 src={rotacao}
                 className="background-video"
-                muted
+                muted // ✅ SEMPRE MUDO
                 playsInline
                 loop
                 style={{
@@ -136,6 +136,7 @@ export default function BackGround() {
                     ref={entradaRef}
                     src={entrada}
                     className="entrada-video"
+                    muted // ✅ SEMPRE MUDO
                     playsInline
                     style={{
                         width: '100%',
@@ -162,6 +163,8 @@ export default function BackGround() {
 
             {showTorre && (
                 <TorreBackground onEnded={() => {
+                    // Como o vídeo agora é infinito, este callback pode não ser mais necessário
+                    // Mantido para compatibilidade, mas nunca será chamado
                     window.dispatchEvent(new CustomEvent('torre:ended'));
                 }} />
             )}

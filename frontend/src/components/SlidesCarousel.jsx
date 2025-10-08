@@ -106,6 +106,137 @@ export default function SlidesCarousel({ slides }) {
     const projectsRootRef = useRef(null);
     const cardNodesRef = useRef(new Map());
     const removeTimersRef = useRef(new Map());
+
+    useEffect(() => {
+        const el = containerRef.current;
+        if (!el) return;
+
+        let isDragging = false;
+        let startX = 0;
+        let startTime = 0;
+
+        const onMouseDown = (e) => {
+            isDragging = true;
+            startX = e.clientX;
+            startTime = Date.now();
+            el.style.cursor = 'grabbing';
+            e.preventDefault();
+        };
+
+        const onMouseMove = (e) => {
+            if (!isDragging) return;
+            e.preventDefault();
+        };
+
+        const onMouseUp = (e) => {
+            if (!isDragging) return;
+            isDragging = false;
+            el.style.cursor = 'grab';
+
+            const endX = e.clientX;
+            const diff = startX - endX;
+            const dt = Date.now() - startTime;
+
+            // Se movimento > 50px e tempo < 1s, considerar como swipe
+            if (Math.abs(diff) > 50 && dt < 1000) {
+                if (diff > 0) {
+                    // Drag para esquerda = próximo slide
+                    setIndex(i => {
+                        const next = Math.min(i + 1, slides.length - 1);
+                        indexRef.current = next;
+                        return next;
+                    });
+                } else {
+                    // Drag para direita = slide anterior
+                    setIndex(i => {
+                        const prev = Math.max(i - 1, 0);
+                        indexRef.current = prev;
+                        return prev;
+                    });
+                }
+            }
+        };
+
+        const onMouseLeave = () => {
+            if (isDragging) {
+                isDragging = false;
+                el.style.cursor = 'grab';
+            }
+        };
+
+        // Adicionar cursor grab por padrão
+        el.style.cursor = 'grab';
+
+        el.addEventListener('mousedown', onMouseDown);
+        el.addEventListener('mousemove', onMouseMove);
+        el.addEventListener('mouseup', onMouseUp);
+        el.addEventListener('mouseleave', onMouseLeave);
+
+        return () => {
+            el.removeEventListener('mousedown', onMouseDown);
+            el.removeEventListener('mousemove', onMouseMove);
+            el.removeEventListener('mouseup', onMouseUp);
+            el.removeEventListener('mouseleave', onMouseLeave);
+        };
+    }, [slides.length]);
+
+    // touch swipe (horizontal) - CÓDIGO EXISTENTE MELHORADO
+    useEffect(() => {
+        const el = containerRef.current;
+        if (!el) return;
+        let startX = 0;
+        let startTime = 0;
+
+        const onTouchStart = (e) => {
+            startX = e.touches[0].clientX;
+            startTime = Date.now();
+        };
+
+        const onTouchMove = (e) => {
+            // Permitir scroll vertical mas prevenir horizontal durante drag
+            const currentX = e.touches[0].clientX;
+            const diffX = Math.abs(startX - currentX);
+            if (diffX > 10) {
+                e.preventDefault(); // Prevenir scroll horizontal
+            }
+        };
+
+        const onTouchEnd = (e) => {
+            const endX = e.changedTouches[0].clientX;
+            const diff = startX - endX;
+            const dt = Date.now() - startTime;
+
+            // Se movimento > 50px e tempo < 1s, considerar como swipe
+            if (Math.abs(diff) > 50 && dt < 1000) {
+                if (diff > 0) {
+                    // Swipe para esquerda = próximo slide
+                    setIndex(i => {
+                        const next = Math.min(i + 1, slides.length - 1);
+                        indexRef.current = next;
+                        return next;
+                    });
+                } else {
+                    // Swipe para direita = slide anterior
+                    setIndex(i => {
+                        const prev = Math.max(i - 1, 0);
+                        indexRef.current = prev;
+                        return prev;
+                    });
+                }
+            }
+        };
+
+        el.addEventListener('touchstart', onTouchStart, { passive: true });
+        el.addEventListener('touchmove', onTouchMove, { passive: false });
+        el.addEventListener('touchend', onTouchEnd, { passive: true });
+
+        return () => {
+            el.removeEventListener('touchstart', onTouchStart);
+            el.removeEventListener('touchmove', onTouchMove);
+            el.removeEventListener('touchend', onTouchEnd);
+        };
+    }, [slides.length]);
+
     useEffect(() => {
         const slide = slides && slides[index];
         // derive a stable page key: prefer slide.path or slide.id, normalize it
@@ -396,7 +527,7 @@ function SlideItem({ slide, idx, goPrev, goNext, onNodeReady }) {
     // button UI to be portaled into the card
     const controls = (
         <>
-            <button aria-label="previous" onClick={goPrev}
+            <button id='prev-button' aria-label="previous" onClick={goPrev}
                 style={{
                     position: "absolute",
                     left: "0px",
@@ -415,7 +546,7 @@ function SlideItem({ slide, idx, goPrev, goNext, onNodeReady }) {
                 }}>
                 ‹
             </button>
-            <button aria-label="next" onClick={goNext}
+            <button id='next-button' aria-label="next" onClick={goNext}
                 style={{
                     position: "absolute",
                     right: "0px",

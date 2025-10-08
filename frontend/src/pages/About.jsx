@@ -1,4 +1,4 @@
-import React, { useRef } from 'react';
+import React, { useRef, useEffect } from 'react';
 import perfil from '../assets/img/img_perfil.png';
 import { FaJava } from 'react-icons/fa';
 import { SiSpring, SiPython, SiDjango, SiReact } from 'react-icons/si';
@@ -9,8 +9,102 @@ export default function About() {
 
   // Função placeholder para botão de estatísticas (será controlada pelas classes)
   const enviarDados = () => console.log('📊 Botão estatísticas clicado em About');
+
+  useEffect(() => {
+    const handleResize = () => {
+      const screenWidth = window.innerWidth;
+      const skillsRow = document.getElementById('about_skills_row');
+      const aboutLeft = document.getElementById('about_left');
+      const aboutRight = document.getElementById('about_right');
+
+      if (!skillsRow || !aboutLeft || !aboutRight) return;
+
+      if (screenWidth < 720) {
+        // Verificar se já existe o container mobile
+        const existingMobileSkills = document.getElementById('about_skills_row_mobile');
+        if (existingMobileSkills) {
+          return; // Já existe, não criar novamente
+        }
+
+        // Criar um container temporário com apenas os 3 primeiros skills
+        const skillBadges = skillsRow.querySelector('#about_skill_badges');
+        const allSkills = skillBadges.querySelectorAll('.skill-badge');
+        const first3Skills = Array.from(allSkills).slice(0, 3);
+
+        // 🔍 DEBUG: Verificar se está coletando corretamente
+        console.log('🔍 Debug Skills Mobile:');
+        console.log('Total skills encontrados:', allSkills.length);
+        console.log('Primeiros 3 skills:', first3Skills);
+        console.log('Skills que serão adicionados:');
+        first3Skills.forEach((skill, index) => {
+          const label = skill.querySelector('.skill-label')?.textContent || 'N/A';
+          console.log(`${index + 1}. ${label}`);
+        });
+
+        // Criar novo container para os 3 primeiros
+        const mobileSkillsContainer = document.createElement('div');
+        mobileSkillsContainer.id = 'about_skills_row_mobile';
+        mobileSkillsContainer.className = 'skills-row';
+
+        const mobileSkillsList = document.createElement('div');
+        mobileSkillsList.className = 'skills-list';
+
+        const mobileSkillsTitle = document.createElement('h4');
+        mobileSkillsTitle.className = 'about-h4-small';
+        mobileSkillsTitle.textContent = 'Skills';
+
+        const mobileSkillBadges = document.createElement('div');
+        mobileSkillBadges.className = 'skill-badges';
+
+        // Adicionar apenas os 3 primeiros skills
+        first3Skills.forEach(skill => {
+          const clonedSkill = skill.cloneNode(true);
+          mobileSkillBadges.appendChild(clonedSkill);
+          console.log('✅ Skill adicionado:', clonedSkill.querySelector('.skill-label')?.textContent);
+        });
+
+        mobileSkillsList.appendChild(mobileSkillsTitle);
+        mobileSkillsList.appendChild(mobileSkillBadges);
+        mobileSkillsContainer.appendChild(mobileSkillsList);
+
+        // Adicionar ao about_left
+        aboutLeft.appendChild(mobileSkillsContainer);
+
+        // ESCONDER o container original no about_right
+        skillsRow.style.display = 'none';
+
+        console.log('📱 Container mobile criado e original escondido');
+
+      } else {
+        // Remover skills mobile e mostrar o original no about_right
+        const mobileSkills = document.getElementById('about_skills_row_mobile');
+        if (mobileSkills) {
+          mobileSkills.remove();
+          console.log('🗑️ Container mobile removido');
+        }
+
+        // MOSTRAR o container original no about_right
+        if (skillsRow) {
+          skillsRow.style.display = 'block';
+          console.log('👁️ Container original mostrado');
+        }
+      }
+    };
+
+    // Executar na montagem do componente
+    handleResize();
+
+    // Adicionar listener para mudanças de tamanho
+    window.addEventListener('resize', handleResize);
+
+    // Cleanup
+    return () => {
+      window.removeEventListener('resize', handleResize);
+    };
+  }, []);
+
   return (
-    <div className="page-root">
+    <div className="page-root" style={{ display: 'flex', justifyContent: 'flex-start', alignItems: 'center', height: '100%', width: '100%', marginLeft: '2%' }}>
       <div id="about_card" ref={rootRef} className="card-carousel about-card">
         <div id="about_left" className="about-left">
           <img id="about_avatar" src={perfil} alt="perfil" className="avatar" />
@@ -21,8 +115,8 @@ export default function About() {
 
           <div id="about_contact_list" className="contact-list">
             <a id="about_link_github" href="https://github.com/" target="_blank" rel="noreferrer" ><FiGithub /> Github</a>
-            <a id="about_link_email" href="mailto:seu.email@exemplo.com"><FiMail /> seu.email@exemplo.com</a>
-            <a id="about_link_phone" href="tel:+5511999999999"><FiPhone /> +55 11 99999-9999</a>
+            <a id="about_link_email" href="mailto:danieltisantos@gmail.com"><FiMail /> E-mail</a>
+            <a id="about_link_phone" href="tel:+5511962696757"><FiPhone />Celular</a>
           </div>
 
           <div id="about_interests_block" className="info-block">
@@ -32,12 +126,6 @@ export default function About() {
             </div>
           </div>
 
-          <div id="about_role_block" className="info-block">
-            <div id="about_role_box" className="info-box">
-              <strong id="about_role_title_strong" className="about-info-strong">Atuação</strong>
-              <div id="about_role_text" className="about-info-text">Tech Lead em ERP — coordenação técnica, definição de arquitetura, code reviews e mentoring.</div>
-            </div>
-          </div>
         </div>
 
         {/* right column: about + skills */}

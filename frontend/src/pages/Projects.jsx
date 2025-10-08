@@ -4,8 +4,8 @@ export default function Projects() {
 
   // Função para debug do WebSocket
   return (
-    <div style={{ display: 'flex', justifyContent: 'flex-start', alignItems: 'center', height: '100%', width: '100%', marginLeft: '12px' }}>
-      <div id="projects_card" className="card-carousel project-card" style={{ width: '70%', height: '80vh', backgroundColor: 'rgba(192, 189, 189, 0.61)', padding: 24, color: 'black', boxSizing: 'border-box', borderRadius: '8px', cursor: 'pointer' }}>
+    <div style={{ display: 'flex', justifyContent: 'flex-start', alignItems: 'center', height: '100%', width: '100%', marginLeft: '2%' }}>
+      <div id="projects_card" className="card-carousel project-card" >
         <h1 id="projects_title">Projetos</h1>
         <p id="projects_description">Aqui estão alguns projetos.</p>
 

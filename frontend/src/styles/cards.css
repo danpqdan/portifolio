@@ -5,12 +5,11 @@
     align-items: center;
     height: 100%;
     width: 100%;
-    margin-left: 12px;
+    margin-left: 2%;
 }
 
 .card-carousel {
     width: 70%;
-    height: 80vh;
     background-color: rgba(192, 189, 189, 0.61);
     padding: 0;
     color: #0b1220;
@@ -24,16 +23,15 @@
 }
 
 .card-header {
-    padding: 28px;
+    padding: 12px;
 }
 
 .card-content {
-    padding: 28px;
+    padding: 0px 28px;
     color: #334155;
-    line-height: 1.6;
     overflow-y: auto;
     flex: 1;
-    font-size: 18px;
+    font-size: 16px;
 }
 
 .card-footer {
@@ -45,7 +43,11 @@
 }
 
 /* Card variants */
-.home-card {
+.home-card,
+.project-card,
+.about-card {
+    min-height: 80vh;
+    max-height: 99vh;
     z-index: 40;
     background-color: rgba(192, 189, 189, 0.61);
 }
@@ -57,6 +59,16 @@
     position: relative;
     display: flex;
     flex-direction: row;
+}
+
+.home-footer {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(100px, max-content));
+    gap: 1.5rem;
+    justify-content: center;
+    /* centraliza o grid */
+    align-items: center;
+    padding: 1rem;
 }
 
 .project-card {
@@ -94,6 +106,21 @@
     border-radius: 14px;
     box-shadow: 0 8px 24px rgba(12, 12, 12, 0.425);
 }
+
+
+.tech-btn {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    background: #0b1220;
+    color: #fff;
+    padding: 10px 14px;
+    border-radius: 8px;
+    text-decoration: none;
+    font-size: 12px;
+}
+
 
 .contact-list {
     width: 100%;
@@ -156,6 +183,7 @@
 }
 
 .skill-badge {
+    justify-content: center;
     display: inline-flex;
     align-items: center;
     gap: 8px;
@@ -195,4 +223,220 @@
     cursor: pointer;
     font-weight: 600;
     font-size: 18px;
+}
+
+.about-info-text{
+    font-size: 20px;
+    color: #334155;
+    margin-top: 4px;
+    margin-bottom: 12px;
+    font-weight: 500;
+}
+
+@media screen and (max-width: 720px) {
+
+    .card-carousel,
+    .project-card,
+    .about-card {
+        width: 96%;
+        min-height: 90vh;
+    }
+
+    .home-footer {
+        padding: 28px;
+        display: grid;
+        justify-content: space-evenly;
+        align-items: center;
+        grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+        gap: 1.5rem;
+        padding: 1rem;
+    }
+
+    .info-block {
+        display: none;
+    }
+
+    .about_right {
+        overflow: hidden;
+    }
+
+    .primary-btn {
+        background: #0f172a;
+        color: #fff;
+        border: none;
+        padding: 12px 16px;
+        border-radius: 8px;
+        cursor: pointer;
+        /* font-weight: 600; */
+        font-size: 14px;
+    }
+}
+
+
+/* ...existing code... */
+
+@media screen and (max-width: 380px) {
+
+    .avatar {
+        width: 60px;
+    }
+
+
+    .card-carousel,
+    .project-card,
+    .about-card {
+        width: 96%;
+        min-height: 99vh;
+        padding: 4px;
+    }
+
+    .card-carousel:only-child,
+    .project-card:only-child,
+    .about-card:only-child {
+        padding: 4px;
+    }
+
+    /* Aplicar padding para todos os filhos e subfilhos */
+    .card-carousel *,
+    .project-card *,
+    .about-card * {
+        padding: 0px !important;
+        margin: 0 !important;
+    }
+
+    /* ✅ REMOVER TODOS OS ÍCONES EM TELAS PEQUENAS */
+    .skill-icon,
+    .card-carousel .skill-icon,
+    .project-card .skill-icon,
+    .about-card .skill-icon,
+    /* Ícones específicos do React Icons */
+    .skill-badge svg,
+    .skill-badge .skill-icon svg,
+    .contact-list svg,
+    .contact-list a svg,
+    /* Todos os SVGs exceto avatar e tech-btn */
+    .card-carousel svg:not(.avatar):not(img):not(.tech-btn svg),
+    .project-card svg:not(.avatar):not(img):not(.tech-btn svg),
+    .about-card svg:not(.avatar):not(img):not(.tech-btn svg),
+    /* Ícones FaJava, SiSpring, etc (exceto tech-btn) */
+    .card-carousel [class*="fa-"]:not(.tech-btn [class*="fa-"]),
+    .card-carousel [class*="si-"]:not(.tech-btn [class*="si-"]),
+    .card-carousel [class*="fi-"]:not(.tech-btn [class*="fi-"]),
+    .project-card [class*="fa-"]:not(.tech-btn [class*="fa-"]),
+    .project-card [class*="si-"]:not(.tech-btn [class*="si-"]),
+    .project-card [class*="fi-"]:not(.tech-btn [class*="fi-"]),
+    .about-card [class*="fa-"]:not(.tech-btn [class*="fa-"]),
+    .about-card [class*="si-"]:not(.tech-btn [class*="si-"]),
+    .about-card [class*="fi-"]:not(.tech-btn [class*="fi-"]) {
+        display: none !important;
+        visibility: hidden !important;
+        width: 0 !important;
+        height: 0 !important;
+        opacity: 0 !important;
+    }
+
+    /* ✅ MANTER ÍCONES DO tech-btn VISÍVEIS */
+    .tech-btn svg,
+    .tech-btn [class*="fa-"],
+    .tech-btn [class*="si-"],
+    .tech-btn [class*="fi-"] {
+        display: inline-flex !important;
+        visibility: visible !important;
+        width: auto !important;
+        height: auto !important;
+        opacity: 1 !important;
+    }
+
+
+    /* Ajustar skill badges sem ícones */
+    .skill-badge {
+        padding: 6px 8px !important;
+        margin: 2px !important;
+        min-width: auto !important;
+        gap: 0 !important;
+    }
+
+    /* Ajustar links de contato sem ícones */
+    .contact-list a {
+        padding: 8px 10px !important;
+        margin: 2px 0 !important;
+        gap: 0 !important;
+    }
+
+    /* Remover espaçamento onde havia ícones */
+    .skill-badge .skill-label,
+    .contact-list a span:not(.skill-icon) {
+        margin-left: 0 !important;
+        padding-left: 0 !important;
+        text-align: center !important;
+    }
+
+    /* Exceções para elementos que não devem ter padding alterado */
+    .card-carousel img,
+    .project-card img,
+    .about-card img,
+    .avatar {
+        padding: 0 !important;
+        margin: 4px !important;
+    }
+
+    /* Exceções para botões e badges */
+    .primary-btn,
+    .tech-btn {
+        padding: 6px 8px !important;
+        margin: 2px !important;
+    }
+
+    /* Exceções para textos */
+    .card-carousel h1,
+    .card-carousel h2,
+    .card-carousel h3,
+    .card-carousel h4,
+    .card-carousel h5,
+    .card-carousel h6,
+    .card-carousel p,
+    .card-carousel span {
+        padding: 0px !important;
+        margin: 0px !important;
+    }
+
+    /* Container específicos com padding controlado */
+    .about-left,
+    .about-right,
+    .card-content,
+    .card-header,
+    .card-footer {
+        gap: 0px;
+    }
+
+    /* Skills container com padding específico */
+    .skills-row,
+    .skills-list,
+    .skill-badges {
+        width: 100%;
+    }
+
+    .skill-badge {
+        border-radius: 4px !important;
+        width: 100%;
+    }
+
+    /* Info blocks com padding menor */
+    .info-block,
+    .info-box {
+        padding: 4px !important;
+        margin: 2px !important;
+    }
+
+    /* Esconder botões de navegação do carousel em telas muito pequenas */
+    #prev-button,
+    #next-button {
+        display: none !important;
+    }
+
+    .about-right {
+        padding: 4px 8px !important;
+    }
+
+
 }

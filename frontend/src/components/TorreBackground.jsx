@@ -13,28 +13,17 @@ export default function TorreBackground({ onEnded }) {
       window.dispatchEvent(new CustomEvent('torre:started'));
     };
 
-    const handleEnded = () => {
-      window.dispatchEvent(new CustomEvent('torre:ended'));
-      if (onEnded) onEnded();
-    };
-
     v.addEventListener('play', handlePlay);
-    v.addEventListener('ended', handleEnded);
 
-    // try to play the video (unmuted if possible). If autoplay with sound is blocked, fallback to muted play.
     const tryPlay = async () => {
       try {
-        v.muted = false;
+        v.muted = true; // ✅ SEMPRE MUDO
+        v.loop = true;  // ✅ LOOP INFINITO
         v.currentTime = 0;
         await v.play();
-      } catch {
-        // fallback to muted play if unmuted autoplay is blocked
-        try {
-          v.muted = true;
-          await v.play();
-        } catch {
-          // ignore final failure
-        }
+      } catch (error) {
+        console.log('Erro ao reproduzir vídeo Torre:', error);
+        // ignore final failure
       }
     };
 
@@ -42,7 +31,6 @@ export default function TorreBackground({ onEnded }) {
 
     return () => {
       v.removeEventListener('play', handlePlay);
-      v.removeEventListener('ended', handleEnded);
     };
   }, [onEnded]);
 
@@ -51,6 +39,8 @@ export default function TorreBackground({ onEnded }) {
       <video
         ref={ref}
         src={torre}
+        muted
+        loop
         playsInline
         style={{ width: '100%', height: '100vh', objectFit: 'cover', display: 'block' }}
       />
