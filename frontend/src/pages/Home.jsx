@@ -27,7 +27,7 @@ export default function Home() {
 
           // Iniciar o rastreamento
           classeHome.iniciar();
-        } catch  {
+        } catch {
           // 
         }
       }
@@ -43,7 +43,7 @@ export default function Home() {
 
   // Função para testar envio de dados
   return (
-    <div style={{ display: 'flex', justifyContent: 'flex-start', alignItems: 'center', height: '100%', width: '100%', marginLeft: '12px' }}>
+    <div style={{ display: 'flex', justifyContent: 'flex-start', alignItems: 'center', height: '100%', width: '100%', marginLeft: '2%' }}>
       <div className="card-carousel home-card">
         {/* header */}
         <div className="card-header home-header">
@@ -69,30 +69,28 @@ export default function Home() {
             Se você presta serviços técnicos, um portfólio atualizado e um painel de estatísticas demonstram não apenas know-how, mas também compromisso com qualidade e transparência dos resultados. Este portfólio pessoal foi desenvolvido com foco em exibir métricas e facilitar a apresentação de resultados a clientes.
           </p>
 
-          <h3 style={{ marginTop: 6, color: '#334155' }}>Integrações e bibliotecas usadas</h3>
-          <p>
-            Todas as integrações apresentadas aqui são realizadas com React como base. O fluxo de dados e estado global é gerenciado com Redux (ou uma variação leve do mesmo, conforme necessidade). Para ícones e pequenos componentes visuais usamos <strong>react-icons</strong>. O projeto foi iniciado com Vite para obter builds rápidos em desenvolvimento.
-          </p>
-
         </div>
 
         {/* footer */}
-        <div className="home-footer">
-          <a className="tech-btn" href="https://grafana.com/" target="_blank" rel="noopener noreferrer">
-            <SiGrafana style={{ color: '#f76b1c' }} /> Abrir Grafana
-          </a>
-          <a className="tech-btn" href="https://react.dev/" target="_blank" rel="noopener noreferrer">
-            <FaReact style={{ color: '#61dafb' }} /> React
-          </a>
-          <a className="tech-btn" href="https://redux.js.org/" target="_blank" rel="noopener noreferrer">
-            <SiRedux style={{ color: '#764abc' }} /> Redux
-          </a>
-          <a className="tech-btn" href="https://react-icons.github.io/react-icons/" target="_blank" rel="noopener noreferrer">
-            <FaFonticons style={{ color: '#61dafb' }} /> react-icons
-          </a>
-          <a className="tech-btn" href="https://vite.dev/" target="_blank" rel="noopener noreferrer">
-            <TbBrandVite style={{ color: '#64b64f' }} /> Vite
-          </a>
+        <div className="container-home-footer">
+
+          <div className="home-footer">
+            <a className="tech-btn" href="https://grafana.com/" target="_blank" rel="noopener noreferrer">
+              <SiGrafana style={{ color: '#f76b1c' }} /> Grafana
+            </a>
+            <a className="tech-btn" href="https://react.dev/" target="_blank" rel="noopener noreferrer">
+              <FaReact style={{ color: '#61dafb' }} /> React
+            </a>
+            <a className="tech-btn" href="https://redux.js.org/" target="_blank" rel="noopener noreferrer">
+              <SiRedux style={{ color: '#764abc' }} /> Redux
+            </a>
+            <a className="tech-btn" href="https://react-icons.github.io/react-icons/" target="_blank" rel="noopener noreferrer">
+              <FaFonticons style={{ color: '#61dafb' }} /> icons
+            </a>
+            <a className="tech-btn" href="https://vite.dev/" target="_blank" rel="noopener noreferrer">
+              <TbBrandVite style={{ color: '#64b64f' }} /> Vite
+            </a>
+          </div>
         </div>
       </div>
     </div >
