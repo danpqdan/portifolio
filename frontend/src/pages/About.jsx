@@ -19,8 +19,60 @@ export default function About() {
 
       if (!skillsRow || !aboutLeft || !aboutRight) return;
 
+      // ✅ JUNTAR AVATAR E TEXTO EM TELAS PEQUENAS
+      if (screenWidth < 380) {
+        const avatar = document.getElementById('about_avatar');
+        const textCenter = document.getElementById('about_text_center');
+
+        if (avatar && textCenter) {
+          // Verificar se já existe o container mobile
+          let avatarTextContainer = document.getElementById('about_avatar_text_mobile');
+
+          if (!avatarTextContainer) {
+            // Criar container para avatar + texto
+            avatarTextContainer = document.createElement('div');
+            avatarTextContainer.id = 'about_avatar_text_mobile';
+            avatarTextContainer.style.display = 'flex';
+            avatarTextContainer.style.flexDirection = 'row';
+            avatarTextContainer.style.alignItems = 'center';
+            avatarTextContainer.style.gap = '12px';
+            avatarTextContainer.style.width = '100%';
+            avatarTextContainer.style.justifyContent = 'center';
+            avatarTextContainer.style.marginBottom = '16px';
+
+            // Mover avatar e texto para o novo container
+            avatarTextContainer.appendChild(avatar);
+            avatarTextContainer.appendChild(textCenter);
+
+            // Adicionar o container no início do about_left
+            aboutLeft.insertBefore(avatarTextContainer, aboutLeft.firstChild);
+
+            console.log('📱 Avatar e texto juntados em container mobile');
+          }
+        }
+      } else {
+        // Restaurar layout original para telas maiores
+        const avatarTextContainer = document.getElementById('about_avatar_text_mobile');
+
+        if (avatarTextContainer) {
+          const avatar = document.getElementById('about_avatar');
+          const textCenter = document.getElementById('about_text_center');
+
+          if (avatar && textCenter) {
+            // Remover do container mobile e adicionar de volta ao about_left
+            aboutLeft.insertBefore(avatar, avatarTextContainer);
+            aboutLeft.insertBefore(textCenter, avatarTextContainer);
+
+            // Remover o container mobile
+            avatarTextContainer.remove();
+
+            console.log('💻 Avatar e texto restaurados para layout original');
+          }
+        }
+      }
+
       if (screenWidth < 720) {
-        // Verificar se já existe o container mobile
+        // Verificar se já existe o container mobile para skills
         const existingMobileSkills = document.getElementById('about_skills_row_mobile');
         if (existingMobileSkills) {
           return; // Já existe, não criar novamente
@@ -29,7 +81,7 @@ export default function About() {
         // Criar um container temporário com apenas os 3 primeiros skills
         const skillBadges = skillsRow.querySelector('#about_skill_badges');
         const allSkills = skillBadges.querySelectorAll('.skill-badge');
-        const first3Skills = Array.from(allSkills).slice(0, 3);
+        const first3Skills = Array.from(allSkills).slice(0, 4);
 
         // 🔍 DEBUG: Verificar se está coletando corretamente
         console.log('🔍 Debug Skills Mobile:');
@@ -130,7 +182,7 @@ export default function About() {
 
         {/* right column: about + skills */}
         <div id="about_right" className="card-content about-right">
-          <h3 id="about_title" className="about-h3-large">Sobre mim</h3>
+          <h3 id="about_title" className="about-h3-large tittle">Sobre mim</h3>
           <p id="about_paragraph1" className="about-paragraph">
             Sou desenvolvedor com 5 anos de experiência, com foco em soluções back-end escaláveis. Tenho 4 anos de experiência com Java e Spring Boot, implementando APIs com foco em performance, observabilidade e confiabilidade. Trabalhei em integrações complexas com bancos relacionais, projetos orientados a microsserviços e desenho de contratos HTTP/REST.
           </p>
