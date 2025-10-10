@@ -52,13 +52,18 @@
     background-color: rgba(192, 189, 189, 0.61);
 }
 
+.project-card {
+    height: 80vh;
+}
+
 .about-card {
-    padding: 12px 32px;
+    padding: 12px 28px;
     z-index: 50;
     background-color: rgba(192, 189, 189, 0.61);
     position: relative;
     display: flex;
     flex-direction: row;
+    overflow-x: hidden;
 }
 
 .home-footer {
@@ -225,7 +230,7 @@
     font-size: 18px;
 }
 
-.about-info-text{
+.about-info-text {
     font-size: 20px;
     color: #334155;
     margin-top: 4px;
@@ -270,12 +275,132 @@
         /* font-weight: 600; */
         font-size: 14px;
     }
+
+    .project-card-container {
+        width: 240px !important;
+        /* height: 120px !important; */
+        margin: 8px !important;
+    }
+
+    #projects_list {
+        grid-template-columns: 1fr 1fr !important;
+        gap: 80px 0px !important;
+        /* 40px vertical, 20px horizontal */
+        align-items: start !important;
+    }
 }
 
 
-/* ...existing code... */
+@media screen and (max-width: 470px) {
+    #projects_list {
+        grid-template-columns: 1fr !important;
+        gap: 15px !important;
+        justify-items: center !important;
+        padding: 5px !important;
+    }
+
+    .project-card-container {
+        width: 280px !important;
+        height: 180px !important;
+        margin: 8px !important;
+    }
+
+    .project-card-back button {
+        padding: 8px 10px !important;
+        font-size: 11px !important;
+        min-width: 70px !important;
+        max-width: 90px !important;
+        gap: 3px !important;
+    }
+
+    .project-card-back .card-buttons {
+        gap: 6px !important;
+        margin-top: 8px !important;
+    }
+
+    .container-btn-projects {
+        justify-content: space-evenly !important;
+    }
+
+    #projects_list {
+        grid-template-columns: 1fr !important;
+        gap: 15px !important;
+        justify-items: center !important;
+        padding: 5px !important;
+    }
+
+    .project-card-container {
+        width: 280px !important;
+        height: 180px !important;
+        margin: 8px !important;
+    }
+
+    #projects_list {
+        gap: 80px !important;
+    }
+
+    .card-content {
+        margin: 0px !important;
+    }
+
+    #projects_list {
+        padding: 0px !important;
+        justify-items: normal !important;
+    }
+
+    .project-card-container {
+        margin: 0px !important;
+        width: 90% !important;
+    }
+
+    #about_right {
+        padding-right: 0px !important;
+        margin-right: 0px !important;
+
+    }
+
+}
 
 @media screen and (max-width: 380px) {
+    #projects_list {
+        grid-template-columns: 1fr !important;
+        gap: 15px !important;
+        justify-items: center !important;
+        padding: 5px !important;
+    }
+
+    .project-card-container {
+        width: 280px !important;
+        height: 180px !important;
+        margin: 8px !important;
+    }
+
+    .project-card-back button {
+        padding: 8px 10px !important;
+        font-size: 11px !important;
+        min-width: 70px !important;
+        max-width: 90px !important;
+        gap: 3px !important;
+    }
+
+    .project-card-back .card-buttons {
+        gap: 6px !important;
+        margin-top: 8px !important;
+    }
+
+    .container-btn-projects {
+        justify-content: space-evenly !important;
+    }
+
+    .project-card-front,
+    .project-card-back {
+        padding: 15px !important;
+    }
+
+    .project-card-front h3,
+    .project-card-back h3 {
+        font-size: 16px !important;
+    }
 
     .avatar {
         width: 60px;
@@ -347,6 +472,49 @@
         opacity: 1 !important;
     }
 
+    .about-h3-large {
+        font-size: 20px !important;
+    }
+
+    .about-paragraph {
+        font-size: 14px !important;
+    }
+
+    .about-left {
+        width: 100% !important;
+        align-items: center !important;
+        text-align: center !important;
+        margin-bottom: 12px !important;
+    }
+
+    .contact-list {
+        display: grid !important;
+        grid-template-columns: 1fr 1fr 1fr !important;
+    }
+
+    .skill-badges {
+        display: grid !important;
+        grid-template-columns: 1fr 1fr 1fr 1fr !important;
+    }
+
+    .about-h3-large.tittle {
+        display: none;
+    }
+
+    .about-h4-small {
+        display: none;
+    }
+
+    #about_card {
+        display: flex !important;
+        flex-direction: column !important;
+        align-items: center !important;
+    }
+
+    #about_right {
+        width: 100% !important;
+        overflow-x: hidden !important;
+    }
 
     /* Ajustar skill badges sem ícones */
     .skill-badge {
@@ -393,11 +561,18 @@
     .card-carousel h3,
     .card-carousel h4,
     .card-carousel h5,
-    .card-carousel h6,
-    .card-carousel p,
-    .card-carousel span {
+    .card-carousel h6 {
         padding: 0px !important;
         margin: 0px !important;
+    }
+
+    .card-carousel p {
+        margin-bottom: 4px !important;
+    }
+
+    .card-carousel ul {
+        text-align: center;
+        list-style-type: none;
     }
 
     /* Container específicos com padding controlado */
@@ -434,9 +609,112 @@
         display: none !important;
     }
 
-    .about-right {
-        padding: 4px 8px !important;
+    #about_avatar_text_mobile {
+        display: flex !important;
+        flex-direction: row !important;
+        align-items: center !important;
+        gap: 12px !important;
+        width: 100% !important;
+        justify-content: center !important;
+        margin-bottom: 16px !important;
+        padding: 8px !important;
     }
 
+    #about_avatar_text_mobile .avatar {
+        width: 60px !important;
+        height: 60px !important;
+        border-radius: 50% !important;
+        margin: 0 !important;
+    }
 
+    #about_avatar_text_mobile .about-text-center {
+        text-align: left !important;
+        flex: 1 !important;
+        margin: 0 !important;
+    }
+
+    #about_avatar_text_mobile .about-h3-large {
+        font-size: 16px !important;
+        margin: 0 0 4px 0 !important;
+        line-height: 1.2 !important;
+    }
+
+    #about_avatar_text_mobile .about-meta {
+        font-size: 12px !important;
+        margin: 0 !important;
+        color: #64748b !important;
+    }
+
+    /* Resto do CSS existente... */
+    #projects_list {
+        grid-template-columns: 1fr !important;
+        gap: 15px !important;
+        justify-items: center !important;
+        padding: 5px !important;
+    }
+
+    .project-card-container {
+        width: 280px !important;
+        height: 180px !important;
+        margin: 8px !important;
+    }
+
+    .container-btn-front {
+        justify-content: center !important;
+    }
+
+    .container-btn-front,
+    span {
+        font-size: 12px !important;
+        padding: 6px 8px !important;
+    }
+
+    .project-card-description {
+        font-size: 14px !important;
+        margin: 0px 4px !important;
+        padding: 12px !important;
+        text-align: justify !important;
+    }
+
+    .tech-span {
+        color: black !important;
+        font-size: 10px !important;
+        padding: 4px 6px !important;
+        gap: 4px !important;
+    }
+
+    .tech-btn {
+        flex-direction: row !important;
+        min-height: 36px;
+        gap: 8px !important;
+    }
+
+    .home-footer {
+        gap: 6px !important;
+    }
+
+    #home-content {
+        padding: 12px !important;
+    }
+
+    #home-content>h3 {
+        font-size: 18px !important;
+        margin: 0 0 8px 0 !important;
+        color: #334155 !important;
+    }
+
+    #home-content>p {
+        font-size: 12px !important;
+        margin: 0 0 0px 0 !important;
+        color: #475569 !important;
+        text-align: justify !important;
+    }
+
+    #about_right>h3,
+    #about_right>p {
+        padding: 0px 8px !important;
+    }
+.about-meta{
+    text-align: center;
+}
 }

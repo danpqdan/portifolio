@@ -47,13 +47,15 @@ export default function Home() {
       <div className="card-carousel home-card">
         {/* header */}
         <div className="card-header home-header">
-          <h1>Portfólio Pessoal — Controle de Dados</h1>
+          <h1>Portfólio Pessoal</h1>
+          <h3>Controle de Dados & Estatísticas</h3>
         </div>
         {/* content (scrollable) */}
         <div
           onWheel={(e) => { e.stopPropagation(); }}
           onTouchMove={(e) => { e.stopPropagation(); }}
           className="card-content"
+          id='home-content'
         >
           <h3 style={{ marginTop: 6, color: '#334155' }}>O projeto</h3>
           <p>

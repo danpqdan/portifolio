@@ -110,7 +110,15 @@ export default function SlidesCarousel({ slides }) {
     useEffect(() => {
         const el = containerRef.current;
         if (!el) return;
-
+        
+        // Detectar se é dispositivo touch
+        const isTouchDevice = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+        
+        // Se for dispositivo touch, não adicionar eventos de mouse
+        if (isTouchDevice) {
+            return;
+        }
+        
         let isDragging = false;
         let startX = 0;
         let startTime = 0;
@@ -132,26 +140,26 @@ export default function SlidesCarousel({ slides }) {
             if (!isDragging) return;
             isDragging = false;
             el.style.cursor = 'grab';
-
+            
             const endX = e.clientX;
             const diff = startX - endX;
             const dt = Date.now() - startTime;
-
+            
             // Se movimento > 50px e tempo < 1s, considerar como swipe
             if (Math.abs(diff) > 50 && dt < 1000) {
                 if (diff > 0) {
                     // Drag para esquerda = próximo slide
-                    setIndex(i => {
-                        const next = Math.min(i + 1, slides.length - 1);
-                        indexRef.current = next;
-                        return next;
+                    setIndex(i => { 
+                        const next = Math.min(i + 1, slides.length - 1); 
+                        indexRef.current = next; 
+                        return next; 
                     });
                 } else {
                     // Drag para direita = slide anterior
-                    setIndex(i => {
-                        const prev = Math.max(i - 1, 0);
-                        indexRef.current = prev;
-                        return prev;
+                    setIndex(i => { 
+                        const prev = Math.max(i - 1, 0); 
+                        indexRef.current = prev; 
+                        return prev; 
                     });
                 }
             }
@@ -166,12 +174,12 @@ export default function SlidesCarousel({ slides }) {
 
         // Adicionar cursor grab por padrão
         el.style.cursor = 'grab';
-
+        
         el.addEventListener('mousedown', onMouseDown);
         el.addEventListener('mousemove', onMouseMove);
         el.addEventListener('mouseup', onMouseUp);
         el.addEventListener('mouseleave', onMouseLeave);
-
+        
         return () => {
             el.removeEventListener('mousedown', onMouseDown);
             el.removeEventListener('mousemove', onMouseMove);
@@ -180,32 +188,56 @@ export default function SlidesCarousel({ slides }) {
         };
     }, [slides.length]);
 
-    // touch swipe (horizontal) - CÓDIGO EXISTENTE MELHORADO
+    // ✅ TOUCH SWIPE para mobile - MELHORADO para prevenir conflitos
     useEffect(() => {
         const el = containerRef.current;
         if (!el) return;
+        
         let startX = 0;
         let startTime = 0;
+        let isScrolling = false;
 
         const onTouchStart = (e) => {
             startX = e.touches[0].clientX;
             startTime = Date.now();
+            isScrolling = false;
         };
 
         const onTouchMove = (e) => {
-            // Permitir scroll vertical mas prevenir horizontal durante drag
+            if (!startX) return;
+            
             const currentX = e.touches[0].clientX;
+            const currentY = e.touches[0].clientY;
             const diffX = Math.abs(startX - currentX);
-            if (diffX > 10) {
-                e.preventDefault(); // Prevenir scroll horizontal
+            const diffY = Math.abs(e.touches[0].clientY - (e.touches[0].clientY - currentY));
+            
+            // Determinar direção do movimento
+            if (!isScrolling) {
+                if (diffY > diffX) {
+                    // Movimento vertical - permitir scroll
+                    isScrolling = true;
+                } else if (diffX > 10) {
+                    // Movimento horizontal - prevenir scroll e ativar swipe
+                    e.preventDefault();
+                }
+            } else if (!isScrolling && diffX > 10) {
+                e.preventDefault();
             }
         };
 
         const onTouchEnd = (e) => {
+            if (!startX || isScrolling) {
+                startX = 0;
+                return;
+            }
+            
             const endX = e.changedTouches[0].clientX;
             const diff = startX - endX;
             const dt = Date.now() - startTime;
-
+            
+            // Reset
+            startX = 0;
+            
             // Se movimento > 50px e tempo < 1s, considerar como swipe
             if (Math.abs(diff) > 50 && dt < 1000) {
                 if (diff > 0) {
@@ -226,14 +258,21 @@ export default function SlidesCarousel({ slides }) {
             }
         };
 
+        const onTouchCancel = () => {
+            startX = 0;
+            isScrolling = false;
+        };
+
         el.addEventListener('touchstart', onTouchStart, { passive: true });
         el.addEventListener('touchmove', onTouchMove, { passive: false });
         el.addEventListener('touchend', onTouchEnd, { passive: true });
+        el.addEventListener('touchcancel', onTouchCancel, { passive: true });
 
         return () => {
             el.removeEventListener('touchstart', onTouchStart);
             el.removeEventListener('touchmove', onTouchMove);
             el.removeEventListener('touchend', onTouchEnd);
+            el.removeEventListener('touchcancel', onTouchCancel);
         };
     }, [slides.length]);
 
