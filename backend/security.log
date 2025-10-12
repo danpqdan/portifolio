@@ -10,3 +10,19 @@
 2025-10-12 13:56:21,418 - INFO -  * Debugger PIN: 456-243-123
 2025-10-12 14:59:11,259 - INFO -  * Detected change in 'D:\\www\\portifolio_completo\\portifolio\\backend\\app.py', reloading
 2025-10-12 14:59:11,424 - INFO -  * Restarting with stat
+2025-10-12 16:30:52,265 - INFO - Server initialized for eventlet.
+2025-10-12 16:30:54,292 - ERROR - ❌ InfluxDB health check falhou: <urllib3.connection.HTTPConnection object at 0x000001F4987CA270>: Failed to establish a new connection: [WinError 10061] Nenhuma conexão pôde ser feita porque a máquina de destino as recusou ativamente
+2025-10-12 16:30:54,293 - INFO - [SUCCESS] InfluxDB service inicializado com sucesso
+2025-10-12 16:30:54,299 - INFO - [CONFIG] Iniciando servidor em modo DESENVOLVIMENTO
+2025-10-12 16:30:54,310 - INFO -  * Restarting with stat
+2025-10-12 16:30:55,701 - INFO - Server initialized for eventlet.
+2025-10-12 16:30:57,745 - ERROR - ❌ InfluxDB health check falhou: <urllib3.connection.HTTPConnection object at 0x000002279364A270>: Failed to establish a new connection: [WinError 10061] Nenhuma conexão pôde ser feita porque a máquina de destino as recusou ativamente
+2025-10-12 16:30:57,746 - INFO - [SUCCESS] InfluxDB service inicializado com sucesso
+2025-10-12 16:30:57,751 - INFO - [CONFIG] Iniciando servidor em modo DESENVOLVIMENTO
+2025-10-12 16:30:57,761 - WARNING -  * Debugger is active!
+2025-10-12 16:30:57,784 - INFO -  * Debugger PIN: 456-243-123
+2025-10-12 16:31:44,247 - INFO -  * Detected change in 'D:\\www\\portifolio_completo\\portifolio\\backend\\app.py', reloading
+2025-10-12 16:31:44,422 - INFO -  * Restarting with stat
+2025-10-12 16:31:46,146 - INFO - Server initialized for eventlet.
+2025-10-12 16:31:48,186 - ERROR - ❌ InfluxDB health check falhou: <urllib3.connection.HTTPConnection object at 0x00000297022EA270>: Failed to establish a new connection: [WinError 10061] Nenhuma conexão pôde ser feita porque a máquina de destino as recusou ativamente
+2025-10-12 16:31:48,187 - INFO - [SUCCESS] InfluxDB service inicializado com sucesso

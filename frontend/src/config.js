@@ -1,25 +1,19 @@
-/**
- * Configurações centralizadas da aplicação
- * Acessa variáveis de ambiente através do import.meta.env
- */
-
-// Ambiente
-export const IS_DEV = import.meta.env.MODE !== 'production';
-export const IS_PROD = import.meta.env.MODE === 'production';
-export const NODE_ENV = import.meta.env.MODE;
-
-// URLs
-export const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
-export const WEBSOCKET_URL = import.meta.env.VITE_WEBSOCKET_URL || 'http://localhost:5000';
-
-// Flags
-export const DEBUG_ENABLED = import.meta.env.VITE_DEBUG === 'true' || IS_DEV; // Habilitar debug em desenvolvimento
-
-export default {
-    IS_DEV,
-    IS_PROD,
-    NODE_ENV,
-    API_URL,
-    WEBSOCKET_URL,
-    DEBUG_ENABLED,
+const config = {
+  development: {
+    API_BASE_URL: 'http://localhost:5000',
+    WEBSOCKET_URL: 'http://localhost:5000',
+    WEBSOCKET_PATH: '/socket.io',
+    ENVIRONMENT: 'development'
+  },
+  production: {
+    // ✅ CORRIGIR PARA SEU DOMÍNIO REAL
+    API_BASE_URL: 'https://dsplayground.com.br/api',
+    WEBSOCKET_URL: 'https://dsplayground.com.br',
+    WEBSOCKET_PATH: '/api/socket.io', // ✅ Caminho correto para produção
+    ENVIRONMENT: 'production'
+  }
 };
+
+// Detectar ambiente automaticamente
+const environment = import.meta.env.MODE || 'development';
+export default config[environment];
