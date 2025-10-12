@@ -6,6 +6,7 @@ class WebSocketService {
     private socket: Socket | null;
     private isConnected: boolean;
     private serverUrl: string;
+    private socketPath: string;
     private connectionAttempts: number;
     private reconnectTimer: ReturnType<typeof setTimeout> | null;
     private pendingData: HeatmapDados[] = []; // Armazena dados pendentes de envio
@@ -19,7 +20,18 @@ class WebSocketService {
     constructor() {
         this.socket = null;
         this.isConnected = false;
-        this.serverUrl = WEBSOCKET_URL;
+        
+        // Configurar URL e path baseado no ambiente
+        if (IS_DEV) {
+            this.serverUrl = WEBSOCKET_URL;
+            this.socketPath = '/socket.io';
+        } else {
+            // Em produção, separar URL base e path
+            const url = new URL(WEBSOCKET_URL);
+            this.serverUrl = `${url.protocol}//${url.host}`;
+            this.socketPath = url.pathname || '/api/socket.io';
+        }
+        
         this.connectionAttempts = 0;
         this.reconnectTimer = null;
         this.pendingData = [];
@@ -73,6 +85,7 @@ class WebSocketService {
 
             try {
                 this.socket = io(this.serverUrl, {
+                    path: this.socketPath,
                     transports: ['websocket', 'polling'],
                     timeout: 20000,
                     forceNew: false, // Alterado para false para evitar criar múltiplas conexões

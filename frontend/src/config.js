@@ -1,43 +1,30 @@
-const config = {
-  development: {
-    API_BASE_URL: 'http://localhost:5000',
-    WEBSOCKET_URL: 'http://localhost:5000',
-    WEBSOCKET_PATH: '/socket.io',
-    ENVIRONMENT: 'development',
-    DEBUG_ENABLED: true,
-    IS_DEV: true,
-    NODE_ENV: 'development'
-  },
-  production: {
-    API_BASE_URL: 'https://dsplayground.com.br/api',
-    WEBSOCKET_URL: 'https://dsplayground.com.br',
-    WEBSOCKET_PATH: '/api/socket.io',  // ✅ ESTE É O CORRETO
-    ENVIRONMENT: 'production',
-    DEBUG_ENABLED: true,  // ✅ ATIVAR DEBUG TEMPORARIAMENTE
-    IS_DEV: false,
-    NODE_ENV: 'production'
-  }
+/**
+ * Configurações centralizadas da aplicação
+ * Acessa variáveis de ambiente através do import.meta.env
+ */
+
+// Ambiente
+export const IS_DEV = import.meta.env.MODE !== 'production';
+export const IS_PROD = import.meta.env.MODE === 'production';
+export const NODE_ENV = import.meta.env.MODE;
+
+// URLs
+export const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+
+// WebSocket configurações
+const WEBSOCKET_BASE_URL = import.meta.env.VITE_WEBSOCKET_URL || (IS_DEV ? 'http://localhost:5000' : 'https://dsplayground.com.br');
+export const WEBSOCKET_URL = WEBSOCKET_BASE_URL;
+export const WEBSOCKET_PATH = IS_DEV ? '/socket.io' : '/api/socket.io';
+
+// Flags
+export const DEBUG_ENABLED = import.meta.env.VITE_DEBUG === 'true' || IS_DEV;
+
+export default {
+    IS_DEV,
+    IS_PROD,
+    NODE_ENV,
+    API_URL,
+    WEBSOCKET_URL,
+    WEBSOCKET_PATH,
+    DEBUG_ENABLED,
 };
-
-// ✅ FORÇAR PRODUÇÃO TEMPORARIAMENTE PARA DEBUG
-const environment = 'production'; // import.meta.env.MODE || 'development';
-const currentConfig = config[environment];
-
-// ✅ LOG PARA DEBUG NO BUILD
-console.log('🔧 Config Debug:', {
-  environment,
-  mode: import.meta.env.MODE,
-  websocket_path: currentConfig.WEBSOCKET_PATH,
-  websocket_url: currentConfig.WEBSOCKET_URL
-});
-
-// Exportar todas as variáveis necessárias
-export const API_BASE_URL = currentConfig.API_BASE_URL;
-export const WEBSOCKET_URL = currentConfig.WEBSOCKET_URL;
-export const WEBSOCKET_PATH = currentConfig.WEBSOCKET_PATH;
-export const ENVIRONMENT = currentConfig.ENVIRONMENT;
-export const DEBUG_ENABLED = currentConfig.DEBUG_ENABLED;
-export const IS_DEV = currentConfig.IS_DEV;
-export const NODE_ENV = currentConfig.NODE_ENV;
-
-export default currentConfig;
