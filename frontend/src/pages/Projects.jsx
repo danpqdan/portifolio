@@ -1,7 +1,24 @@
 import React, { useState } from 'react';
 import { useSpring, a } from '@react-spring/web';
-import { FaReact, FaJs, FaPython, FaGithub, FaExternalLinkAlt } from 'react-icons/fa';
-import { SiTypescript, SiDjango, SiInfluxdb, SiPostgresql } from 'react-icons/si';
+import {
+  FaReact,
+  FaJs,
+  FaPython,
+  FaGithub,
+  FaExternalLinkAlt,
+  FaJava
+} from 'react-icons/fa';
+import {
+  SiTypescript,
+  SiDjango,
+  SiInfluxdb,
+  SiPostgresql,
+  SiPython,
+  SiApachekafka,
+  SiDocker,
+  SiMysql
+} from 'react-icons/si';
+
 
 // Card individual com animação flip
 function ProjectCard({ project, index }) {
@@ -106,7 +123,7 @@ function ProjectCard({ project, index }) {
           </p>
 
           {project.features && (
-            <ul style={{ margin: '0', padding: '0 0 0 15px', color: '#e2e8f0', fontSize: '12px', listStyleType: 'none',  lineHeight: '1.4' }}>
+            <ul style={{ margin: '0', padding: '0 0 0 15px', color: '#e2e8f0', fontSize: '12px', listStyleType: 'none', lineHeight: '1.4' }}>
               {project.features.map((feature, idx) => (
                 <li key={idx} style={{ marginBottom: '5px' }}>{feature}</li>
               ))}
@@ -172,78 +189,81 @@ export default function Projects() {
   // Função placeholder para botão GitHub (será controlada pelas classes)
   const enviarDados = () => console.log('📊 Botão GitHub clicado em Projects');
 
-  // Dados dos projetos
+  // Dados dos projetos atualizados
   const projects = [
     {
-      title: "Portfolio Interativo",
-      description: "Portfolio pessoal com analytics em tempo real e monitoramento de interações do usuário.",
-      details: "Sistema completo de portfolio com coleta de dados de interação, heatmaps e analytics temporais usando InfluxDB.",
+      title: "Análise Educacional - IDEB",
+      description: "Análise da importância da inovação nas escolas brasileiras através de dados do IDEB e censo escolar.",
+      details: "Dashboard interativo para visualização de dados educacionais, analisando o impacto da tecnologia nas notas e correlação com indicadores do IDEB.",
       technologies: [
-        { name: "React", icon: <FaReact /> },
-        { name: "TypeScript", icon: <SiTypescript /> },
-        { name: "InfluxDB", icon: <SiInfluxdb /> }
+        { name: "Streamlit", icon: <SiPython /> },
+        { name: "Pandas", icon: <SiPython /> },
+        { name: "Matplotlib", icon: <FaPython /> },
+        { name: "Scikit-learn", icon: <SiPython /> }
       ],
       features: [
-        "Analytics em tempo real",
-        "Heatmap de interações",
-        "Dashboard de métricas",
-        "Responsivo e acessível"
+        "Dashboard interativo de dados educacionais",
+        "Análise de correlação tecnologia x notas",
+        "Visualização de indicadores IDEB",
+        "Análise de evasão escolar"
       ],
-      githubUrl: "https://github.com/username/portfolio",
-      demoUrl: "https://portfolio-demo.com"
+      githubUrl: "https://github.com/danpqdan/analise-dados-educacionais",
+      demoUrl: "https://9vnfumnf7ajvghfs4ttffq.streamlit.app/"
     },
     {
-      title: "Sistema de Heatmap",
-      description: "Implementação de rastreamento de interações do usuário com mapas de calor e analytics.",
-      details: "Sistema avançado para captura e visualização de padrões de comportamento do usuário em interfaces web.",
-      technologies: [
-        { name: "JavaScript", icon: <FaJs /> },
-        { name: "Python", icon: <FaPython /> },
-        { name: "Django", icon: <SiDjango /> }
-      ],
-      features: [
-        "Captura de mouse tracking",
-        "Geração de heatmaps",
-        "Dashboard analítico",
-        "API REST completa"
-      ],
-      githubUrl: "https://github.com/username/heatmap-system",
-      demoUrl: "https://heatmap-demo.com"
-    },
-    {
-      title: "API de Analytics",
-      description: "Backend robusto para coleta e processamento de dados analíticos em tempo real.",
-      details: "API escalável construída com Django e PostgreSQL para processamento de grandes volumes de dados.",
+      title: "Análise de Dados Python",
+      description: "Coleção de projetos em Python focados em análise estatística, automação e visualização de dados.",
+      details: "Repositório com múltiplos projetos incluindo automação web, controle comercial, gráficos 3D e análises estatísticas avançadas.",
       technologies: [
         { name: "Python", icon: <FaPython /> },
-        { name: "Django", icon: <SiDjango /> },
-        { name: "PostgreSQL", icon: <SiPostgresql /> }
+        { name: "Tkinter", icon: <SiPython /> },
+        { name: "Matplotlib", icon: <FaPython /> },
+        { name: "Pandas", icon: <SiPython /> }
       ],
       features: [
-        "Processamento em tempo real",
-        "Autenticação JWT",
-        "Rate limiting",
-        "Documentação Swagger"
+        "Automação de processos web",
+        "Controle comercial com Tkinter",
+        "Visualizações 3D de dados",
+        "Análises estatísticas e probabilísticas"
       ],
-      githubUrl: "https://github.com/username/analytics-api"
+      githubUrl: "https://github.com/danpqdan/analise_dados-py"
     },
     {
-      title: "Dashboard InfluxDB",
-      description: "Interface de visualização para métricas temporais coletadas via InfluxDB.",
-      details: "Dashboard interativo para visualização de séries temporais com gráficos dinâmicos e alertas.",
+      title: "Chatbot LLM com Kafka",
+      description: "Assistente de IA em tempo real com arquitetura de microsserviços e comunicação assíncrona via Kafka.",
+      details: "Sistema distribuído em Java com event-driven architecture, WebSocket para client-side e Kafka para alta resiliência e demanda.",
       technologies: [
-        { name: "React", icon: <FaReact /> },
-        { name: "TypeScript", icon: <SiTypescript /> },
-        { name: "InfluxDB", icon: <SiInfluxdb /> }
+        { name: "Java", icon: <FaJava /> },
+        { name: "Kafka", icon: <SiApachekafka /> },
+        { name: "WebSocket", icon: <FaJs /> },
+        { name: "Microservices", icon: <SiDocker /> }
       ],
       features: [
-        "Gráficos em tempo real",
-        "Alertas personalizados",
-        "Queries Flux",
-        "Export de dados"
+        "Arquitetura event-driven",
+        "Comunicação WebSocket em tempo real",
+        "Alta resiliência com Kafka",
+        "Escalabilidade para alta demanda"
       ],
-      githubUrl: "https://github.com/username/influx-dashboard",
-      demoUrl: "https://influx-dashboard-demo.com"
+      githubUrl: "https://github.com/danpqdan/chatbot-llm-kafka"
+    },
+    {
+      title: "Sistema Help Desk",
+      description: "Sistema desktop para gerenciamento de ordens de serviço com interface intuitiva e geração de relatórios.",
+      details: "Aplicação robusta desenvolvida em Python com Tkinter, MySQL e ReportLab para gestão completa de ordens de serviço e relatórios em PDF.",
+      technologies: [
+        { name: "Python", icon: <FaPython /> },
+        { name: "Tkinter", icon: <SiPython /> },
+        { name: "MySQL", icon: <SiMysql /> },
+        { name: "ReportLab", icon: <FaPython /> }
+      ],
+      features: [
+        "Interface gráfica intuitiva",
+        "Gestão completa de ordens de serviço",
+        "Relatórios PDF automatizados",
+        "Integração com banco MySQL"
+      ],
+      githubUrl: "https://github.com/danpqdan/desk-help",
+      demoUrl: "https://github.com/danpqdan/desk-help/releases/tag/dist%2Fdist%2Frelease_windows_0.0.1"
     }
   ];
 
@@ -271,7 +291,7 @@ export default function Projects() {
               id="projects_list"
               style={{
                 display: 'grid',
-                gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))',
+                gridTemplateColumns: 'repeat(auto-fit, minmax(400px, 1fr))',
                 gap: '50px 0px',
                 width: '100%',
                 height: 'fit-content'

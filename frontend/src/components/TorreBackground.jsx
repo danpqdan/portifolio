@@ -34,15 +34,45 @@ export default function TorreBackground({ onEnded }) {
     };
   }, [onEnded]);
 
+  // ✅ DETECTAR LARGURA DA TELA PARA AJUSTAR POSIÇÃO
+  const getVideoStyle = () => {
+    const baseStyle = {
+      width: '100%',
+      height: '100vh',
+      objectFit: 'cover',
+      display: 'block'
+    };
+
+    // Verificar se é mobile < 380px
+    if (window.innerWidth < 380) {
+      return {
+        ...baseStyle,
+        objectPosition: '75% center', // Move o foco do vídeo para a direita
+        width: '100%' // Compensa o translate aumentando a largura
+      };
+    }
+
+    return baseStyle;
+  };
+
   return (
-    <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100vh', zIndex: 20000, pointerEvents: 'none' }}>
+    <div style={{
+      position: 'fixed',
+      top: 0,
+      left: 0,
+      width: '100%',
+      height: '100vh',
+      zIndex: 20000,
+      pointerEvents: 'none',
+      overflow: 'hidden' // ✅ EVITA SCROLL HORIZONTAL
+    }}>
       <video
         ref={ref}
         src={torre}
         muted
         loop
         playsInline
-        style={{ width: '100%', height: '100vh', objectFit: 'cover', display: 'block' }}
+        style={getVideoStyle()}
       />
     </div>
   );
