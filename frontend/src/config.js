@@ -2,7 +2,7 @@ const config = {
   development: {
     API_BASE_URL: 'http://localhost:5000',
     WEBSOCKET_URL: 'http://localhost:5000',
-    WEBSOCKET_PATH: '/socket.io',
+    WEBSOCKET_PATH: '/socket.io',  // ✅ Desenvolvimento sem prefixo
     ENVIRONMENT: 'development',
     DEBUG_ENABLED: true,
     IS_DEV: true,
@@ -10,8 +10,8 @@ const config = {
   },
   production: {
     API_BASE_URL: 'https://dsplayground.com.br/api',
-    WEBSOCKET_URL: 'https://dsplayground.com.br',
-    WEBSOCKET_PATH: '/api/socket.io',
+    WEBSOCKET_URL: 'https://dsplayground.com.br',  // ✅ URL base
+    WEBSOCKET_PATH: '/api/socket.io',  // ✅ CAMINHO COMPLETO COM /api/
     ENVIRONMENT: 'production',
     DEBUG_ENABLED: false,
     IS_DEV: false,
@@ -23,7 +23,7 @@ const config = {
 const environment = import.meta.env.MODE || 'development';
 const currentConfig = config[environment];
 
-// ✅ EXPORTAR TODAS AS VARIÁVEIS NECESSÁRIAS
+// Exportar todas as variáveis necessárias
 export const API_BASE_URL = currentConfig.API_BASE_URL;
 export const WEBSOCKET_URL = currentConfig.WEBSOCKET_URL;
 export const WEBSOCKET_PATH = currentConfig.WEBSOCKET_PATH;
