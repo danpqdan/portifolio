@@ -652,7 +652,7 @@ def handle_analytics_data(data):
 
 
 if __name__ == "__main__":
-    # ✅ REGISTRAR BLUEPRINT COM CONFIGURAÇÃO CORRETA PARA AMBIENTE
+    # ✅ MANTER APENAS ESTE REGISTRO (com lógica condicional)
     if env == "production":
         app.register_blueprint(api_bp, url_prefix="/api")
     else:
