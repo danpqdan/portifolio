@@ -1,0 +1,12 @@
+2025-10-12 13:53:29,917 - INFO -  * Restarting with stat
+2025-10-12 13:53:31,681 - WARNING -  * Debugger is active!
+2025-10-12 13:53:31,699 - INFO -  * Debugger PIN: 456-243-123
+2025-10-12 13:56:19,250 - INFO -  * Detected change in 'D:\\www\\portifolio_completo\\portifolio\\backend\\app.py', reloading
+2025-10-12 13:56:19,418 - INFO -  * Restarting with stat
+2025-10-12 13:56:21,395 - INFO - ✅ InfluxDB conectado: http://dsplayground.com.br:8086/
+2025-10-12 13:56:21,395 - INFO - [SUCCESS] InfluxDB service inicializado com sucesso
+2025-10-12 13:56:21,397 - INFO - [CONFIG] Iniciando servidor em modo DESENVOLVIMENTO
+2025-10-12 13:56:21,402 - WARNING -  * Debugger is active!
+2025-10-12 13:56:21,418 - INFO -  * Debugger PIN: 456-243-123
+2025-10-12 14:59:11,259 - INFO -  * Detected change in 'D:\\www\\portifolio_completo\\portifolio\\backend\\app.py', reloading
+2025-10-12 14:59:11,424 - INFO -  * Restarting with stat
