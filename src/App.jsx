@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react';
 import BackGround from "./BackGround";
 import SlidesCarousel from './components/SlidesCarousel';
-// Navbar removed; navigation is handled by SlidesCarousel controls
 import Home from './pages/Home';
 import Projects from './pages/Projects';
 import About from './pages/About';
