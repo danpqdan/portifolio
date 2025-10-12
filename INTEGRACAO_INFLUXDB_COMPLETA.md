@@ -7,7 +7,7 @@ Integração completa entre o sistema de coleta temporal e **InfluxDB** para arm
 ## ⚙️ **Configuração**
 
 ### **Credenciais InfluxDB:**
-- **URL**: `dsplayground.com.br:8086`
+- **URL**: `dsplayground.com.br/influxdb`
 - **Token**: `answThmmRah9sMPB8rM_8_L7svg_kpVQwOjuBqh9HFJQEHbjU36GTfdWXzMBGeA1yCcoVx-N5ZpSESfrgvv_JA==`
 - **Bucket**: `portifolio`
 - **Organization**: `zen`
@@ -15,7 +15,7 @@ Integração completa entre o sistema de coleta temporal e **InfluxDB** para arm
 
 ### **Variáveis de Ambiente (.env):**
 ```bash
-INFLUXDB_URL=http://dsplayground.com.br:8086
+INFLUXDB_URL=http://dsplayground.com.br/influxdb
 INFLUXDB_TOKEN=answThmmRah9sMPB8rM_8_L7svg_kpVQwOjuBqh9HFJQEHbjU36GTfdWXzMBGeA1yCcoVx-N5ZpSESfrgvv_JA==
 INFLUXDB_ORG=zen
 INFLUXDB_BUCKET=portifolio
@@ -146,7 +146,7 @@ GET /analytics/influxdb/health
   "status": "success",
   "influxdb_enabled": true,
   "influxdb_healthy": true,
-  "influxdb_url": "dsplayground.com.br:8086",
+  "influxdb_url": "dsplayground.com.br/influxdb/",
   "influxdb_bucket": "portifolio",
   "influxdb_org": "zen",
   "influxdb_version": "2.7"
