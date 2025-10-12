@@ -651,33 +651,15 @@ def handle_analytics_data(data):
         emit("analytics_error", {"error": "Erro interno do servidor"})
 
 
-if env == "production":
-    # Em produção, registrar com prefixo /api
-    app.register_blueprint(api_bp, url_prefix="/api")
-else:
-    # Em desenvolvimento, registrar sem prefixo
-    app.register_blueprint(api_bp)
-
-# ==================== INICIALIZAÇÃO ====================
-
 if __name__ == "__main__":
+    # ✅ REGISTRAR BLUEPRINT COM CONFIGURAÇÃO CORRETA PARA AMBIENTE
     if env == "production":
-        log_safe(
-            security_logger,
-            "info",
-            "[CONFIG] Iniciando servidor em modo PRODUCAO com seguranca maxima",
-        )
+        app.register_blueprint(api_bp, url_prefix="/api")
     else:
-        log_safe(
-            security_logger,
-            "info",
-            "[CONFIG] Iniciando servidor em modo DESENVOLVIMENTO",
-        )
+        app.register_blueprint(api_bp)
 
-    socketio.run(
-        app,
-        host="0.0.0.0",
-        port=5000,
-        debug=(env == "development"),
-        allow_unsafe_werkzeug=(env == "development"),
-    )
+    # Inicializar servidor
+    if env == "production":
+        socketio.run(app, host="127.0.0.1", port=5000, debug=False, use_reloader=False)
+    else:
+        socketio.run(app, host="127.0.0.1", port=5000, debug=True)
