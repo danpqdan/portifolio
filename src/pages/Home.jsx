@@ -3,19 +3,8 @@ import { FaReact, FaIcons, FaFonticons } from "react-icons/fa";
 import { TbBrandVite } from "react-icons/tb";
 import '../styles/cards.css';
 import '../styles/home.css';
-import analytics from '../lib/analyticsCache';
-import { useEffect } from 'react';
-
-
 
 export default function Home() {
-  useEffect(() => {
-    analytics.startPageTimer('home');
-    analytics.increment('view_home');
-    return () => {
-      analytics.stopPageTimer('home');
-    };
-  }, []);
   return (
     <div style={{ display: 'flex', justifyContent: 'flex-start', alignItems: 'center', height: '100%', width: '100%', marginLeft: '12px' }}>
       <div className="card-carousel home-card">
@@ -52,19 +41,19 @@ export default function Home() {
 
         {/* footer */}
         <div className="home-footer">
-          <a className="tech-btn" href="https://grafana.com/" target="_blank" rel="noopener noreferrer" onClick={() => { analytics.increment('clicks_info'); analytics.increment('clicks_geral'); }}>
+          <a className="tech-btn" href="https://grafana.com/" target="_blank" rel="noopener noreferrer">
             <SiGrafana style={{ color: '#f76b1c' }} /> Abrir Grafana
           </a>
-          <a className="tech-btn" href="https://react.dev/" target="_blank" rel="noopener noreferrer" onClick={() => { analytics.increment('clicks_info'); analytics.increment('clicks_geral'); }}>
+          <a className="tech-btn" href="https://react.dev/" target="_blank" rel="noopener noreferrer">
             <FaReact style={{ color: '#61dafb' }} /> React
           </a>
-          <a className="tech-btn" href="https://redux.js.org/" target="_blank" rel="noopener noreferrer" onClick={() => { analytics.increment('clicks_info'); analytics.increment('clicks_geral'); }}>
+          <a className="tech-btn" href="https://redux.js.org/" target="_blank" rel="noopener noreferrer">
             <SiRedux style={{ color: '#764abc' }} /> Redux
           </a>
-          <a className="tech-btn" href="https://react-icons.github.io/react-icons/" target="_blank" rel="noopener noreferrer" onClick={() => { analytics.increment('clicks_info'); analytics.increment('clicks_geral'); }}>
+          <a className="tech-btn" href="https://react-icons.github.io/react-icons/" target="_blank" rel="noopener noreferrer">
             <FaFonticons style={{ color: '#61dafb' }} /> react-icons
           </a>
-          <a className="tech-btn" href="https://vite.dev/" target="_blank" rel="noopener noreferrer" onClick={() => { analytics.increment('clicks_info'); analytics.increment('clicks_geral'); }}>
+          <a className="tech-btn" href="https://vite.dev/" target="_blank" rel="noopener noreferrer">
             <TbBrandVite style={{ color: '#64b64f' }} /> Vite
           </a>
         </div>
