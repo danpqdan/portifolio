@@ -108,31 +108,23 @@ CORS(
     methods=["GET", "POST", "OPTIONS"],
 )
 
-# ✅ SOCKETIO COM SUPORTE A PROXY REVERSO
 socketio_config = {
     "cors_allowed_origins": cors_origins,
     "logger": True if env == "development" else False,
     "engineio_logger": True if env == "development" else False,
     "ping_timeout": 60,
     "ping_interval": 25,
-    # ✅ CONFIGURAÇÕES PARA PYTHON-SOCKETIO 5.14.x
     "async_mode": "eventlet",
-    "manage_session": False,
-    "always_connect": True,
-    # ✅ CONFIGURAÇÕES DE TRANSPORTE MODERNAS
-    "transports": ["polling", "websocket"],
+    # ✅ CONFIGURAÇÕES PARA COMPATIBILIDADE COM SOCKET.IO 4.x
     "allow_upgrades": True,
-    "cookie": None,  # ✅ Não usar cookies do socket.io
+    "transports": ["polling", "websocket"],
 }
 
 if env == "production":
     socketio_config.update(
         {
-            "path": "/api/socket.io",
-            # ✅ CONFIGURAÇÕES ESPECÍFICAS PARA PRODUÇÃO COM VERSÃO RECENTE
+            "path": "/api/socket.io",  # ✅ Caminho customizado
             "cors_credentials": True,
-            "monitor_clients": True,  # ✅ Disponível em versões recentes
-            "json": None,  # ✅ Usar JSON padrão
         }
     )
 
