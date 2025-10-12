@@ -1,47 +1,220 @@
-from flask import Flask, jsonify, request
+from flask import Flask, jsonify, request, session
 from flask_cors import CORS
-from flask_socketio import SocketIO, emit
+from flask_socketio import SocketIO, emit, disconnect
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
 import os
+import secrets
+import hashlib
+import time
+import jwt
+from datetime import datetime, timedelta
+from collections import defaultdict
+from typing import Dict, List, Optional
+from functools import wraps
+import uuid
+import logging
+import sys
+
 from config import config
 from dto.Dados import HeatmapDados
 import json
-from datetime import datetime
-from collections import defaultdict
-import time
-from typing import Dict, List, Optional
-
-# Importar serviço InfluxDB
 from influxdb_service import get_influxdb_service, create_temporal_metric_from_heatmap, TemporalMetric
 
+# ==================== CONFIGURAÇÃO DE SEGURANÇA ====================
+
+# ✅ CONFIGURAR APPLICATION CONTEXT PARA /api/
 app = Flask(__name__)
 env = os.environ.get("FLASK_ENV", "development")
 app.config.from_object(config[env])
 
-# Configurar CORS para Flask
-CORS(app, origins=app.config["CORS_ORIGINS"])
+# ✅ CONFIGURAR PREFIXO /api PARA PRODUÇÃO
+if env == 'production':
+    # Blueprint para organizar rotas com prefixo
+    from flask import Blueprint
+    api_bp = Blueprint('api', __name__, url_prefix='/api')
+else:
+    # Em desenvolvimento, usar sem prefixo
+    api_bp = Blueprint('api', __name__)
 
-# Configurar SocketIO com CORS
-socketio = SocketIO(
-    app,
-    cors_allowed_origins=app.config["CORS_ORIGINS"],
-    logger=True,
-    engineio_logger=True,
+# ✅ CONFIGURAÇÕES DE SEGURANÇA AVANÇADAS
+SECRET_KEY = app.config.get('SECRET_KEY') or secrets.token_urlsafe(32)
+app.secret_key = SECRET_KEY
+
+# Configurações de sessão seguras
+app.config.update(
+    SESSION_COOKIE_SECURE=env == 'production',
+    SESSION_COOKIE_HTTPONLY=True,
+    SESSION_COOKIE_SAMESITE='Lax',
+    PERMANENT_SESSION_LIFETIME=timedelta(hours=1),
+    SESSION_COOKIE_NAME='portfolio_session',
+    WTF_CSRF_TIME_LIMIT=None,
+    # ✅ CONFIGURAÇÃO PARA PROXY REVERSO
+    APPLICATION_ROOT='/api' if env == 'production' else '/',
+    PREFERRED_URL_SCHEME='https' if env == 'production' else 'http'
 )
 
-# Inicializar serviço InfluxDB
-influxdb_service = get_influxdb_service()
+# ✅ RATE LIMITING
+limiter = Limiter(
+    key_func=get_remote_address,
+    app=app,
+    default_limits=["200 per day", "50 per hour"],
+    storage_uri="memory://"
+)
 
-# ==================== CACHE E CONTROLE TEMPORAL ====================
+# ✅ LOGGING SEGURO
+class SafeFileHandler(logging.FileHandler):
+    def __init__(self, filename, mode='a', encoding='utf-8', delay=False):
+        super().__init__(filename, mode, encoding, delay)
 
-# Cache para estatísticas temporais em tempo real
-temporal_stats_cache = {
-    "total_sessions": 0,
-    "active_sessions": {},  # session_id: dados da sessão
-    "realtime_data": defaultdict(list),  # página: [dados temporais]
-    "last_cleanup": time.time()
+class SafeStreamHandler(logging.StreamHandler):
+    def emit(self, record):
+        try:
+            msg = self.format(record)
+            msg = msg.encode('ascii', errors='ignore').decode('ascii')
+            stream = self.stream
+            stream.write(msg + self.terminator)
+            self.flush()
+        except Exception:
+            self.handleError(record)
+
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s',
+    handlers=[
+        SafeFileHandler('security.log', encoding='utf-8'),
+        SafeStreamHandler(sys.stdout)
+    ],
+    force=True
+)
+security_logger = logging.getLogger('security')
+
+# ✅ CORS COM SUPORTE A PROXY REVERSO
+cors_origins = app.config.get("CORS_ORIGINS", ["http://localhost:5173"])
+if env == 'production':
+    cors_origins.extend([
+        "https://dsplayground.com.br",
+        "https://www.dsplayground.com.br"
+    ])
+
+CORS(app, 
+     origins=cors_origins,
+     supports_credentials=True,
+     allow_headers=['Content-Type', 'Authorization', 'X-Session-Token', 'X-Forwarded-For', 'X-Forwarded-Proto'],
+     methods=['GET', 'POST', 'OPTIONS']
+)
+
+# ✅ SOCKETIO COM SUPORTE A PROXY REVERSO
+socketio_config = {
+    'cors_allowed_origins': cors_origins,
+    'logger': False,
+    'engineio_logger': False,
+    'ping_timeout': 60,
+    'ping_interval': 25
 }
 
-# Configurações temporais (usar da config)
+if env == 'production':
+    socketio_config.update({
+        'path': '/api/socket.io',  # Caminho customizado para produção
+        'async_mode': 'eventlet'   # Melhor para produção
+    })
+
+socketio = SocketIO(app, **socketio_config)
+
+# ==================== MIDDLEWARE PARA PROXY REVERSO ====================
+
+@app.before_request
+def before_request():
+    """Middleware para lidar com headers de proxy reverso"""
+    # Configurar HTTPS quando atrás de proxy
+    if request.headers.get('X-Forwarded-Proto') == 'https':
+        request.environ['wsgi.url_scheme'] = 'https'
+    
+    # Configurar IP real do cliente
+    if request.headers.get('X-Forwarded-For'):
+        request.environ['REMOTE_ADDR'] = request.headers.get('X-Forwarded-For').split(',')[0].strip()
+
+def log_safe(logger, level, message, *args):
+    """Log seguro que remove emojis problemáticos"""
+    emoji_map = {
+        '🔧': '[CONFIG]', '🔒': '[SECURITY]', '✅': '[SUCCESS]',
+        '⚠️': '[WARNING]', '❌': '[ERROR]', '🔌': '[WEBSOCKET]',
+        '📊': '[ANALYTICS]', '🚫': '[BLOCKED]', '🧹': '[CLEANUP]',
+        '⏰': '[TIMEOUT]', '🌐': '[REMOTE]', '💻': '[LOCAL]', '🔍': '[DEBUG]'
+    }
+    
+    safe_message = message
+    for emoji, replacement in emoji_map.items():
+        safe_message = safe_message.replace(emoji, replacement)
+    
+    getattr(logger, level)(safe_message, *args)
+
+# ==================== SISTEMA DE SESSÕES (mantido igual) ====================
+active_sessions = {}
+session_metrics = defaultdict(lambda: {
+    'requests_count': 0, 'last_activity': time.time(),
+    'ip_address': None, 'user_agent': None,
+    'security_score': 100, 'warnings': []
+})
+suspicious_ips = set()
+rate_limit_violations = defaultdict(list)
+
+def generate_session_token():
+    return secrets.token_urlsafe(32)
+
+def create_session_fingerprint(request):
+    user_agent = request.headers.get('User-Agent', '')
+    ip_address = request.environ.get('REMOTE_ADDR', '')
+    accept_language = request.headers.get('Accept-Language', '')
+    fingerprint_string = f"{ip_address}:{user_agent}:{accept_language}"
+    return hashlib.sha256(fingerprint_string.encode()).hexdigest()[:16]
+
+def validate_session_integrity(session_id: str, request) -> bool:
+    if session_id not in active_sessions:
+        return False
+    session_data = active_sessions[session_id]
+    current_fingerprint = create_session_fingerprint(request)
+    if session_data.get('fingerprint') != current_fingerprint:
+        log_safe(security_logger, 'warning', f"[SECURITY] Possivel session hijacking detectado: {session_id}")
+        return False
+    if time.time() - session_data.get('created_at', 0) > 3600:
+        log_safe(security_logger, 'info', f"[TIMEOUT] Sessao expirada: {session_id}")
+        return False
+    return True
+
+def check_suspicious_activity(session_id: str, request) -> bool:
+    ip_address = request.environ.get('REMOTE_ADDR', '')
+    current_time = time.time()
+    if ip_address in suspicious_ips:
+        log_safe(security_logger, 'warning', f"[BLOCKED] IP suspeito tentando acesso: {ip_address}")
+        return False
+    recent_requests = [t for t in rate_limit_violations[ip_address] if current_time - t < 60]
+    if len(recent_requests) > 30:
+        log_safe(security_logger, 'warning', f"[WARNING] Rate limit excedido para IP: {ip_address}")
+        suspicious_ips.add(ip_address)
+        return False
+    rate_limit_violations[ip_address].append(current_time)
+    return True
+
+def security_middleware(f):
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if not check_suspicious_activity(request.sid if hasattr(request, 'sid') else 'http', request):
+            return jsonify({"error": "Acesso negado"}), 403
+        session_id = request.sid if hasattr(request, 'sid') else request.headers.get('X-Session-Token')
+        if session_id:
+            session_metrics[session_id]['requests_count'] += 1
+            session_metrics[session_id]['last_activity'] = time.time()
+            session_metrics[session_id]['ip_address'] = request.environ.get('REMOTE_ADDR', '')
+        return f(*args, **kwargs)
+    return decorated_function
+
+# ==================== CACHE TEMPORAL ====================
+temporal_stats_cache = {
+    "total_sessions": 0, "active_sessions": {},
+    "realtime_data": defaultdict(list), "last_cleanup": time.time(), "security_events": []
+}
+
 TEMPORAL_CONFIG = {
     "REALTIME_INTERVAL": app.config.get("TEMPORAL_REALTIME_INTERVAL", 5000),
     "REGULAR_INTERVAL": app.config.get("TEMPORAL_REGULAR_INTERVAL", 15000),
@@ -50,29 +223,29 @@ TEMPORAL_CONFIG = {
 }
 
 def cleanup_temporal_cache():
-    """Limpa cache temporal periodicamente"""
     current_time = time.time()
     if current_time - temporal_stats_cache["last_cleanup"] > TEMPORAL_CONFIG["CACHE_CLEANUP_INTERVAL"]:
-        # Limitar entradas do cache
+        expired_sessions = [
+            sid for sid, data in active_sessions.items()
+            if current_time - data.get('last_activity', 0) > 3600
+        ]
+        for sid in expired_sessions:
+            del active_sessions[sid]
+            if sid in temporal_stats_cache["active_sessions"]:
+                del temporal_stats_cache["active_sessions"][sid]
+        if expired_sessions:
+            log_safe(security_logger, 'info', f"[CLEANUP] Removidas {len(expired_sessions)} sessoes expiradas")
         for page in temporal_stats_cache["realtime_data"]:
             if len(temporal_stats_cache["realtime_data"][page]) > TEMPORAL_CONFIG["MAX_CACHE_ENTRIES"]:
                 temporal_stats_cache["realtime_data"][page] = temporal_stats_cache["realtime_data"][page][-TEMPORAL_CONFIG["MAX_CACHE_ENTRIES"]//2:]
-        
         temporal_stats_cache["last_cleanup"] = current_time
-        print(f"🧹 Cache temporal limpo em {datetime.now().strftime('%H:%M:%S')}")
 
 def detect_data_type(data: dict) -> str:
-    """Detecta se os dados são de envio temporal ou regular"""
-    # Verifica se há dados recentes (últimos 10 segundos)
     current_time = int(time.time() * 1000)
-    
-    # Verifica timestamps dos dados
     if data.get('timestamp_final'):
         time_diff = current_time - data['timestamp_final']
-        if time_diff < 10000:  # Menos de 10 segundos = temporal
+        if time_diff < 10000:
             return "temporal"
-    
-    # Verifica se há poucas interações (indicativo de envio temporal)
     total_interactions = 0
     for page_name in ['home', 'about', 'projects']:
         if page_name in data and data[page_name]:
@@ -80,581 +253,231 @@ def detect_data_type(data: dict) -> str:
                 total_interactions += len(session.get('cliques', []))
                 total_interactions += len(session.get('toques', []))
                 total_interactions += len(session.get('scrolls', []))
-    
-    # Poucos dados = provavelmente temporal
     if total_interactions < 5:
         return "temporal"
-    
     return "regular"
 
-def print_temporal_logs(heatmap_dados: HeatmapDados, session_id: str):
-    """Logs específicos para dados temporais (5s)"""
-    print("\n" + "⏱️" * 20)
-    print(f"📊 DADOS TEMPORAIS RECEBIDOS - {datetime.now().strftime('%H:%M:%S.%f')[:-3]}")
-    print("⏱️" * 20)
-    
-    print(f"🆔 Sessão: {session_id}")
-    print(f"🆔 ID Registro: {heatmap_dados.id_registro}")
-    
-    # Estatísticas de tempo em tempo real
-    for page_name in ['home', 'about', 'projects']:
-        page_data = getattr(heatmap_dados, page_name, [])
-        if page_data:
-            for i, sessao in enumerate(page_data):
-                print(f"  ⏱️ {page_name.upper()}: {sessao.segundos}s ativos")
-                if sessao.timestamp_inicial and sessao.timestamp_final:
-                    duracao = (sessao.timestamp_final - sessao.timestamp_inicial) / 1000
-                    print(f"    🕐 Duração real: {duracao:.1f}s")
-    
-    print("⏱️" * 20 + "\n")
+# Inicializar InfluxDB
+try:
+    influxdb_service = get_influxdb_service()
+    log_safe(security_logger, 'info', "[SUCCESS] InfluxDB service inicializado com sucesso")
+except Exception as e:
+    log_safe(security_logger, 'warning', f"[WARNING] Erro ao inicializar InfluxDB: {str(e)}")
+    influxdb_service = None
 
-def print_regular_logs(heatmap_dados: HeatmapDados):
-    """Logs detalhados para dados regulares (15s)"""
-    print("\n" + "=" * 80)
-    print(f"📦 DADOS REGULARES RECEBIDOS - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-    print("=" * 80)
+# ==================== ROTAS COM BLUEPRINT ====================
 
-    print(f"🆔 ID do Registro: {heatmap_dados.id_registro}")
-    print(f"⏰ Timestamp Inicial: {heatmap_dados.timestamp_inicial}")
-    print(f"⏰ Timestamp Final: {heatmap_dados.timestamp_final}")
-
-    # Calcular duração da sessão
-    duracao_segundos = heatmap_dados.get_duracao_sessao_segundos()
-    if duracao_segundos:
-        print(f"⏱️  Duração da Sessão: {duracao_segundos:.2f} segundos")
-
-    # Estatísticas gerais
-    print(f"📈 Total de Visualizações: {heatmap_dados.get_total_visualizacoes()}")
-    print(f"🖱️  Total de Cliques: {heatmap_dados.get_total_cliques()}")
-    print(f"⏳ Tempo Total: {heatmap_dados.get_total_tempo_segundos()} segundos")
-
-    # Dados por página
-    print("\n📄 DADOS POR PÁGINA:")
-
-    if heatmap_dados.home:
-        print(f"  🏠 HOME: {len(heatmap_dados.home)} sessão(ões)")
-        for i, sessao in enumerate(heatmap_dados.home):
-            print(f"    Sessão {i+1}: {sessao.visualizacoes} visualizações, {sessao.segundos}s, {len(sessao.cliques)} cliques")
-
-    if heatmap_dados.about:
-        print(f"  👤 ABOUT: {len(heatmap_dados.about)} sessão(ões)")
-        for i, sessao in enumerate(heatmap_dados.about):
-            print(f"    Sessão {i+1}: {sessao.visualizacoes} visualizações, {sessao.segundos}s, {len(sessao.cliques)} cliques")
-
-    if heatmap_dados.projects:
-        print(f"  💼 PROJECTS: {len(heatmap_dados.projects)} sessão(ões)")
-        for i, sessao in enumerate(heatmap_dados.projects):
-            print(f"    Sessão {i+1}: {sessao.visualizacoes} visualizações, {sessao.segundos}s, {len(sessao.cliques)} cliques")
-
-    print("=" * 80)
-    print("✅ Dados processados com sucesso!")
-    print("=" * 80 + "\n")
-
-def get_temporal_stats() -> Dict:
-    """Retorna estatísticas temporais em tempo real"""
-    stats = {
-        "total_sessions": temporal_stats_cache["total_sessions"],
-        "active_sessions_count": len(temporal_stats_cache["active_sessions"]),
-        "timestamp": datetime.now().isoformat(),
-        "pages_stats": {}
-    }
-    
-    # Estatísticas por página
-    for page_name in ['home', 'about', 'projects']:
-        page_data = temporal_stats_cache["realtime_data"][page_name]
-        if page_data:
-            recent_data = [d for d in page_data if 
-                          (datetime.now() - datetime.fromisoformat(d["timestamp"])).seconds < 60]  # Últimos 60s
-            
-            if recent_data:
-                avg_time = sum(d["tempo_permanencia"] for d in recent_data) / len(recent_data)
-                total_interactions = sum(d["interacoes"] for d in recent_data)
-                
-                stats["pages_stats"][page_name] = {
-                    "entries_last_minute": len(recent_data),
-                    "avg_permanencia_segundos": round(avg_time, 1),
-                    "total_interacoes": total_interactions
-                }
-    
-    return stats
-
-
-@app.route("/", methods=["GET"])
+@api_bp.route("/", methods=["GET"])
+@limiter.limit("10 per minute")
 def index():
-    return jsonify({"message": "API do Portfólio está funcionando!"})
+    return jsonify({
+        "message": "API do Portfólio está funcionando!",
+        "security": "enabled",
+        "timestamp": datetime.now().isoformat(),
+        "influxdb_status": "connected" if influxdb_service else "disconnected",
+        "environment": env,
+        "context": "api" if env == 'production' else "root"
+    })
 
+@api_bp.route("/health", methods=["GET"])
+@limiter.limit("30 per minute")
+def health_check():
+    return jsonify({
+        "status": "healthy",
+        "timestamp": datetime.now().isoformat(),
+        "security": "enabled",
+        "active_sessions": len(active_sessions),
+        "influxdb": "connected" if influxdb_service else "disconnected"
+    })
+
+@api_bp.route("/analytics/security/status", methods=["GET"])
+@limiter.limit("5 per minute")
+@security_middleware
+def get_security_status():
+    try:
+        current_time = time.time()
+        active_count = len([s for s in active_sessions.values() 
+                           if current_time - s.get('last_activity', 0) < 300])
+        suspicious_count = len(suspicious_ips)
+        
+        security_stats = {
+            "active_sessions": active_count,
+            "total_sessions_created": len(active_sessions),
+            "suspicious_ips_blocked": suspicious_count,
+            "security_events_last_hour": len([
+                event for event in temporal_stats_cache.get("security_events", [])
+                if current_time - event.get('timestamp', 0) < 3600
+            ]),
+            "timestamp": datetime.now().isoformat(),
+            "security_level": "high",
+            "protections_enabled": [
+                "session_validation", "rate_limiting", "fingerprinting",
+                "ip_blocking", "csrf_protection"
+            ]
+        }
+        
+        return jsonify({"status": "success", "security": security_stats}), 200
+        
+    except Exception as e:
+        log_safe(security_logger, 'error', f"[ERROR] Erro ao obter status seguranca: {str(e)}")
+        return jsonify({"error": "Erro interno do servidor"}), 500
+
+@api_bp.route("/analytics/stats/temporal", methods=["GET"])
+@limiter.limit("10 per minute")
+@security_middleware
+def get_temporal_statistics():
+    try:
+        cleanup_temporal_cache()
+        return jsonify({
+            "status": "success",
+            "temporal_stats": {
+                "total_sessions": temporal_stats_cache["total_sessions"],
+                "active_sessions_count": len(temporal_stats_cache["active_sessions"]),
+                "cache_size": sum(len(data) for data in temporal_stats_cache["realtime_data"].values()),
+                "last_cleanup": temporal_stats_cache["last_cleanup"],
+            },
+            "timestamp": datetime.now().isoformat()
+        }), 200
+    except Exception as e:
+        log_safe(security_logger, 'error', f"[ERROR] Erro ao obter estatisticas temporais: {str(e)}")
+        return jsonify({"error": "Erro interno do servidor"}), 500
+
+# ✅ REGISTRAR BLUEPRINT
+app.register_blueprint(api_bp)
 
 # ==================== WEBSOCKET EVENTS ====================
 
-
 @socketio.on("connect")
 def handle_connect():
-    """Evento quando um cliente se conecta via WebSocket"""
-    print(f"🔌 Cliente conectado: {request.sid}")
-    emit(
-        "connection_response",
-        {
-            "status": "connected",
-            "message": "Conectado ao servidor de analytics",
-            "timestamp": datetime.now().isoformat(),
-        },
-    )
-
+    session_id = request.sid
+    ip_address = request.environ.get('REMOTE_ADDR', 'unknown')
+    user_agent = request.headers.get('User-Agent', 'unknown')
+    
+    if not check_suspicious_activity(session_id, request):
+        log_safe(security_logger, 'warning', f"[BLOCKED] Conexao WebSocket negada para IP suspeito: {ip_address}")
+        disconnect()
+        return
+    
+    fingerprint = create_session_fingerprint(request)
+    session_token = generate_session_token()
+    
+    active_sessions[session_id] = {
+        'token': session_token, 'fingerprint': fingerprint,
+        'ip_address': ip_address, 'user_agent': user_agent,
+        'created_at': time.time(), 'last_activity': time.time(), 'request_count': 0
+    }
+    
+    log_safe(security_logger, 'info', f"[WEBSOCKET] Nova conexao WebSocket: {session_id} de {ip_address}")
+    
+    emit("connection_response", {
+        "status": "connected", "session_token": session_token,
+        "message": "Conectado com segurança ao servidor de analytics",
+        "timestamp": datetime.now().isoformat(), "security_level": "high"
+    })
 
 @socketio.on("disconnect")
 def handle_disconnect():
-    """Evento quando um cliente se desconecta"""
     session_id = request.sid
-    print(f"🔌 Cliente desconectado: {session_id}")
-    
-    # Limpar sessão ativa do cache temporal
+    if session_id in active_sessions:
+        session_data = active_sessions[session_id]
+        duration = time.time() - session_data.get('created_at', 0)
+        log_safe(security_logger, 'info', f"[WEBSOCKET] Desconexao WebSocket: {session_id} (duracao: {duration:.1f}s)")
+        del active_sessions[session_id]
     if session_id in temporal_stats_cache["active_sessions"]:
-        session_data = temporal_stats_cache["active_sessions"][session_id]
-        print(f"🧹 Removendo sessão temporal: {session_id}")
-        print(f"   ⏱️ Duração da sessão: {session_data.get('last_update', 'N/A')}")
         del temporal_stats_cache["active_sessions"][session_id]
 
-
 @socketio.on("analytics_data")
+@security_middleware
 def handle_analytics_data(data):
-    """
-    Evento WebSocket para receber dados de analytics/heatmap do frontend
-    Suporte para coleta temporal em tempo real (5s) e envios regulares (15s)
-    """
     try:
-        cleanup_temporal_cache()  # Limpar cache periodicamente
+        session_id = request.sid
         
-        print(f"\n🔌 Dados recebidos via WebSocket de: {request.sid}")
-
+        if not validate_session_integrity(session_id, request):
+            log_safe(security_logger, 'warning', f"[SECURITY] Sessao invalida tentando enviar dados: {session_id}")
+            emit("analytics_error", {"error": "Sessão inválida"})
+            disconnect()
+            return
+        
+        active_sessions[session_id]['last_activity'] = time.time()
+        active_sessions[session_id]['request_count'] += 1
+        
+        if active_sessions[session_id]['request_count'] > 100:
+            log_safe(security_logger, 'warning', f"[WARNING] Rate limit de sessao excedido: {session_id}")
+            emit("analytics_error", {"error": "Rate limit excedido"})
+            return
+        
+        cleanup_temporal_cache()
+        
         if not data:
             emit("analytics_error", {"error": "Nenhum dado foi enviado"})
             return
 
-        # Detectar tipo de envio
         data_type = detect_data_type(data)
         is_temporal = data_type == "temporal"
         
-        # Log dos dados recebidos com tipo
-        print(f"🧩 Tipo de envio: {'⏱️ TEMPORAL (5s)' if is_temporal else '📦 REGULAR (15s)'}")
-        print(f"🧩 Estrutura recebida: {list(data.keys()) if isinstance(data, dict) else 'Formato inválido'}")
-
-        # Converter dados para o DTO
         heatmap_dados = HeatmapDados.from_dict(data)
-
-        # Atualizar cache temporal
+        
         if is_temporal:
             temporal_stats_cache["total_sessions"] += 1
-            session_id = request.sid
-            
-            # Atualizar sessão ativa
             temporal_stats_cache["active_sessions"][session_id] = {
                 "last_update": datetime.now().isoformat(),
-                "data": heatmap_dados,
-                "page_times": {}
+                "data": heatmap_dados, "security_validated": True,
+                "ip_address": active_sessions[session_id]['ip_address']
             }
-            
-            # Adicionar aos dados temporais por página
-            for page_name in ['home', 'about', 'projects']:
-                page_data = getattr(heatmap_dados, page_name, [])
-                if page_data:
-                    for session_data in page_data:
-                        temporal_stats_cache["realtime_data"][page_name].append({
-                            "timestamp": datetime.now().isoformat(),
-                            "session_id": session_id,
-                            "tempo_permanencia": session_data.segundos,
-                            "visualizacoes": session_data.visualizacoes,
-                            "interacoes": len(session_data.cliques) + len(session_data.toques)
-                        })
-
-        # Logs diferenciados por tipo
-        if is_temporal:
-            print_temporal_logs(heatmap_dados, request.sid)
-        else:
-            print_regular_logs(heatmap_dados)
-
-        # ==================== ENVIO PARA INFLUXDB ====================
-        # Enviar dados para InfluxDB de forma assíncrona
-        try:
-            # Extrair informações do request
-            user_agent = request.headers.get('User-Agent', 'unknown')
-            ip_address = request.environ.get('REMOTE_ADDR', 'unknown')
-            
-            # Converter dados do heatmap para métricas temporais
-            temporal_metrics = create_temporal_metric_from_heatmap(
-                session_id=request.sid,
-                heatmap_data=data,
-                user_agent=user_agent,
-                ip_address=ip_address
-            )
-            
-            # Enviar cada métrica para InfluxDB (assíncrono)
-            for metric in temporal_metrics:
-                influxdb_service.write_temporal_metrics_async(metric)
+        
+        log_safe(security_logger, 'info', f"[ANALYTICS] Dados analytics recebidos: {session_id} ({data_type})")
+        
+        if influxdb_service:
+            try:
+                user_agent = request.headers.get('User-Agent', 'unknown')
+                ip_address = request.environ.get('REMOTE_ADDR', 'unknown')
                 
-            print(f"📊 InfluxDB: {len(temporal_metrics)} métricas enviadas para série temporal")
+                temporal_metrics = create_temporal_metric_from_heatmap(
+                    session_id=session_id, heatmap_data=data,
+                    user_agent=user_agent, ip_address=ip_address
+                )
                 
-        except Exception as influx_error:
-            print(f"⚠️ Erro ao enviar para InfluxDB: {str(influx_error)}")
-            # Não falhar o processo principal por erro no InfluxDB
+                for metric in temporal_metrics:
+                    influxdb_service.write_temporal_metrics_async(metric)
+                    
+            except Exception as influx_error:
+                log_safe(security_logger, 'error', f"[ERROR] Erro InfluxDB: {str(influx_error)}")
 
-        # Emitir confirmação de recebimento com informações do tipo
-        emit(
-            "analytics_received",
-            {
-                "status": "success",
-                "message": f"Dados de analytics recebidos via WebSocket ({'temporal' if is_temporal else 'regular'})",
-                "id_registro": heatmap_dados.id_registro,
-                "timestamp_recebimento": datetime.now().isoformat(),
-                "tipo_envio": data_type,
-                "resumo": {
-                    "total_visualizacoes": heatmap_dados.get_total_visualizacoes(),
-                    "total_cliques": heatmap_dados.get_total_cliques(),
-                    "tempo_total_segundos": heatmap_dados.get_total_tempo_segundos(),
-                    "duracao_sessao_segundos": heatmap_dados.get_duracao_sessao_segundos(),
-                    "paginas_visitadas": {
-                        "home": len(heatmap_dados.home),
-                        "about": len(heatmap_dados.about),
-                        "projects": len(heatmap_dados.projects),
-                    },
-                },
-                "stats_temporais": get_temporal_stats() if is_temporal else None
-            },
-        )
+        emit("analytics_received", {
+            "status": "success",
+            "message": f"Dados recebidos com segurança ({data_type})",
+            "id_registro": heatmap_dados.id_registro,
+            "timestamp_recebimento": datetime.now().isoformat(),
+            "tipo_envio": data_type, "security_validated": True,
+            "resumo": {
+                "total_visualizacoes": heatmap_dados.get_total_visualizacoes(),
+                "total_cliques": heatmap_dados.get_total_cliques(),
+                "tempo_total_segundos": heatmap_dados.get_total_tempo_segundos(),
+                "duracao_sessao_segundos": heatmap_dados.get_duracao_sessao_segundos(),
+                "paginas_visitadas": {
+                    "home": len(heatmap_dados.home), "about": len(heatmap_dados.about),
+                    "projects": len(heatmap_dados.projects),
+                }
+            }
+        })
 
     except ValueError as e:
-        print(f"❌ Erro de validação de dados via WebSocket: {str(e)}")
+        log_safe(security_logger, 'warning', f"[ERROR] Dados invalidos de {session_id}: {str(e)}")
         emit("analytics_error", {"error": f"Dados inválidos: {str(e)}"})
-
     except Exception as e:
-        import traceback
-        print(f"❌ Erro interno ao processar analytics via WebSocket: {str(e)}")
-        print(f"Stack trace: {traceback.format_exc()}")
+        log_safe(security_logger, 'error', f"[ERROR] Erro interno analytics de {session_id}: {str(e)}")
         emit("analytics_error", {"error": "Erro interno do servidor"})
 
-
-# ==================== HTTP ENDPOINTS ====================
-
-@app.route("/analytics/stats/temporal", methods=["GET"])
-def get_temporal_statistics():
-    """
-    Endpoint para consultar estatísticas temporais em tempo real
-    """
-    try:
-        cleanup_temporal_cache()
-        
-        stats = get_temporal_stats()
-        
-        # Adicionar informações extras
-        stats["config"] = TEMPORAL_CONFIG
-        stats["cache_info"] = {
-            "total_realtime_entries": sum(len(temporal_stats_cache["realtime_data"][page]) 
-                                        for page in temporal_stats_cache["realtime_data"]),
-            "last_cleanup": datetime.fromtimestamp(temporal_stats_cache["last_cleanup"]).isoformat()
-        }
-        
-        return jsonify({
-            "status": "success",
-            "timestamp": datetime.now().isoformat(),
-            "stats": stats
-        }), 200
-        
-    except Exception as e:
-        print(f"❌ Erro ao obter estatísticas temporais: {str(e)}")
-        return jsonify({"error": "Erro interno do servidor"}), 500
-
-@app.route("/analytics/stats/summary", methods=["GET"])
-def get_analytics_summary():
-    """
-    Endpoint para resumo geral de analytics
-    """
-    try:
-        # Obter parâmetros de query
-        page = request.args.get('page', 'all')
-        time_range = request.args.get('time_range', '1h')  # 1h, 24h, 7d
-        
-        current_time = datetime.now()
-        
-        # Calcular filtro de tempo
-        time_filters = {
-            '1h': 3600,
-            '24h': 86400,
-            '7d': 604800
-        }
-        seconds_back = time_filters.get(time_range, 3600)
-        
-        summary = {
-            "time_range": time_range,
-            "timestamp": current_time.isoformat(),
-            "temporal_data": {},
-            "active_sessions": len(temporal_stats_cache["active_sessions"])
-        }
-        
-        # Filtrar dados por página e tempo
-        for page_name in ['home', 'about', 'projects']:
-            if page == 'all' or page == page_name:
-                page_entries = temporal_stats_cache["realtime_data"][page_name]
-                
-                # Filtrar por tempo
-                recent_entries = []
-                for entry in page_entries:
-                    entry_time = datetime.fromisoformat(entry["timestamp"])
-                    if (current_time - entry_time).total_seconds() <= seconds_back:
-                        recent_entries.append(entry)
-                
-                if recent_entries:
-                    summary["temporal_data"][page_name] = {
-                        "total_entries": len(recent_entries),
-                        "avg_permanencia": round(sum(e["tempo_permanencia"] for e in recent_entries) / len(recent_entries), 1),
-                        "total_visualizacoes": sum(e["visualizacoes"] for e in recent_entries),
-                        "total_interacoes": sum(e["interacoes"] for e in recent_entries),
-                        "unique_sessions": len(set(e["session_id"] for e in recent_entries))
-                    }
-        
-        return jsonify({
-            "status": "success",
-            "summary": summary
-        }), 200
-        
-    except Exception as e:
-        print(f"❌ Erro ao obter resumo de analytics: {str(e)}")
-        return jsonify({"error": "Erro interno do servidor"}), 500
-
-
-@app.route("/analytics", methods=["POST"])
-def receive_analytics():
-    """
-    Endpoint para receber dados de analytics/heatmap do frontend
-    Aceita dados no formato JSON correspondente à estrutura HeatmapDados
-    """
-    try:
-        # Obter dados JSON do request
-        data = request.get_json()
-
-        if not data:
-            return jsonify({"error": "Nenhum dado foi enviado"}), 400
-
-        # Converter dados para o DTO
-        heatmap_dados = HeatmapDados.from_dict(data)
-
-        # Imprimir dados no console para debug
-        print("\n" + "=" * 80)
-        print(
-            f"📊 DADOS DE ANALYTICS RECEBIDOS - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
-        )
-        print("=" * 80)
-
-        print(f"🆔 ID do Registro: {heatmap_dados.id_registro}")
-        print(f"⏰ Timestamp Inicial: {heatmap_dados.timestamp_inicial}")
-        print(f"⏰ Timestamp Final: {heatmap_dados.timestamp_final}")
-
-        # Calcular duração da sessão
-        duracao_segundos = heatmap_dados.get_duracao_sessao_segundos()
-        if duracao_segundos:
-            print(f"⏱️  Duração da Sessão: {duracao_segundos:.2f} segundos")
-
-        # Estatísticas gerais
-        print(f"📈 Total de Visualizações: {heatmap_dados.get_total_visualizacoes()}")
-        print(f"🖱️  Total de Cliques: {heatmap_dados.get_total_cliques()}")
-        print(f"⏳ Tempo Total: {heatmap_dados.get_total_tempo_segundos()} segundos")
-
-        # Dados por página
-        print("\n📄 DADOS POR PÁGINA:")
-
-        if heatmap_dados.home:
-            print(f"  🏠 HOME: {len(heatmap_dados.home)} sessão(ões)")
-            for i, sessao in enumerate(heatmap_dados.home):
-                print(
-                    f"    Sessão {i+1}: {sessao.visualizacoes} visualizações, {sessao.segundos}s, {len(sessao.cliques)} cliques"
-                )
-
-        if heatmap_dados.about:
-            print(f"  👤 ABOUT: {len(heatmap_dados.about)} sessão(ões)")
-            for i, sessao in enumerate(heatmap_dados.about):
-                print(
-                    f"    Sessão {i+1}: {sessao.visualizacoes} visualizações, {sessao.segundos}s, {len(sessao.cliques)} cliques"
-                )
-
-        if heatmap_dados.projects:
-            print(f"  💼 PROJECTS: {len(heatmap_dados.projects)} sessão(ões)")
-            for i, sessao in enumerate(heatmap_dados.projects):
-                print(
-                    f"    Sessão {i+1}: {sessao.visualizacoes} visualizações, {sessao.segundos}s, {len(sessao.cliques)} cliques"
-                )
-
-        # Dados detalhados (opcional - descomente se quiser ver todos os dados)
-        # print("\n🔍 DADOS COMPLETOS:")
-        # print(json.dumps(heatmap_dados.to_dict(), indent=2, ensure_ascii=False))
-
-        print("=" * 80)
-        print("✅ Dados processados com sucesso!")
-        print("=" * 80 + "\n")
-
-        # Resposta de sucesso
-        return (
-            jsonify(
-                {
-                    "status": "success",
-                    "message": "Dados de analytics recebidos com sucesso",
-                    "id_registro": heatmap_dados.id_registro,
-                    "timestamp_recebimento": datetime.now().isoformat(),
-                    "resumo": {
-                        "total_visualizacoes": heatmap_dados.get_total_visualizacoes(),
-                        "total_cliques": heatmap_dados.get_total_cliques(),
-                        "tempo_total_segundos": heatmap_dados.get_total_tempo_segundos(),
-                        "duracao_sessao_segundos": duracao_segundos,
-                        "paginas_visitadas": {
-                            "home": len(heatmap_dados.home),
-                            "about": len(heatmap_dados.about),
-                            "projects": len(heatmap_dados.projects),
-                        },
-                    },
-                }
-            ),
-            200,
-        )
-
-    except ValueError as e:
-        print(f"❌ Erro de validação de dados: {str(e)}")
-        return jsonify({"error": f"Dados inválidos: {str(e)}"}), 400
-
-    except Exception as e:
-        print(f"❌ Erro interno ao processar analytics: {str(e)}")
-        return jsonify({"error": "Erro interno do servidor"}), 500
-
-
-# ==================== ENDPOINTS INFLUXDB TEMPORAL ====================
-
-@app.route("/analytics/influxdb/realtime", methods=["GET"])
-def get_influxdb_realtime_metrics():
-    """
-    Endpoint para consultar métricas em tempo real do InfluxDB
-    """
-    try:
-        time_range = request.args.get('time_range', '-5m')  # Padrão: últimos 5 minutos
-        
-        metrics = influxdb_service.query_realtime_metrics(time_range)
-        
-        return jsonify({
-            "status": "success",
-            "time_range": time_range,
-            "timestamp": datetime.now().isoformat(),
-            "metrics": metrics,
-            "count": len(metrics),
-            "influxdb_healthy": influxdb_service.is_healthy()
-        })
-        
-    except Exception as e:
-        print(f"❌ Erro ao consultar InfluxDB realtime: {str(e)}")
-        return jsonify({
-            "status": "error",
-            "error": str(e),
-            "influxdb_healthy": influxdb_service.is_healthy()
-        }), 500
-
-@app.route("/analytics/influxdb/summary", methods=["GET"])
-def get_influxdb_page_summary():
-    """
-    Endpoint para resumo de analytics por página do InfluxDB
-    """
-    try:
-        time_range = request.args.get('time_range', '-1h')  # Padrão: última hora
-        
-        summary = influxdb_service.get_page_analytics_summary(time_range)
-        
-        return jsonify({
-            "status": "success",
-            "time_range": time_range,
-            "timestamp": datetime.now().isoformat(),
-            "page_analytics": summary,
-            "influxdb_healthy": influxdb_service.is_healthy()
-        })
-        
-    except Exception as e:
-        print(f"❌ Erro ao consultar InfluxDB summary: {str(e)}")
-        return jsonify({
-            "status": "error", 
-            "error": str(e),
-            "influxdb_healthy": influxdb_service.is_healthy()
-        }), 500
-
-@app.route("/analytics/influxdb/health", methods=["GET"])
-def get_influxdb_health():
-    """
-    Endpoint para verificar saúde da conexão InfluxDB
-    """
-    try:
-        is_healthy = influxdb_service.is_healthy()
-        
-        return jsonify({
-            "status": "success",
-            "influxdb_enabled": influxdb_service.enabled,
-            "influxdb_healthy": is_healthy,
-            "influxdb_url": influxdb_service.url,
-            "influxdb_bucket": influxdb_service.bucket,
-            "timestamp": datetime.now().isoformat()
-        })
-        
-    except Exception as e:
-        print(f"❌ Erro ao verificar saúde InfluxDB: {str(e)}")
-        return jsonify({
-            "status": "error",
-            "error": str(e),
-            "influxdb_enabled": False,
-            "influxdb_healthy": False
-        }), 500
-
-@app.route("/analytics/influxdb/navigate", methods=["POST"])
-def record_navigation_event():
-    """
-    Endpoint para registrar eventos de navegação entre páginas
-    """
-    try:
-        data = request.json
-        session_id = data.get('session_id')
-        from_page = data.get('from_page')
-        to_page = data.get('to_page')
-        navigation_time = float(data.get('navigation_time', 0))
-        
-        if not all([session_id, from_page, to_page]):
-            return jsonify({
-                "status": "error",
-                "error": "session_id, from_page e to_page são obrigatórios"
-            }), 400
-        
-        # Extrair informações do request
-        user_agent = request.headers.get('User-Agent', 'unknown')
-        ip_address = request.environ.get('REMOTE_ADDR', 'unknown')
-        
-        # Registrar navegação no InfluxDB
-        success = influxdb_service.write_navigation_event(
-            session_id=session_id,
-            from_page=from_page,
-            to_page=to_page,
-            navigation_time=navigation_time,
-            user_agent=user_agent,
-            ip_address=ip_address
-        )
-        
-        if success:
-            return jsonify({
-                "status": "success",
-                "message": "Evento de navegação registrado com sucesso",
-                "timestamp": datetime.now().isoformat()
-            })
-        else:
-            return jsonify({
-                "status": "warning",
-                "message": "InfluxDB não disponível, evento não registrado"
-            }), 202
-            
-    except Exception as e:
-        print(f"❌ Erro ao registrar navegação: {str(e)}")
-        return jsonify({
-            "status": "error",
-            "error": str(e)
-        }), 500
-
+# ==================== INICIALIZAÇÃO ====================
 
 if __name__ == "__main__":
-    # Executar a aplicação com SocketIO
-    socketio.run(app, host="0.0.0.0", port=5000, debug=True, allow_unsafe_werkzeug=True)
+    if env == 'production':
+        log_safe(security_logger, 'info', "[CONFIG] Iniciando servidor em modo PRODUCAO com seguranca maxima")
+    else:
+        log_safe(security_logger, 'info', "[CONFIG] Iniciando servidor em modo DESENVOLVIMENTO")
+    
+    socketio.run(
+        app, host="0.0.0.0", port=5000,
+        debug=(env == 'development'),
+        allow_unsafe_werkzeug=(env == 'development')
+    )
