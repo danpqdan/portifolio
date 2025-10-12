@@ -468,9 +468,6 @@ def get_temporal_statistics():
         return jsonify({"error": "Erro interno do servidor"}), 500
 
 
-# ✅ REGISTRAR BLUEPRINT
-app.register_blueprint(api_bp)
-
 # ==================== WEBSOCKET EVENTS ====================
 
 
