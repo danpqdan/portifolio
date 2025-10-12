@@ -119,7 +119,7 @@ FLASK_DEBUG=False
 SECRET_KEY=your-super-secret-key-change-this-in-production
 
 # CORS
-CORS_ORIGINS=https://dsplayground.com.br,https://www.dsplayground.com.br,http://dsplayground.com.br
+CORS_ORIGINS=https://dsplayground.com.br,https://www.dsplayground.com.br,http://dsplayground.com.br,http://localhost:3000
 
 # InfluxDB
 INFLUXDB_MODE=local

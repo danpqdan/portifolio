@@ -26,7 +26,7 @@ socketio = SocketIO(
     cors_allowed_origins=app.config["CORS_ORIGINS"],
     logger=True,
     engineio_logger=True,
-    socketio_path='/api/socket.io'
+    path='/api/socket.io'
 )
 
 # Inicializar serviço InfluxDB
