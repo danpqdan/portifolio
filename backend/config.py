@@ -13,7 +13,7 @@ class Config:
     TEMPORAL_CLEANUP_INTERVAL = int(os.environ.get('TEMPORAL_CLEANUP_INTERVAL', '300'))  # 5min
 
     # Configurações InfluxDB
-    INFLUXDB_URL = os.environ.get('INFLUXDB_URL', 'http://dsplayground.com.br:8086')
+    INFLUXDB_URL = os.environ.get('INFLUXDB_URL_LOCAL', 'http://dsplayground.com.br:8086/')
     INFLUXDB_TOKEN = os.environ.get('INFLUXDB_TOKEN', '***REMOVED***')
     INFLUXDB_ORG = os.environ.get('INFLUXDB_ORG', 'zen')
     INFLUXDB_BUCKET = os.environ.get('INFLUXDB_BUCKET', 'portifolio')
@@ -32,7 +32,7 @@ class ProductionConfig(Config):
     """Configuração para produção"""
     DEBUG = False
     # Adicione aqui as origens permitidas em produção
-    CORS_ORIGINS = ["https://seudominio.com"]
+    CORS_ORIGINS = ["https://dsplayground.com.br"]
     
     # Configurações temporais para produção (intervalos padrão)
     TEMPORAL_REALTIME_INTERVAL = 5000  # 5s
