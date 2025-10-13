@@ -180,7 +180,7 @@ def get_temporal_stats() -> Dict:
     return stats
 
 
-@app.route("/", methods=["GET"])
+@app.route("/api/", methods=["GET"])
 def index():
     return jsonify({"message": "API do Portfólio está funcionando!"})
 
@@ -335,7 +335,7 @@ def handle_analytics_data(data):
 
 # ==================== HTTP ENDPOINTS ====================
 
-@app.route("/analytics/stats/temporal", methods=["GET"])
+@app.route("/api/analytics/stats/temporal", methods=["GET"])
 def get_temporal_statistics():
     """
     Endpoint para consultar estatísticas temporais em tempo real
@@ -363,7 +363,7 @@ def get_temporal_statistics():
         print(f"❌ Erro ao obter estatísticas temporais: {str(e)}")
         return jsonify({"error": "Erro interno do servidor"}), 500
 
-@app.route("/analytics/stats/summary", methods=["GET"])
+@app.route("/api/analytics/stats/summary", methods=["GET"])
 def get_analytics_summary():
     """
     Endpoint para resumo geral de analytics
@@ -421,7 +421,7 @@ def get_analytics_summary():
         return jsonify({"error": "Erro interno do servidor"}), 500
 
 
-@app.route("/analytics", methods=["POST"])
+@app.route("/api/analytics", methods=["POST"])
 def receive_analytics():
     """
     Endpoint para receber dados de analytics/heatmap do frontend
@@ -525,7 +525,7 @@ def receive_analytics():
 
 # ==================== ENDPOINTS INFLUXDB TEMPORAL ====================
 
-@app.route("/analytics/influxdb/realtime", methods=["GET"])
+@app.route("/api/analytics/influxdb/realtime", methods=["GET"])
 def get_influxdb_realtime_metrics():
     """
     Endpoint para consultar métricas em tempo real do InfluxDB
@@ -552,7 +552,7 @@ def get_influxdb_realtime_metrics():
             "influxdb_healthy": influxdb_service.is_healthy()
         }), 500
 
-@app.route("/analytics/influxdb/summary", methods=["GET"])
+@app.route("/api/analytics/influxdb/summary", methods=["GET"])
 def get_influxdb_page_summary():
     """
     Endpoint para resumo de analytics por página do InfluxDB
@@ -578,7 +578,7 @@ def get_influxdb_page_summary():
             "influxdb_healthy": influxdb_service.is_healthy()
         }), 500
 
-@app.route("/analytics/influxdb/health", methods=["GET"])
+@app.route("/api/analytics/influxdb/health", methods=["GET"])
 def get_influxdb_health():
     """
     Endpoint para verificar saúde da conexão InfluxDB
@@ -604,7 +604,7 @@ def get_influxdb_health():
             "influxdb_healthy": False
         }), 500
 
-@app.route("/analytics/influxdb/navigate", methods=["POST"])
+@app.route("/api/analytics/influxdb/navigate", methods=["POST"])
 def record_navigation_event():
     """
     Endpoint para registrar eventos de navegação entre páginas
