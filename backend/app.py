@@ -1,7 +1,7 @@
 from flask import Flask, jsonify
 from flask_cors import CORS
 from flask_socketio import SocketIO, emit
-from flask_socketio import request
+from flask import request
 import os
 from config import config
 from dto.Dados import HeatmapDados
