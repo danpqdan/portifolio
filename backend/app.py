@@ -1,6 +1,6 @@
-from flask import Flask, jsonify, request
+from flask import Flask, jsonify
 from flask_cors import CORS
-from flask_socketio import SocketIO, emit
+from flask_socketio import SocketIO, emit, request, disconnect, join_room, leave_room, Namespace
 import os
 from config import config
 from dto.Dados import HeatmapDados
@@ -9,7 +9,6 @@ from datetime import datetime
 from collections import defaultdict
 import time
 from typing import Dict, List, Optional
-from flask_socketio import request
 
 # Importar serviço InfluxDB
 from influxdb_service import (
