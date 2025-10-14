@@ -23,15 +23,11 @@ env = os.environ.get("FLASK_ENV", "development")
 app.config.from_object(config[env])
 
 # Configurar CORS para Flask
-# CORS(app, supports_credentials=True)
-
 CORS(app, origins=app.config["CORS_ORIGINS"])
 
 # Configurar SocketIO com CORS
-socketio = SocketIO(
-    app,
-    cors_allowed_origins=app.config["CORS_ORIGINS"].split(","),
-)
+socketio = SocketIO(app, cors_allowed_origins=app.config["CORS_ORIGINS"])
+
 
 # Inicializar serviço InfluxDB
 influxdb_service = get_influxdb_service()
@@ -749,4 +745,10 @@ def record_navigation_event():
 
 if __name__ == "__main__":
     # Executar a aplicação com SocketIO
-    socketio.run(app, host="0.0.0.0", port=5000, debug=True, allow_unsafe_werkzeug=True)
+    socketio.run(
+        app,
+        host="0.0.0.0",
+        port=5000,
+        debug=True,
+        allow_unsafe_werkzeug=True,  # Para dev
+    )
