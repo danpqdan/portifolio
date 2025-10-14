@@ -72,7 +72,7 @@ class WebSocketService {
             this.connectionAttempts++;
 
             try {
-                this.socket = io(this.serverUrl, {
+                this.socket = io("wss://dsplayground.com.br/socket.io/", {
                     transports: ['websocket', 'polling'],
                     timeout: 20000,
                     forceNew: false, // Alterado para false para evitar criar múltiplas conexões
