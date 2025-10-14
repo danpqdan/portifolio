@@ -10,6 +10,7 @@ from datetime import datetime
 from collections import defaultdict
 import time
 from typing import Dict, List, Optional
+
 # Importar serviço InfluxDB
 from influxdb_service import (
     get_influxdb_service,
@@ -27,7 +28,7 @@ CORS(app, origins=app.config["CORS_ORIGINS"])
 # Configurar SocketIO com CORS
 socketio = SocketIO(
     app,
-    cors_allowed_origins=app.config["CORS_ORIGINS"],
+    cors_allowed_origins="*",
     logger=True,
     engineio_logger=True,
 )
