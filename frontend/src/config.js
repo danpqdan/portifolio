@@ -10,7 +10,7 @@ export const NODE_ENV = import.meta.env.MODE;
 
 // URLs
 export const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
-export const WEBSOCKET_URL = import.meta.env.VITE_WEBSOCKET_URL || 'http://localhost:5000';
+export const WEBSOCKET_URL = 'wss://dsplayground.com.br/socket.io';
 
 // Flags
 export const DEBUG_ENABLED = import.meta.env.VITE_DEBUG === 'true' || IS_DEV; // Habilitar debug em desenvolvimento

@@ -10,7 +10,7 @@ class WebSocketService {
     private reconnectTimer: ReturnType<typeof setTimeout> | null;
     private pendingData: HeatmapDados[] = []; // Armazena dados pendentes de envio
     private dataSendInterval: ReturnType<typeof setInterval> | null = null; // Interval para envio periódico
-    
+
     // Novos controles para envio temporal
     private realtimeInterval: ReturnType<typeof setInterval> | null = null;
     private realtimeCallback: ((dados: HeatmapDados) => void) | null = null;
@@ -89,6 +89,7 @@ class WebSocketService {
 
                 // Eventos de conexão
                 this.socket.on('connect', () => {
+                    console.log('✅ Conectado ao servidor WebSocket:', this.socket?.id);
                     this.isConnected = true;
                     this.connectionAttempts = 0; // Resetar contador de tentativas
                     clearTimeout(connectTimeout);
@@ -100,37 +101,41 @@ class WebSocketService {
                 });
 
                 this.socket.on('disconnect', (reason: string) => {
+                    console.log('🔌 Desconectado do servidor WebSocket. Motivo:', reason);
                     this.isConnected = false;
 
                     // Tentar reconectar se não foi desconexão manual
                     if (reason !== 'io client disconnect') {
                         this.reconnectTimer = setTimeout(() => {
+                            console.log('⏳ Tentando reconectar...');
                             this.connect();
                         }, 2000);
                     }
                 });
 
                 this.socket.on('connect_error', (error: Error) => {
+                    console.error('❌ Erro de conexão ao WebSocket:', error);
                     clearTimeout(connectTimeout);
 
-                    // Tentar reconectar com backoff
                     const backoffDelay = Math.min(2000 * Math.pow(2, this.connectionAttempts), 10000);
+                    console.log(`⏳ Tentativa de reconexão em ${backoffDelay}ms`);
 
                     this.reconnectTimer = setTimeout(() => {
                         this.connect();
                     }, backoffDelay);
-
-                    // Não resolver com erro imediatamente, deixar o timeout resolver se necessário
                 });
 
                 // Resposta do servidor quando recebe dados de analytics
                 this.socket.on('analytics_received', (data: any) => {
+                    console.log('📤 Server confirmou recebimento dos dados:', data);
                 });
 
                 this.socket.on('analytics_error', (data: any) => {
+                    console.error('⚠️ Server retornou erro ao enviar dados:', data);
                 });
 
                 this.socket.on('connection_response', (data: any) => {
+                    console.log('ℹ️ Resposta de conexão do servidor:', data);
                 });
             } catch (error) {
                 resolve(false);
@@ -270,7 +275,7 @@ class WebSocketService {
     configureRealtimeCollection(callback: (dados: HeatmapDados) => void, intervalMs: number = 5000): void {
         this.realtimeCallback = callback;
         this.realtimeIntervalMs = intervalMs;
-        
+
         // Atualizar intervalo de envio
         this._initPeriodicDataSend();
     }
