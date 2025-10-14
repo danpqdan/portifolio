@@ -1,6 +1,7 @@
 from flask import Flask, jsonify
 from flask_cors import CORS
-from flask_socketio import SocketIO, emit, request, disconnect, join_room, leave_room, Namespace
+from flask_socketio import SocketIO, emit
+from flask_socketio import request
 import os
 from config import config
 from dto.Dados import HeatmapDados
@@ -9,7 +10,6 @@ from datetime import datetime
 from collections import defaultdict
 import time
 from typing import Dict, List, Optional
-
 # Importar serviço InfluxDB
 from influxdb_service import (
     get_influxdb_service,
@@ -223,7 +223,7 @@ def index():
 @socketio.on("connect")
 def handle_connect():
     """Evento quando um cliente se conecta via WebSocket"""
-    print(f"🔌 Cliente conectado: {request.sid}")
+    print(f"🔌 Cliente conectado")
     emit(
         "connection_response",
         {
