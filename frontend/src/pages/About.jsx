@@ -189,7 +189,7 @@ export default function About() {
           </div>
 
           <div id="about_card_actions" className="card-actions">
-            <button id="about_btn_stats" className="primary-btn" onClick={enviarDados}>
+            <button id="about_btn_stats" className="primary-btn">
               Visualizar estatística
             </button>
             <button id="about_btn_restart" className="primary-btn">reiniciar projeto</button>
