@@ -11,6 +11,7 @@ export default function Home() {
   const classeHomeRef = useRef(null);
   const controlesRef = useRef(null);
 
+
   // Inicializar a ClasseHome quando o componente for montado
   useEffect(() => {
     // Aguardar renderização do DOM

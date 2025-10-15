@@ -6,6 +6,8 @@ import { FiGithub, FiMail, FiPhone } from 'react-icons/fi';
 
 export default function About() {
   const rootRef = useRef(null);
+  const enviarDados = () => { };
+
   useEffect(() => {
     const handleResize = () => {
       const screenWidth = window.innerWidth;
@@ -189,7 +191,7 @@ export default function About() {
           </div>
 
           <div id="about_card_actions" className="card-actions">
-            <button id="about_btn_stats" className="primary-btn">
+            <button id="about_btn_stats" className="primary-btn" onClick={enviarDados}>
               Visualizar estatística
             </button>
             <button id="about_btn_restart" className="primary-btn">reiniciar projeto</button>

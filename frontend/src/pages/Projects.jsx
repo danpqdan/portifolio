@@ -23,6 +23,8 @@ import {
 // Card individual com animação flip
 function ProjectCard({ project, index }) {
   const [flipped, setFlipped] = useState(false);
+  const enviarDados = () => { };
+
 
   const { transform, opacity } = useSpring({
     opacity: flipped ? 1 : 0,
