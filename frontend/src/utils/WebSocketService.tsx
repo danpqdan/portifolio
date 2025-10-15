@@ -72,13 +72,13 @@ class WebSocketService {
             this.connectionAttempts++;
 
             try {
-                this.socket = io("wss://dsplayground.com.br/socket.io/", {
-                    transports: ['websocket', 'polling'],
-                    timeout: 20000,
-                    forceNew: false, // Alterado para false para evitar criar múltiplas conexões
+                this.socket = io("wss://dsplayground.com.br", {
+                    path: "/socket.io",         // 👈 garante o path correto
+                    transports: ["websocket"],  // prioriza WebSocket direto
                     reconnection: true,
                     reconnectionAttempts: 5,
-                    reconnectionDelay: 1000
+                    reconnectionDelay: 1000,
+                    timeout: 20000,
                 });
 
                 const connectTimeout = setTimeout(() => {
