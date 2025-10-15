@@ -36,33 +36,35 @@ export default function BackGround() {
         };
     }, [blackTimeout]);
 
-    const handleStartProject = async () => {
-        const bg = videoRef.current;
-        const ent = entradaRef.current;
-        if (!ent) return;
-        try { bg.pause(); } catch { /* ignore */ }
+    useEffect(() => {
+        if (playingEntrada) {
+            const ent = entradaRef.current;
+            if (ent) {
+                ent.currentTime = 0;
+                ent.muted = true;
+                ent.play().catch(() => { });
+                const onEnded = () => {
+                    setPlayingEntrada(false);
+                    setShowBlackFrame(true);
+                    const t = setTimeout(() => {
+                        setShowTorre(true);
+                        window.dispatchEvent(new CustomEvent('torre:started'));
+                        setBlackFadeOut(true);
+                        videoRef.current?.pause();
+                    }, 2000);
+                    setBlackTimeout(t);
+                    window.dispatchEvent(new CustomEvent('entrada:ended'));
+                    ent.removeEventListener('ended', onEnded);
+                };
+                ent.addEventListener('ended', onEnded);
+            }
+        }
+        // Limpeza do timeout já está em outro useEffect
+    }, [playingEntrada]);
+
+    const handleStartProject = () => {
+        videoRef.current?.pause();
         setPlayingEntrada(true);
-        try { ent.currentTime = 0; } catch { /* ignore */ }
-        ent.muted = true; // ✅ VÍDEO DE ENTRADA TAMBÉM MUDO
-        try { await ent.play(); } catch { /* ignore */ }
-
-        const onEnded = () => {
-            setPlayingEntrada(false);
-            setShowBlackFrame(true);
-            const t = setTimeout(() => {
-                setShowTorre(true);
-                // notify other parts that Torre video is starting
-                window.dispatchEvent(new CustomEvent('torre:started'));
-                setBlackFadeOut(true);
-                try { bg.pause(); } catch { /* ignore */ }
-            }, 2000);
-
-            setBlackTimeout(t);
-            window.dispatchEvent(new CustomEvent('entrada:ended'));
-            ent.removeEventListener('ended', onEnded);
-        };
-
-        ent.addEventListener('ended', onEnded);
     };
 
     useEffect(() => {
@@ -124,6 +126,17 @@ export default function BackGround() {
         justifyContent: 'center',
         backgroundColor: 'rgba(0,0,0,0.2)'
     };
+    const blackFrameStyle = {
+        position: 'fixed',
+        top: 0,
+        left: 0,
+        width: '100%',
+        height: '100vh',
+        backgroundColor: 'black',
+        zIndex: 10000,
+        opacity: blackFadeOut ? 0 : 1,
+        transition: 'opacity 1s ease'
+    };
 
     return (
         <div className="background">
@@ -134,7 +147,7 @@ export default function BackGround() {
                 ref={videoRef}
                 src={rotacao}
                 className="background-video"
-                muted // ✅ SEMPRE MUDO
+                muted
                 playsInline
                 loop
                 style={{
@@ -148,40 +161,27 @@ export default function BackGround() {
                     transformOrigin: 'center center'
                 }}
             />
-            <div style={overlayStyle} aria-hidden={!playingEntrada}>
-                <video
-                    ref={entradaRef}
-                    src={entrada}
-                    className="entrada-video"
-                    muted // ✅ SEMPRE MUDO
-                    playsInline
-                    style={{
-                        width: '100%',
-                        height: '100vh',
-                        objectFit: 'cover'
-                    }}
-                />
-            </div>
-            {showBlackFrame && (
-                <div
-                    style={{
-                        position: 'fixed',
-                        top: 0,
-                        left: 0,
-                        width: '100%',
-                        height: '100vh',
-                        backgroundColor: 'black',
-                        zIndex: 10001,
-                        opacity: blackFadeOut ? 0 : 1,
-                        transition: 'opacity 1s ease'
-                    }}
-                />
+            {playingEntrada && (
+                <div style={overlayStyle} aria-hidden={!playingEntrada}>
+                    <video
+                        ref={entradaRef}
+                        src={entrada}
+                        className="entrada-video"
+                        muted
+                        playsInline
+                        style={{
+                            width: '100%',
+                            height: '100vh',
+                            objectFit: 'cover'
+                        }}
+                    />
+                </div>
             )}
-
+            {showBlackFrame && (
+                <div style={blackFrameStyle} />
+            )}
             {showTorre && (
                 <TorreBackground onEnded={() => {
-                    // Como o vídeo agora é infinito, este callback pode não ser mais necessário
-                    // Mantido para compatibilidade, mas nunca será chamado
                     window.dispatchEvent(new CustomEvent('torre:ended'));
                 }} />
             )}
