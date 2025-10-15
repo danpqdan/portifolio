@@ -23,6 +23,8 @@ export default defineConfig(({ mode }) => {
   };
 
   return {
+    base: './', // ✅ AGORA está dentro do return
+
     plugins: [react()],
     define: {
       'process.env.NODE_ENV': JSON.stringify(mode),
@@ -32,7 +34,7 @@ export default defineConfig(({ mode }) => {
       'import.meta.env.VITE_API_URL': JSON.stringify(safeEnv.VITE_API_URL),
       'import.meta.env.VITE_WEBSOCKET_URL': JSON.stringify(safeEnv.VITE_WEBSOCKET_URL),
       'import.meta.env.VITE_DEBUG': JSON.stringify(safeEnv.VITE_DEBUG),
-      'import.meta.env.VITE_APP_VERSION': JSON.stringify(version) // expõe a versão
+      'import.meta.env.VITE_APP_VERSION': JSON.stringify(version)
     },
     resolve: {
       alias: {
