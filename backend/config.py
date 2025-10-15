@@ -13,7 +13,7 @@ class Config:
     TEMPORAL_CLEANUP_INTERVAL = int(os.environ.get('TEMPORAL_CLEANUP_INTERVAL', '300'))  # 5min
 
     # Configurações InfluxDB
-    INFLUXDB_URL = os.environ.get('INFLUXDB_URL', 'http://dsplayground.com.br:8086')
+    INFLUXDB_URL = os.environ.get('INFLUXDB_URL', 'http://127.0.0.1:8086')
     INFLUXDB_TOKEN = os.environ.get('INFLUXDB_TOKEN', '***REMOVED***')
     INFLUXDB_ORG = os.environ.get('INFLUXDB_ORG', 'zen')
     INFLUXDB_BUCKET = os.environ.get('INFLUXDB_BUCKET', 'portifolio')
