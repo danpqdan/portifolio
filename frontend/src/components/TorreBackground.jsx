@@ -33,6 +33,16 @@ export default function TorreBackground({ onEnded }) {
     };
   }, [onEnded]);
 
+  useEffect(() => {
+    const v = ref.current;
+    return () => {
+      if (v) {
+        v.pause();
+        v.src = "";
+      }
+    };
+  }, []);
+
   // ✅ DETECTAR LARGURA DA TELA PARA AJUSTAR POSIÇÃO
   const getVideoStyle = () => {
     const baseStyle = {

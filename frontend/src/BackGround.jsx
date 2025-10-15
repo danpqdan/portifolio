@@ -65,6 +65,23 @@ export default function BackGround() {
         ent.addEventListener('ended', onEnded);
     };
 
+    useEffect(() => {
+        const bg = videoRef.current;
+        const ent = entradaRef.current;
+
+        return () => {
+            if (bg) {
+                bg.pause();
+                bg.src = "";
+            }
+            if (ent) {
+                ent.pause();
+                ent.src = "";
+            }
+        };
+    }, []);
+
+
     var styleContent = {
         width: '100%',
         height: '50px',
