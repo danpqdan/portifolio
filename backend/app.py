@@ -30,9 +30,6 @@ CORS(app, origins=app.config["CORS_ORIGINS"])
 # Configurar SocketIO com CORS
 
 origins = os.getenv("CORS_ORIGINS", "").split(",")
-
-print("🔵 CORS_ORIGINS carregados:", origins)  # para debug
-
 socketio = SocketIO(app, cors_allowed_origins=origins)
 
 # Inicializar serviço InfluxDB
@@ -75,8 +72,6 @@ def cleanup_temporal_cache():
                 ][page][-TEMPORAL_CONFIG["MAX_CACHE_ENTRIES"] // 2 :]
 
         temporal_stats_cache["last_cleanup"] = current_time
-        print(f"🧹 Cache temporal limpo em {datetime.now().strftime('%H:%M:%S')}")
-
 
 def detect_data_type(data: dict) -> str:
     """Detecta se os dados são de envio temporal ou regular"""
@@ -103,82 +98,6 @@ def detect_data_type(data: dict) -> str:
         return "temporal"
 
     return "regular"
-
-
-def print_temporal_logs(heatmap_dados: HeatmapDados, session_id: str):
-    """Logs específicos para dados temporais (5s)"""
-    print("\n" + "⏱️" * 20)
-    print(
-        f"📊 DADOS TEMPORAIS RECEBIDOS - {datetime.now().strftime('%H:%M:%S.%f')[:-3]}"
-    )
-    print("⏱️" * 20)
-
-    print(f"🆔 Sessão: {session_id}")
-    print(f"🆔 ID Registro: {heatmap_dados.id_registro}")
-
-    # Estatísticas de tempo em tempo real
-    for page_name in ["home", "about", "projects"]:
-        page_data = getattr(heatmap_dados, page_name, [])
-        if page_data:
-            for i, sessao in enumerate(page_data):
-                print(f"  ⏱️ {page_name.upper()}: {sessao.segundos}s ativos")
-                if sessao.timestamp_inicial and sessao.timestamp_final:
-                    duracao = (sessao.timestamp_final - sessao.timestamp_inicial) / 1000
-                    print(f"    🕐 Duração real: {duracao:.1f}s")
-
-    print("⏱️" * 20 + "\n")
-
-
-def print_regular_logs(heatmap_dados: HeatmapDados):
-    """Logs detalhados para dados regulares (15s)"""
-    print("\n" + "=" * 80)
-    print(
-        f"📦 DADOS REGULARES RECEBIDOS - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
-    )
-    print("=" * 80)
-
-    print(f"🆔 ID do Registro: {heatmap_dados.id_registro}")
-    print(f"⏰ Timestamp Inicial: {heatmap_dados.timestamp_inicial}")
-    print(f"⏰ Timestamp Final: {heatmap_dados.timestamp_final}")
-
-    # Calcular duração da sessão
-    duracao_segundos = heatmap_dados.get_duracao_sessao_segundos()
-    if duracao_segundos:
-        print(f"⏱️  Duração da Sessão: {duracao_segundos:.2f} segundos")
-
-    # Estatísticas gerais
-    print(f"📈 Total de Visualizações: {heatmap_dados.get_total_visualizacoes()}")
-    print(f"🖱️  Total de Cliques: {heatmap_dados.get_total_cliques()}")
-    print(f"⏳ Tempo Total: {heatmap_dados.get_total_tempo_segundos()} segundos")
-
-    # Dados por página
-    print("\n📄 DADOS POR PÁGINA:")
-
-    if heatmap_dados.home:
-        print(f"  🏠 HOME: {len(heatmap_dados.home)} sessão(ões)")
-        for i, sessao in enumerate(heatmap_dados.home):
-            print(
-                f"    Sessão {i+1}: {sessao.visualizacoes} visualizações, {sessao.segundos}s, {len(sessao.cliques)} cliques"
-            )
-
-    if heatmap_dados.about:
-        print(f"  👤 ABOUT: {len(heatmap_dados.about)} sessão(ões)")
-        for i, sessao in enumerate(heatmap_dados.about):
-            print(
-                f"    Sessão {i+1}: {sessao.visualizacoes} visualizações, {sessao.segundos}s, {len(sessao.cliques)} cliques"
-            )
-
-    if heatmap_dados.projects:
-        print(f"  💼 PROJECTS: {len(heatmap_dados.projects)} sessão(ões)")
-        for i, sessao in enumerate(heatmap_dados.projects):
-            print(
-                f"    Sessão {i+1}: {sessao.visualizacoes} visualizações, {sessao.segundos}s, {len(sessao.cliques)} cliques"
-            )
-
-    print("=" * 80)
-    print("✅ Dados processados com sucesso!")
-    print("=" * 80 + "\n")
-
 
 def get_temporal_stats() -> Dict:
     """Retorna estatísticas temporais em tempo real"""
@@ -226,7 +145,6 @@ def index():
 @socketio.on("connect")
 def handle_connect():
     """Evento quando um cliente se conecta via WebSocket"""
-    print(f"🔌 Cliente conectado")
     emit(
         "connection_response",
         {
@@ -241,13 +159,8 @@ def handle_connect():
 def handle_disconnect():
     """Evento quando um cliente se desconecta"""
     session_id = request.sid
-    print(f"🔌 Cliente desconectado: {session_id}")
-
-    # Limpar sessão ativa do cache temporal
     if session_id in temporal_stats_cache["active_sessions"]:
         session_data = temporal_stats_cache["active_sessions"][session_id]
-        print(f"🧹 Removendo sessão temporal: {session_id}")
-        print(f"   ⏱️ Duração da sessão: {session_data.get('last_update', 'N/A')}")
         del temporal_stats_cache["active_sessions"][session_id]
 
 
@@ -259,9 +172,6 @@ def handle_analytics_data(data):
     """
     try:
         cleanup_temporal_cache()  # Limpar cache periodicamente
-
-        print(f"\n🔌 Dados recebidos via WebSocket de: {request.sid}")
-
         if not data:
             emit("analytics_error", {"error": "Nenhum dado foi enviado"})
             return
@@ -269,16 +179,6 @@ def handle_analytics_data(data):
         # Detectar tipo de envio
         data_type = detect_data_type(data)
         is_temporal = data_type == "temporal"
-
-        # Log dos dados recebidos com tipo
-        print(
-            f"🧩 Tipo de envio: {'⏱️ TEMPORAL (5s)' if is_temporal else '📦 REGULAR (15s)'}"
-        )
-        print(
-            f"🧩 Estrutura recebida: {list(data.keys()) if isinstance(data, dict) else 'Formato inválido'}"
-        )
-
-        # Converter dados para o DTO
         heatmap_dados = HeatmapDados.from_dict(data)
 
         # Atualizar cache temporal
@@ -309,12 +209,6 @@ def handle_analytics_data(data):
                             }
                         )
 
-        # Logs diferenciados por tipo
-        if is_temporal:
-            print_temporal_logs(heatmap_dados, request.sid)
-        else:
-            print_regular_logs(heatmap_dados)
-
         # ==================== ENVIO PARA INFLUXDB ====================
         # Enviar dados para InfluxDB de forma assíncrona
         try:
@@ -334,12 +228,8 @@ def handle_analytics_data(data):
             for metric in temporal_metrics:
                 influxdb_service.write_temporal_metrics_async(metric)
 
-            print(
-                f"📊 InfluxDB: {len(temporal_metrics)} métricas enviadas para série temporal"
-            )
-
         except Exception as influx_error:
-            print(f"⚠️ Erro ao enviar para InfluxDB: {str(influx_error)}")
+            traceback.print_exc()
             # Não falhar o processo principal por erro no InfluxDB
 
         # Emitir confirmação de recebimento com informações do tipo
@@ -367,14 +257,10 @@ def handle_analytics_data(data):
         )
 
     except ValueError as e:
-        print(f"❌ Erro de validação de dados via WebSocket: {str(e)}")
         emit("analytics_error", {"error": f"Dados inválidos: {str(e)}"})
 
     except Exception as e:
         import traceback
-
-        print(f"❌ Erro interno ao processar analytics via WebSocket: {str(e)}")
-        print(f"Stack trace: {traceback.format_exc()}")
         emit("analytics_error", {"error": "Erro interno do servidor"})
 
 
@@ -415,7 +301,6 @@ def get_temporal_statistics():
         )
 
     except Exception as e:
-        print(f"❌ Erro ao obter estatísticas temporais: {str(e)}")
         return jsonify({"error": "Erro interno do servidor"}), 500
 
 
@@ -476,7 +361,6 @@ def get_analytics_summary():
         return jsonify({"status": "success", "summary": summary}), 200
 
     except Exception as e:
-        print(f"❌ Erro ao obter resumo de analytics: {str(e)}")
         return jsonify({"error": "Erro interno do servidor"}), 500
 
 
@@ -496,60 +380,7 @@ def receive_analytics():
         # Converter dados para o DTO
         heatmap_dados = HeatmapDados.from_dict(data)
 
-        # Imprimir dados no console para debug
-        print("\n" + "=" * 80)
-        print(
-            f"📊 DADOS DE ANALYTICS RECEBIDOS - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
-        )
-        print("=" * 80)
-
-        print(f"🆔 ID do Registro: {heatmap_dados.id_registro}")
-        print(f"⏰ Timestamp Inicial: {heatmap_dados.timestamp_inicial}")
-        print(f"⏰ Timestamp Final: {heatmap_dados.timestamp_final}")
-
-        # Calcular duração da sessão
         duracao_segundos = heatmap_dados.get_duracao_sessao_segundos()
-        if duracao_segundos:
-            print(f"⏱️  Duração da Sessão: {duracao_segundos:.2f} segundos")
-
-        # Estatísticas gerais
-        print(f"📈 Total de Visualizações: {heatmap_dados.get_total_visualizacoes()}")
-        print(f"🖱️  Total de Cliques: {heatmap_dados.get_total_cliques()}")
-        print(f"⏳ Tempo Total: {heatmap_dados.get_total_tempo_segundos()} segundos")
-
-        # Dados por página
-        print("\n📄 DADOS POR PÁGINA:")
-
-        if heatmap_dados.home:
-            print(f"  🏠 HOME: {len(heatmap_dados.home)} sessão(ões)")
-            for i, sessao in enumerate(heatmap_dados.home):
-                print(
-                    f"    Sessão {i+1}: {sessao.visualizacoes} visualizações, {sessao.segundos}s, {len(sessao.cliques)} cliques"
-                )
-
-        if heatmap_dados.about:
-            print(f"  👤 ABOUT: {len(heatmap_dados.about)} sessão(ões)")
-            for i, sessao in enumerate(heatmap_dados.about):
-                print(
-                    f"    Sessão {i+1}: {sessao.visualizacoes} visualizações, {sessao.segundos}s, {len(sessao.cliques)} cliques"
-                )
-
-        if heatmap_dados.projects:
-            print(f"  💼 PROJECTS: {len(heatmap_dados.projects)} sessão(ões)")
-            for i, sessao in enumerate(heatmap_dados.projects):
-                print(
-                    f"    Sessão {i+1}: {sessao.visualizacoes} visualizações, {sessao.segundos}s, {len(sessao.cliques)} cliques"
-                )
-
-        # Dados detalhados (opcional - descomente se quiser ver todos os dados)
-        # print("\n🔍 DADOS COMPLETOS:")
-        # print(json.dumps(heatmap_dados.to_dict(), indent=2, ensure_ascii=False))
-
-        print("=" * 80)
-        print("✅ Dados processados com sucesso!")
-        print("=" * 80 + "\n")
-
-        # Resposta de sucesso
         return (
             jsonify(
                 {
@@ -574,11 +405,9 @@ def receive_analytics():
         )
 
     except ValueError as e:
-        print(f"❌ Erro de validação de dados: {str(e)}")
         return jsonify({"error": f"Dados inválidos: {str(e)}"}), 400
 
     except Exception as e:
-        print(f"❌ Erro interno ao processar analytics: {str(e)}")
         return jsonify({"error": "Erro interno do servidor"}), 500
 
 
@@ -607,7 +436,6 @@ def get_influxdb_realtime_metrics():
         )
 
     except Exception as e:
-        print(f"❌ Erro ao consultar InfluxDB realtime: {str(e)}")
         return (
             jsonify(
                 {
@@ -641,7 +469,6 @@ def get_influxdb_page_summary():
         )
 
     except Exception as e:
-        print(f"❌ Erro ao consultar InfluxDB summary: {str(e)}")
         return (
             jsonify(
                 {
@@ -674,7 +501,6 @@ def get_influxdb_health():
         )
 
     except Exception as e:
-        print(f"❌ Erro ao verificar saúde InfluxDB: {str(e)}")
         return (
             jsonify(
                 {
@@ -745,7 +571,6 @@ def record_navigation_event():
             )
 
     except Exception as e:
-        print(f"❌ Erro ao registrar navegação: {str(e)}")
         return jsonify({"status": "error", "error": str(e)}), 500
 
 
