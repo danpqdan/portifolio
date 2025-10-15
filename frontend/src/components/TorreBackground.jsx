@@ -23,7 +23,7 @@ export default function TorreBackground({ onEnded }) {
         await v.play();
       } catch (error) {
         // ;
-            }
+      }
     };
 
     tryPlay();
@@ -71,6 +71,7 @@ export default function TorreBackground({ onEnded }) {
         muted
         loop
         playsInline
+        preload="auto"
         style={getVideoStyle()}
       />
     </div>
