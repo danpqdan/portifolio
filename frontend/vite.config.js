@@ -2,16 +2,17 @@ import { defineConfig, loadEnv } from 'vite';
 import react from '@vitejs/plugin-react-swc';
 import { fileURLToPath } from 'url';
 import { dirname, resolve } from 'path';
+import { readFileSync } from 'fs';
 
-// Criar equivalentes para __dirname e __filename em módulos ESM
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
-// https://vite.dev/config/
+// Ler versão do package.json
+const pkg = JSON.parse(readFileSync(resolve(__dirname, 'package.json'), 'utf-8'));
+const version = pkg.version || '0.0.0';
+
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '');
-
-  // Variáveis adicionais do arquivo .env personalizado
   let customEnv = {};
 
   const safeEnv = {
@@ -24,17 +25,14 @@ export default defineConfig(({ mode }) => {
   return {
     plugins: [react()],
     define: {
-      // SEGURANÇA: Não exponha todo o process.env, apenas as variáveis específicas
-      // que você deseja tornar disponíveis no cliente
       'process.env.NODE_ENV': JSON.stringify(mode),
       'process.env.VITE_API_URL': JSON.stringify(safeEnv.VITE_API_URL),
       'process.env.VITE_WEBSOCKET_URL': JSON.stringify(safeEnv.VITE_WEBSOCKET_URL),
       'process.env.VITE_DEBUG': JSON.stringify(safeEnv.VITE_DEBUG),
-
-      // Para compatibilidade com código que usa import.meta.env
       'import.meta.env.VITE_API_URL': JSON.stringify(safeEnv.VITE_API_URL),
       'import.meta.env.VITE_WEBSOCKET_URL': JSON.stringify(safeEnv.VITE_WEBSOCKET_URL),
-      'import.meta.env.VITE_DEBUG': JSON.stringify(safeEnv.VITE_DEBUG)
+      'import.meta.env.VITE_DEBUG': JSON.stringify(safeEnv.VITE_DEBUG),
+      'import.meta.env.VITE_APP_VERSION': JSON.stringify(version) // expõe a versão
     },
     resolve: {
       alias: {
@@ -45,6 +43,10 @@ export default defineConfig(({ mode }) => {
       port: 3000,
       strictPort: false,
       host: true,
+    },
+    build: {
+      outDir: `dist_v${version}`, // define o dist com a versão
+      sourcemap: true
     }
   };
 });
