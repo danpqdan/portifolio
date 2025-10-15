@@ -8,61 +8,33 @@ export default function TorreBackground({ onEnded }) {
     const v = ref.current;
     if (!v) return;
 
-    const handlePlay = () => {
-      // notify that torre started (some callers already dispatch this, but keep for robustness)
-      window.dispatchEvent(new CustomEvent('torre:started'));
-    };
-
-    v.addEventListener('play', handlePlay);
-
-    const tryPlay = async () => {
+    const handleLoaded = async () => {
       try {
-        v.muted = true; // ✅ SEMPRE MUDO
-        v.loop = true;  // ✅ LOOP INFINITO
-        v.currentTime = 0;
+        v.muted = true;
+        v.loop = true;
         await v.play();
+        // ✅ dispara o evento APÓS o primeiro frame visível
+        window.dispatchEvent(new CustomEvent('torre:started'));
       } catch (error) {
-        // ;
+        console.warn("Erro ao iniciar vídeo da torre:", error);
       }
     };
 
-    tryPlay();
+    v.addEventListener('loadeddata', handleLoaded);
 
     return () => {
-      v.removeEventListener('play', handlePlay);
-    };
-  }, [onEnded]);
-
-  useEffect(() => {
-    const v = ref.current;
-    return () => {
-      if (v) {
-        v.pause();
-        v.src = "";
-      }
+      v.removeEventListener('loadeddata', handleLoaded);
+      v.pause();
     };
   }, []);
 
-  // ✅ DETECTAR LARGURA DA TELA PARA AJUSTAR POSIÇÃO
-  const getVideoStyle = () => {
-    const baseStyle = {
-      width: '100%',
-      height: '100vh',
-      objectFit: 'cover',
-      display: 'block'
-    };
-
-    // Verificar se é mobile < 380px
-    if (window.innerWidth < 380) {
-      return {
-        ...baseStyle,
-        objectPosition: '75% center', // Move o foco do vídeo para a direita
-        width: '100%' // Compensa o translate aumentando a largura
-      };
-    }
-
-    return baseStyle;
-  };
+  const getVideoStyle = () => ({
+    width: '100%',
+    height: '100vh',
+    objectFit: 'cover',
+    objectPosition: window.innerWidth < 380 ? '75% center' : 'center',
+    display: 'block',
+  });
 
   return (
     <div style={{
@@ -73,7 +45,7 @@ export default function TorreBackground({ onEnded }) {
       height: '100vh',
       zIndex: 20000,
       pointerEvents: 'none',
-      overflow: 'hidden' // ✅ EVITA SCROLL HORIZONTAL
+      overflow: 'hidden'
     }}>
       <video
         ref={ref}

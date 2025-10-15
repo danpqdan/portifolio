@@ -12,17 +12,20 @@ export default function App() {
 
   useEffect(() => {
     WebSocketService.connect();
-    
-    const onTorreStarted = () => setShowUi(true);
+
+    const onTorreStarted = () => {
+      setTimeout(() => setShowUi(true), 300); // espera o fade terminar
+    };
+
     window.addEventListener('torre:started', onTorreStarted);
-    
+
     const handleBeforeUnload = () => {
       const dadosFinais = HeatmapUtils.getDadosGlobais();
       WebSocketService.sendAnalyticsData(dadosFinais);
     };
-    
+
     window.addEventListener('beforeunload', handleBeforeUnload);
-    
+
     return () => {
       window.removeEventListener('torre:started', onTorreStarted);
       window.removeEventListener('beforeunload', handleBeforeUnload);
@@ -33,7 +36,7 @@ export default function App() {
   return (
     <div id="app" style={{
       height: '100vh', width: '100vw', overflow: 'hidden', position: 'relative', display: 'flex'
-   }}>
+    }}>
       <BackGround />
       {showUi && (
         <div style={{ position: 'relative', zIndex: 20000, width: '100%' }}>
