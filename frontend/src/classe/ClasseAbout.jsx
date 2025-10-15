@@ -27,9 +27,6 @@ export default class ClasseAbout {
         // Listener para verificar visibilidade da página
         this.visibilityChangeHandler = () => {
             this.isPageVisible = !document.hidden;
-            if (DEBUG_ENABLED) {
-                console.log(`🔍 [ClasseAbout] Visibilidade alterada: ${this.isPageVisible ? 'visível' : 'oculta'}`);
-            }
         };
     }
 
@@ -50,9 +47,7 @@ export default class ClasseAbout {
             try {
                 window.__ACTIVE_PAGE_CONTROLLER__.parar();
             } catch (error) {
-                if (DEBUG_ENABLED) {
-                    console.warn('⚠️ [ClasseAbout] Erro ao parar controlador anterior:', error);
-                }
+                // 
             }
         }
         
@@ -70,20 +65,9 @@ export default class ClasseAbout {
             (dados) => {
                 // Só enviar se página estiver visível e for a página ativa
                 if (this.isPageVisible && window.__ACTIVE_PAGE_CONTROLLER__ === this) {
-                    WebSocketService.sendAnalyticsDataImmediate(dados, false);
-                    
-                    if (DEBUG_ENABLED) {
-                        console.log('📊 [ClasseAbout] Dados temporais enviados:', {
-                            timestamp: new Date().toISOString(),
-                            tempoPermanciaSegundos: this.heatmap.getTempoPermanciaSegundos(),
-                            totalVisualizacoes: dados.get_total_visualizacoes ? dados.get_total_visualizacoes() : 0
-                        });
-                    }
-                } else if (DEBUG_ENABLED) {
-                    console.log('⏸️ [ClasseAbout] Dados temporais não enviados - página não visível ou não ativa');
+                    WebSocketService.sendAnalyticsDataImmediate(dados, false);   
                 }
-            },
-            5000 // 5 segundos
+            },5000 
         );
 
         // Iniciar coleta temporal
@@ -93,9 +77,6 @@ export default class ClasseAbout {
         this.heatmap.iniciar();
         WebSocketService.connect();
         
-        if (DEBUG_ENABLED) {
-            console.log('🚀 [ClasseAbout] Iniciado como página ativa - apenas coleta temporal');
-        }
     }
 
     parar() {
@@ -120,9 +101,6 @@ export default class ClasseAbout {
         const dados = this.heatmap.getDados();
         WebSocketService.sendAnalyticsDataImmediate(dados, true);
 
-        if (DEBUG_ENABLED) {
-            console.log('🛑 [ClasseAbout] Coleta parada e dados finais enviados');
-        }
     }
 
     enviarDados() {
@@ -149,13 +127,6 @@ export default class ClasseAbout {
             this.heatmap.configurarColecaoTempoReal(
                 (dados) => {
                     WebSocketService.sendAnalyticsDataImmediate(dados, false);
-                    
-                    if (DEBUG_ENABLED) {
-                        console.log(`📊 [ClasseAbout] Dados temporais enviados (${intervalMs}ms):`, {
-                            timestamp: new Date().toISOString(),
-                            tempoPermanciaSegundos: this.heatmap.getTempoPermanciaSegundos()
-                        });
-                    }
                 },
                 intervalMs
             );

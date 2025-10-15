@@ -6,10 +6,6 @@ import { FiGithub, FiMail, FiPhone } from 'react-icons/fi';
 
 export default function About() {
   const rootRef = useRef(null);
-
-  // Função placeholder para botão de estatísticas (será controlada pelas classes)
-  const enviarDados = () => console.log('📊 Botão estatísticas clicado em About');
-
   useEffect(() => {
     const handleResize = () => {
       const screenWidth = window.innerWidth;
@@ -46,8 +42,6 @@ export default function About() {
 
             // Adicionar o container no início do about_left
             aboutLeft.insertBefore(avatarTextContainer, aboutLeft.firstChild);
-
-            console.log('📱 Avatar e texto juntados em container mobile');
           }
         }
       } else {
@@ -65,8 +59,6 @@ export default function About() {
 
             // Remover o container mobile
             avatarTextContainer.remove();
-
-            console.log('💻 Avatar e texto restaurados para layout original');
           }
         }
       }
@@ -82,15 +74,8 @@ export default function About() {
         const skillBadges = skillsRow.querySelector('#about_skill_badges');
         const allSkills = skillBadges.querySelectorAll('.skill-badge');
         const first3Skills = Array.from(allSkills).slice(0, 4);
-
-        // 🔍 DEBUG: Verificar se está coletando corretamente
-        console.log('🔍 Debug Skills Mobile:');
-        console.log('Total skills encontrados:', allSkills.length);
-        console.log('Primeiros 3 skills:', first3Skills);
-        console.log('Skills que serão adicionados:');
         first3Skills.forEach((skill, index) => {
           const label = skill.querySelector('.skill-label')?.textContent || 'N/A';
-          console.log(`${index + 1}. ${label}`);
         });
 
         // Criar novo container para os 3 primeiros
@@ -112,7 +97,6 @@ export default function About() {
         first3Skills.forEach(skill => {
           const clonedSkill = skill.cloneNode(true);
           mobileSkillBadges.appendChild(clonedSkill);
-          console.log('✅ Skill adicionado:', clonedSkill.querySelector('.skill-label')?.textContent);
         });
 
         mobileSkillsList.appendChild(mobileSkillsTitle);
@@ -125,20 +109,16 @@ export default function About() {
         // ESCONDER o container original no about_right
         skillsRow.style.display = 'none';
 
-        console.log('📱 Container mobile criado e original escondido');
-
       } else {
         // Remover skills mobile e mostrar o original no about_right
         const mobileSkills = document.getElementById('about_skills_row_mobile');
         if (mobileSkills) {
           mobileSkills.remove();
-          console.log('🗑️ Container mobile removido');
         }
 
         // MOSTRAR o container original no about_right
         if (skillsRow) {
           skillsRow.style.display = 'block';
-          console.log('👁️ Container original mostrado');
         }
       }
     };

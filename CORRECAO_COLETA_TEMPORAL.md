@@ -75,9 +75,6 @@ window.__ACTIVE_PAGE_TYPE__ = this.pageType;
 // Listener de visibilidade
 this.visibilityChangeHandler = () => {
     this.isPageVisible = !document.hidden;
-    if (DEBUG_ENABLED) {
-        console.log(`🔍 [Classe${pageType}] Visibilidade alterada: ${this.isPageVisible ? 'visível' : 'oculta'}`);
-    }
 };
 
 document.addEventListener('visibilitychange', this.visibilityChangeHandler);
@@ -88,9 +85,7 @@ document.addEventListener('visibilitychange', this.visibilityChangeHandler);
 // Só enviar se página estiver visível e for a página ativa
 if (this.isPageVisible && window.__ACTIVE_PAGE_CONTROLLER__ === this) {
     WebSocketService.sendAnalyticsDataImmediate(dados, false);
-} else if (DEBUG_ENABLED) {
-    console.log('⏸️ Dados temporais não enviados - página não visível ou não ativa');
-}
+} 
 ```
 
 ## Arquivos Modificados

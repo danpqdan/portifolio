@@ -22,9 +22,8 @@ export default function TorreBackground({ onEnded }) {
         v.currentTime = 0;
         await v.play();
       } catch (error) {
-        console.log('Erro ao reproduzir vídeo Torre:', error);
-        // ignore final failure
-      }
+        // ;
+            }
     };
 
     tryPlay();

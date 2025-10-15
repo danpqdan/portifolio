@@ -41,13 +41,9 @@ export const useHeatmap = (
                 if (mergedOptions.realtimeCollection && mergedOptions.realtimeInterval) {
                     WebSocketService.setRealtimeInterval(mergedOptions.realtimeInterval);
                 }
-                
-                if (mergedOptions.debug) {
-                    console.log('🔌 WebSocket conectado para página', paginaTipo);
-                }
             } catch (error) {
                 if (mergedOptions.debug) {
-                    console.error('❌ Erro ao conectar WebSocket:', error);
+                    // 
                 }
             }
         };
@@ -72,13 +68,6 @@ export const useHeatmap = (
                     // Enviar dados em tempo real via WebSocket
                     WebSocketService.sendAnalyticsDataImmediate(dados, false);
                     
-                    if (mergedOptions.debug) {
-                        console.log(`📊 Dados temporais enviados para ${paginaTipo}:`, {
-                            timestamp: new Date().toISOString(),
-                            tempoPermanciaSegundos: heatmap.getTempoPermanciaSegundos(),
-                            totalVisualizacoes: dados.get_total_visualizacoes ? dados.get_total_visualizacoes() : 0
-                        });
-                    }
                 },
                 mergedOptions.realtimeInterval
             );
@@ -97,10 +86,6 @@ export const useHeatmap = (
                 if (isActiveRef.current && heatmapRef.current) {
                     const dados = heatmapRef.current.getDados();
                     WebSocketService.sendAnalyticsData(dados);
-                    
-                    if (mergedOptions.debug) {
-                        console.log(`📤 Envio automático para ${paginaTipo}`);
-                    }
                 }
             }, mergedOptions.autoSendInterval);
         }
@@ -176,10 +161,6 @@ export const useHeatmap = (
     // Função para configurar intervalo de coleta temporal
     const setRealtimeInterval = useCallback((intervalMs: number) => {
         WebSocketService.setRealtimeInterval(intervalMs);
-        
-        if (mergedOptions.debug) {
-            console.log(`⏱️ Intervalo de coleta temporal alterado para ${intervalMs}ms`);
-        }
     }, [mergedOptions.debug]);
 
     return {

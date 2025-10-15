@@ -89,7 +89,6 @@ class WebSocketService {
 
                 // Eventos de conexão
                 this.socket.on('connect', () => {
-                    console.log('✅ Conectado ao servidor WebSocket:', this.socket?.id);
                     this.isConnected = true;
                     this.connectionAttempts = 0; // Resetar contador de tentativas
                     clearTimeout(connectTimeout);
@@ -101,25 +100,19 @@ class WebSocketService {
                 });
 
                 this.socket.on('disconnect', (reason: string) => {
-                    console.log('🔌 Desconectado do servidor WebSocket. Motivo:', reason);
                     this.isConnected = false;
 
                     // Tentar reconectar se não foi desconexão manual
                     if (reason !== 'io client disconnect') {
                         this.reconnectTimer = setTimeout(() => {
-                            console.log('⏳ Tentando reconectar...');
                             this.connect();
                         }, 2000);
                     }
                 });
 
                 this.socket.on('connect_error', (error: Error) => {
-                    console.error('❌ Erro de conexão ao WebSocket:', error);
                     clearTimeout(connectTimeout);
-
                     const backoffDelay = Math.min(2000 * Math.pow(2, this.connectionAttempts), 10000);
-                    console.log(`⏳ Tentativa de reconexão em ${backoffDelay}ms`);
-
                     this.reconnectTimer = setTimeout(() => {
                         this.connect();
                     }, backoffDelay);
@@ -127,15 +120,12 @@ class WebSocketService {
 
                 // Resposta do servidor quando recebe dados de analytics
                 this.socket.on('analytics_received', (data: any) => {
-                    console.log('📤 Server confirmou recebimento dos dados:', data);
                 });
 
                 this.socket.on('analytics_error', (data: any) => {
-                    console.error('⚠️ Server retornou erro ao enviar dados:', data);
                 });
 
                 this.socket.on('connection_response', (data: any) => {
-                    console.log('ℹ️ Resposta de conexão do servidor:', data);
                 });
             } catch (error) {
                 resolve(false);
@@ -289,7 +279,6 @@ class WebSocketService {
         }
 
         if (!this.realtimeCallback) {
-            console.warn('[WebSocketService] Callback não configurado para coleta em tempo real');
             return;
         }
 

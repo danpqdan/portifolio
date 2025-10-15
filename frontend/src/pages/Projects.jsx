@@ -186,10 +186,6 @@ function ProjectCard({ project, index }) {
 }
 
 export default function Projects() {
-  // Função placeholder para botão GitHub (será controlada pelas classes)
-  const enviarDados = () => console.log('📊 Botão GitHub clicado em Projects');
-
-  // Dados dos projetos atualizados
   const projects = [
     {
       title: "Análise Educacional - IDEB",

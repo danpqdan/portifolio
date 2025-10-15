@@ -27,9 +27,6 @@ export default class ClasseProjects {
         // Listener para verificar visibilidade da página
         this.visibilityChangeHandler = () => {
             this.isPageVisible = !document.hidden;
-            if (DEBUG_ENABLED) {
-                console.log(`🔍 [ClasseProjects] Visibilidade alterada: ${this.isPageVisible ? 'visível' : 'oculta'}`);
-            }
         };
     }
 
@@ -51,9 +48,7 @@ export default class ClasseProjects {
             try {
                 window.__ACTIVE_PAGE_CONTROLLER__.parar();
             } catch (error) {
-                if (DEBUG_ENABLED) {
-                    console.warn('⚠️ [ClasseProjects] Erro ao parar controlador anterior:', error);
-                }
+                // 
             }
         }
         
@@ -73,16 +68,7 @@ export default class ClasseProjects {
                 if (this.isPageVisible && window.__ACTIVE_PAGE_CONTROLLER__ === this) {
                     WebSocketService.sendAnalyticsDataImmediate(dados, false);
                     
-                    if (DEBUG_ENABLED) {
-                        console.log('📊 [ClasseProjects] Dados temporais enviados:', {
-                            timestamp: new Date().toISOString(),
-                            tempoPermanciaSegundos: this.heatmap.getTempoPermanciaSegundos(),
-                            totalVisualizacoes: dados.get_total_visualizacoes ? dados.get_total_visualizacoes() : 0
-                        });
-                    }
-                } else if (DEBUG_ENABLED) {
-                    console.log('⏸️ [ClasseProjects] Dados temporais não enviados - página não visível ou não ativa');
-                }
+                } 
             },
             5000 // 5 segundos
         );
@@ -93,11 +79,7 @@ export default class ClasseProjects {
 
         this.heatmap.iniciar();
         WebSocketService.connect();
-        
-        if (DEBUG_ENABLED) {
-            console.log('🚀 [ClasseProjects] Iniciado como página ativa - apenas coleta temporal');
-        }
-    }
+            }
 
     // Método original
     parar() {
@@ -121,10 +103,6 @@ export default class ClasseProjects {
         // Enviar dados finais com prioridade
         const dados = this.heatmap.getDados();
         WebSocketService.sendAnalyticsDataImmediate(dados, true);
-
-        if (DEBUG_ENABLED) {
-            console.log('🛑 [ClasseProjects] Coleta parada e dados finais enviados');
-        }
     }
 
     enviarDados() {
@@ -152,12 +130,6 @@ export default class ClasseProjects {
                 (dados) => {
                     WebSocketService.sendAnalyticsDataImmediate(dados, false);
                     
-                    if (DEBUG_ENABLED) {
-                        console.log(`📊 [ClasseProjects] Dados temporais enviados (${intervalMs}ms):`, {
-                            timestamp: new Date().toISOString(),
-                            tempoPermanciaSegundos: this.heatmap.getTempoPermanciaSegundos()
-                        });
-                    }
                 },
                 intervalMs
             );

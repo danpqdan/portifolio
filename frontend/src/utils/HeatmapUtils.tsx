@@ -262,8 +262,6 @@ export class HeatmapUtils {
         this._onMouseMove = this._onMouseMove.bind(this);
         this._onTouchMove = this._onTouchMove.bind(this);
         this._onIntersection = this._onIntersection.bind(this);
-
-        console.log(`[HeatmapUtils] Construído para página ${paginaTipo}`, { id_registro: this._registry.getIdRegistro() });
     }
 
     iniciar() {
