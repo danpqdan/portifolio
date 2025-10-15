@@ -22,8 +22,8 @@ import {
 
 // Card individual com animação flip
 function ProjectCard({ project, index }) {
+
   const [flipped, setFlipped] = useState(false);
-  const enviarDados = () => { };
 
 
   const { transform, opacity } = useSpring({
@@ -188,6 +188,8 @@ function ProjectCard({ project, index }) {
 }
 
 export default function Projects() {
+  const enviarDados = () => { };
+
   const projects = [
     {
       title: "Análise Educacional - IDEB",
