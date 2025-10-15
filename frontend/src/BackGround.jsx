@@ -1,7 +1,10 @@
 import { useEffect, useRef, useState } from "react";
-import rotacao from './assets/videos/earth_light.mp4';
-import entrada from './assets/videos/entrada.mp4';
+// import rotacao from './assets/videos/earth_light.mp4';
+// import entrada from './assets/videos/entrada.mp4';
 import TorreBackground from './components/TorreBackground';
+
+const rotacao = '/assets/earth_light-BmacQRFL.mp4';
+const entrada = '/assets/entrada-kzkB2t7h.mp4';
 
 export default function BackGround() {
   const videoRef = useRef(null);
