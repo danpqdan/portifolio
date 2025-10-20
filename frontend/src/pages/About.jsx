@@ -18,7 +18,7 @@ export default function About() {
       if (!skillsRow || !aboutLeft || !aboutRight) return;
 
       // ✅ JUNTAR AVATAR E TEXTO EM TELAS PEQUENAS
-      if (screenWidth < 380) {
+      if (screenWidth < 720) {
         const avatar = document.getElementById('about_avatar');
         const textCenter = document.getElementById('about_text_center');
 

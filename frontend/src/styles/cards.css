@@ -1,4 +1,50 @@
-/* Standard card layout for slides */
+/* Estilos padrão (mobile first) */
+.container {
+    padding: 1rem;
+    font-size: 14px;
+}
+
+/* Pequeno (>= 480px) */
+@media (min-width: 480px) {
+    .container {
+        padding: 1.5rem;
+    }
+}
+
+/* Médio (>= 768px) */
+@media (min-width: 768px) {
+    .container {
+        font-size: 16px;
+        padding: 2rem;
+    }
+}
+
+/* Grande (>= 1024px) */
+@media (min-width: 1024px) {
+    .container {
+        font-size: 18px;
+        padding: 3rem;
+    }
+}
+
+/* Extra grande (>= 1280px) */
+@media (min-width: 1280px) {
+    .container {
+        font-size: 20px;
+    }
+}
+
+/* 2x Extra grande (>= 1536px) */
+@media (min-width: 1536px) {
+    .container {
+        max-width: 1400px;
+        margin: 0 auto;
+    }
+}
+
+
+
+
 .page-root {
     display: flex;
     justify-content: flex-start;
@@ -44,10 +90,9 @@
 
 /* Card variants */
 .home-card,
-.project-card,
+#project-card,
 .about-card {
-    min-height: 80vh;
-    max-height: 99vh;
+    height: 80vh;
     z-index: 40;
     background-color: rgba(192, 189, 189, 0.61);
 }
@@ -74,10 +119,6 @@
     /* centraliza o grid */
     align-items: center;
     padding: 1rem;
-}
-
-.project-card {
-    z-index: 30;
 }
 
 /* Small helpers */
@@ -241,7 +282,6 @@
 @media screen and (max-width: 720px) {
 
     .card-carousel,
-    .project-card,
     .about-card {
         width: 96%;
         min-height: 90vh;
@@ -276,46 +316,42 @@
         font-size: 14px;
     }
 
-    .project-card-container {
-        width: 240px !important;
-        /* height: 120px !important; */
-        margin: 8px !important;
-    }
-
     #projects_list {
         grid-template-columns: 1fr 1fr !important;
         gap: 80px 0px !important;
         /* 40px vertical, 20px horizontal */
+        align-items: center !important;
+    }
+
+    .about-card,
+    .project-card {
+        width: 96%;
+        min-height: 99vh;
+        padding: 4px;
+    }
+
+}
+
+@media screen and (max-width: 670px) {
+    #projects_list {
+        grid-template-columns: 1fr !important;
+        gap: 40px 20px !important;
         align-items: start !important;
+        justify-items: center;
     }
 }
 
 
 @media screen and (max-width: 470px) {
+    .avatar {
+        width: 60px;
+    }
+
     #projects_list {
         grid-template-columns: 1fr !important;
         gap: 15px !important;
         justify-items: center !important;
         padding: 5px !important;
-    }
-
-    .project-card-container {
-        width: 280px !important;
-        height: 180px !important;
-        margin: 8px !important;
-    }
-
-    .project-card-back button {
-        padding: 8px 10px !important;
-        font-size: 11px !important;
-        min-width: 70px !important;
-        max-width: 90px !important;
-        gap: 3px !important;
-    }
-
-    .project-card-back .card-buttons {
-        gap: 6px !important;
-        margin-top: 8px !important;
     }
 
     .container-btn-projects {
@@ -329,11 +365,6 @@
         padding: 5px !important;
     }
 
-    .project-card-container {
-        width: 280px !important;
-        height: 180px !important;
-        margin: 8px !important;
-    }
 
     #projects_list {
         gap: 80px !important;
@@ -343,15 +374,7 @@
         margin: 0px !important;
     }
 
-    #projects_list {
-        padding: 0px !important;
-        justify-items: normal !important;
-    }
 
-    .project-card-container {
-        margin: 0px !important;
-        width: 90% !important;
-    }
 
     #about_right {
         padding-right: 0px !important;
@@ -359,11 +382,52 @@
         overflow-x: hidden !important;
     }
 
+
+    #about_card {
+        display: flex !important;
+        flex-direction: column !important;
+        align-items: center !important;
+    }
+
+    #about_right {
+        width: 100% !important;
+        overflow-x: hidden !important;
+    }
+
+    .about-left {
+        width: 100% !important;
+        align-items: center !important;
+        text-align: center !important;
+        margin-bottom: 12px !important;
+    }
+
+    .contact-list {
+        display: grid !important;
+        grid-template-columns: 1fr 1fr 1fr !important;
+    }
+
+    .skill-badges {
+        display: grid !important;
+        grid-template-columns: 1fr 1fr 1fr 1fr !important;
+    }
+
+    .skill-badges>button>span {
+        font-size: 12px !important;
+    }
+
+    .card-content {
+        padding: 04px !important;
+    }
+
+    #prev-button,
+    #next-button {
+        display: none !important;
+    }
 }
 
 @media screen and (max-width: 380px) {
 
-    .card-content > p {
+    .card-content>p {
         color: black !important;
     }
 
@@ -391,37 +455,9 @@
         padding: 5px !important;
     }
 
-    .project-card-container {
-        width: 280px !important;
-        height: 180px !important;
-        margin: 8px !important;
-    }
-
-    .project-card-back button {
-        padding: 8px 10px !important;
-        font-size: 11px !important;
-        min-width: 70px !important;
-        max-width: 90px !important;
-        gap: 3px !important;
-    }
-
-    .project-card-back .card-buttons {
-        gap: 6px !important;
-        margin-top: 8px !important;
-    }
 
     .container-btn-projects {
         justify-content: space-evenly !important;
-    }
-
-    .project-card-front,
-    .project-card-back {
-        padding: 15px !important;
-    }
-
-    .project-card-front h3,
-    .project-card-back h3 {
-        font-size: 16px !important;
     }
 
     .avatar {
@@ -438,14 +474,12 @@
     }
 
     .card-carousel:only-child,
-    .project-card:only-child,
     .about-card:only-child {
         padding: 4px;
     }
 
     /* Aplicar padding para todos os filhos e subfilhos */
     .card-carousel *,
-    .project-card *,
     .about-card * {
         padding: 0px !important;
         margin: 0 !important;
@@ -454,7 +488,6 @@
     /* ✅ REMOVER TODOS OS ÍCONES EM TELAS PEQUENAS */
     .skill-icon,
     .card-carousel .skill-icon,
-    .project-card .skill-icon,
     .about-card .skill-icon,
     /* Ícones específicos do React Icons */
     .skill-badge svg,
@@ -463,15 +496,11 @@
     .contact-list a svg,
     /* Todos os SVGs exceto avatar e tech-btn */
     .card-carousel svg:not(.avatar):not(img):not(.tech-btn svg),
-    .project-card svg:not(.avatar):not(img):not(.tech-btn svg),
     .about-card svg:not(.avatar):not(img):not(.tech-btn svg),
     /* Ícones FaJava, SiSpring, etc (exceto tech-btn) */
     .card-carousel [class*="fa-"]:not(.tech-btn [class*="fa-"]),
     .card-carousel [class*="si-"]:not(.tech-btn [class*="si-"]),
     .card-carousel [class*="fi-"]:not(.tech-btn [class*="fi-"]),
-    .project-card [class*="fa-"]:not(.tech-btn [class*="fa-"]),
-    .project-card [class*="si-"]:not(.tech-btn [class*="si-"]),
-    .project-card [class*="fi-"]:not(.tech-btn [class*="fi-"]),
     .about-card [class*="fa-"]:not(.tech-btn [class*="fa-"]),
     .about-card [class*="si-"]:not(.tech-btn [class*="si-"]),
     .about-card [class*="fi-"]:not(.tech-btn [class*="fi-"]) {
@@ -563,7 +592,6 @@
 
     /* Exceções para elementos que não devem ter padding alterado */
     .card-carousel img,
-    .project-card img,
     .about-card img,
     .avatar {
         padding: 0 !important;
@@ -677,11 +705,6 @@
         padding: 5px !important;
     }
 
-    .project-card-container {
-        width: 280px !important;
-        height: 180px !important;
-        margin: 8px !important;
-    }
 
     .container-btn-front {
         justify-content: center !important;
@@ -691,13 +714,6 @@
     span {
         font-size: 12px !important;
         padding: 6px 8px !important;
-    }
-
-    .project-card-description {
-        font-size: 14px !important;
-        margin: 0px 4px !important;
-        padding: 12px !important;
-        text-align: justify !important;
     }
 
     .tech-span {
