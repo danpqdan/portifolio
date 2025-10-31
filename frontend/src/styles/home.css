@@ -1,4 +1,59 @@
-/* Styles specific to Home page */
-.home-header h1 { margin-top: 0; }
+/* Estilos padrão (mobile first) */
+#home-content {
+    display: flex;
+    flex-direction: column;
+    justify-content: space-evenly;
+    align-items: stretch;
+}
 
-.tech-btn svg { width: 28px; height: 28px; border-radius: 6px; }
+.tech-btn{
+    display: flex;
+}
+
+/* Pequeno (>= 480px) */
+@media (min-width: 480px) {
+    .container {
+        padding: 1.5rem;
+    }
+}
+
+/* Médio (>= 768px) */
+@media (min-width: 768px) {
+    .container {
+        font-size: 16px;
+        padding: 2rem;
+    }
+}
+
+/* Grande (>= 1024px) */
+@media (min-width: 1024px) {
+    .container {
+        font-size: 18px;
+        padding: 3rem;
+    }
+}
+
+/* Extra grande (>= 1280px) */
+@media (min-width: 1280px) {
+    .container {
+        font-size: 20px;
+    }
+}
+
+/* 2x Extra grande (>= 1536px) */
+@media (min-width: 1536px) {
+    .container {
+        max-width: 1400px;
+        margin: 0 auto;
+    }
+}
+
+@media (max-height: 720px) {
+    .home-footer {
+        display: grid;
+        padding: 0px !important;
+        grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)) !important;
+        gap: 6px;
+        margin-bottom: 2px;
+    }
+}

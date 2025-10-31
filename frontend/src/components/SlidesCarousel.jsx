@@ -524,7 +524,7 @@ export default function SlidesCarousel({ slides }) {
     }, []);
 
     return (
-        <div ref={containerRef} style={{ position: 'relative', width: '100%', height: '100vh', overflow: 'hidden', touchAction: 'pan-y' }}>
+        <div ref={containerRef} style={{ position: 'relative', width: '100vw', height: '100vh', overflow: 'hidden', touchAction: 'pan-y' }}>
             <div ref={wrapperRef} style={{ display: 'flex', flexDirection: 'row', width: `${slides.length * 100}vw`, height: '100vh', willChange: 'transform' }}>
                 {slides.map((s, i) => (
                     <SlideItem key={s.path} slide={s} idx={i} total={slides.length}
@@ -547,7 +547,6 @@ function SlideItem({ slide, idx, goPrev, goNext, onNodeReady }) {
         if (!root) return;
         const node = root.querySelector('.card-carousel');
         if (node) {
-            // ensure positioning so absolute buttons are relative to the card
             if (!node.style.position || node.style.position === 'static') node.style.position = 'relative';
             setTarget(node);
             if (onNodeReady) onNodeReady(idx, node);
@@ -608,8 +607,8 @@ function SlideItem({ slide, idx, goPrev, goNext, onNodeReady }) {
     );
 
     return (
-        <div ref={rootRef} style={{ width: '100vw', height: '100vh', overflow: 'hidden', flexShrink: 0 }}>
-            <div style={{ width: '100%', height: '100%', overflow: 'hidden' }}>{slide.element}</div>
+        <div ref={rootRef} style={{ width: '100vw', height: '100vh', maxHeight: '100vh'}}>
+            <div>{slide.element}</div>
             {target && createPortal(controls, target)}
         </div>
     );

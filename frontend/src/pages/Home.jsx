@@ -1,8 +1,8 @@
 import { SiGrafana, SiRedux } from 'react-icons/si';
 import { FaReact, FaFonticons } from "react-icons/fa";
 import { TbBrandVite } from "react-icons/tb";
-import '../styles/cards.css';
 import '../styles/home.css';
+
 import { useEffect, useRef } from 'react';
 import ClasseHome from '../classe/ClasseHome.jsx';
 
@@ -44,8 +44,8 @@ export default function Home() {
 
   // Função para testar envio de dados
   return (
-    <div style={{ display: 'flex', justifyContent: 'flex-start', alignItems: 'center', height: '100%', width: '100%', marginLeft: '2%' }}>
-      <div className="card-carousel home-card">
+    <div className='container'>
+      <div className="container-card">
         {/* header */}
         <div className="card-header home-header">
           <h1>Portfólio Pessoal</h1>
@@ -58,13 +58,13 @@ export default function Home() {
           className="card-content"
           id='home-content'
         >
-          <h3 style={{ marginTop: 6, color: '#334155' }}>O projeto</h3>
           <p>
+            <h3>O projeto</h3>
             Este portfólio pessoal inclui um componente para controle de dados e estatísticas (visualizáveis via Grafana <SiGrafana style={{ color: '#f76b1c', verticalAlign: 'middle', marginLeft: 6 }} />). A ideia é centralizar métricas e eventos relevantes sobre projetos e interações dos visitantes, transformando-os em dashboards que ajudam a entender o comportamento, medir impacto e tomar decisões informadas.
           </p>
 
-          <h3 style={{ marginTop: 6, color: '#334155' }}>Por que ter uma página pessoal?</h3>
           <p>
+            <h3>Por que ter uma página pessoal?</h3>
             Uma página pessoal funciona como vitrine e central de contatos para profissionais que oferecem serviços. Ela ajuda a construir credibilidade mostrando projetos, resultados e habilidades de forma clara e acessível. Além disso, uma página própria permite apresentar estudos de caso, destacar integrações (como o uso do Grafana para monitoramento) e oferecer caminhos diretos para contratação — tudo isso melhora a percepção de valor e facilita a aquisição de clientes.
           </p>
 

@@ -1,5 +1,6 @@
 import React, { useRef, useEffect } from 'react';
 import perfil from '../assets/img/img_perfil.png';
+import "../styles/about.css"
 import { FaJava } from 'react-icons/fa';
 import { SiSpring, SiPython, SiDjango, SiReact } from 'react-icons/si';
 import { FiGithub, FiMail, FiPhone } from 'react-icons/fi';
@@ -138,8 +139,8 @@ export default function About() {
   }, []);
 
   return (
-    <div className="page-root" style={{ display: 'flex', justifyContent: 'flex-start', alignItems: 'center', height: '100%', width: '100%', marginLeft: '2%' }}>
-      <div id="about_card" ref={rootRef} className="card-carousel about-card">
+    <div className='container'>
+      <div id="about_card" ref={rootRef} className="container-card">
         <div id="about_left" className="about-left">
           <img id="about_avatar" src={perfil} alt="perfil" className="avatar" />
           <div id="about_text_center" className="about-text-center">
@@ -190,12 +191,12 @@ export default function About() {
             </div>
           </div>
 
-          <div id="about_card_actions" className="card-actions">
-            <button id="about_btn_stats" className="primary-btn" onClick={enviarDados}>
-              Visualizar estatística
-            </button>
-            <button id="about_btn_restart" className="primary-btn">reiniciar projeto</button>
-          </div>
+        </div>
+        <div id="about_card_actions" className="card-actions">
+          <button id="about_btn_stats" className="primary-btn" onClick={enviarDados}>
+            Visualizar estatística
+          </button>
+          <button id="about_btn_restart" className="primary-btn">reiniciar projeto</button>
         </div>
       </div>
     </div>

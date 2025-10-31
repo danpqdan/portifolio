@@ -6,6 +6,7 @@ import Projects from './pages/Projects';
 import About from './pages/About';
 import WebSocketService from './utils/WebSocketService.tsx';
 import { HeatmapUtils } from './utils/HeatmapUtils.tsx';
+import './styles/cards.css'
 
 export default function App() {
   const [showUi, setShowUi] = useState(false);

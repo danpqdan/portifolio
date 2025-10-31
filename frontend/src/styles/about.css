@@ -1,59 +1,106 @@
-/* Styles specific to About page (moved from inline styles) */
-.about-text-center {
+/* Estilos padrão (mobile first) */
+.about_avatar_text_mobile {
+    padding: 0 6px;
+}
+
+.avatar {
+    border-radius: 50%
+}
+
+.contact-list {
+    width: 100%;
+    display: flex;
+    justify-content: space-evenly;
+    margin: 8px 0;
+}
+
+.contact-list>a {
+    display: flex;
     text-align: center;
+    flex-direction: row;
+    justify-content: space-around;
+    align-content: center;
+    align-items: center;
+    gap: 8px;
+    padding: 4px 8px;
+    background: linear-gradient(to bottom, rgb(115 247 247 / 56%), rgb(216 219 250));
+    border-radius: 4px;
 }
 
-.about-h3-large {
-    margin: 0;
-    font-size: 24px;
-}
-
-.about-meta {
-    margin: 6px 0 0 0;
-    color: #000000ff;
-    font-size: 18px;
-}
-
-.about-info-strong {
-    display: block;
-    margin-bottom: 6px;
-    font-size: 24px;
-}
-
-.about-info-text {
-    color: #000000ff;
-    font-size: 16px;
-}
-
-.about-paragraph {
-    color: #000000ff;
-    line-height: 1.6;
-    margin-top: 6px;
-}
-
-.about-h4-small {
-    margin-bottom: 8px;
+.skill-badges {
+    display: flex;
+    gap: 6px;
+    width: 100%;
+    justify-content: space-evenly;
 }
 
 .skill-badge {
-    display: inline-flex;
+    border: none;
+    border-radius: 6px;
+    min-width: 80px;
+    width: 80px;
+    height: 50px;
+    min-height: 50px;
+    display: flex;
+    text-align: center;
+    flex-direction: column;
+    align-content: center;
     align-items: center;
-    gap: 8px;
-    padding: 6px 10px;
-    background: white;
-    border: 1px solid rgba(15, 23, 42, 0.04);
-    border-radius: 999px;
-    box-shadow: rgb(0 0 0 / 33%) 0px 8px 24px;
-    color: #0f172a;
-    font-weight: 600;
+    background: linear-gradient(to bottom, rgb(216 219 250), rgb(115 247 247 / 56%));
+    justify-content: center;
 }
 
-.skill-badge .skill-icon {
-    display: inline-flex;
-    align-items: center;
-    font-size: 18px;
+.about-right>p {
+    font-size: 12px !important;
+    margin: 0 0 0px 0 !important;
+    color: #000000 !important;
+    text-align: justify !important;
 }
 
-.skill-badge .skill-label {
-    font-size: 13px;
+.card-actions {
+    width: 100%;
+    min-height: 50px;
+    display: flex;
+    justify-content: center;
+    gap: 12px;
 }
+
+/* Pequeno (>= 480px) */
+@media (min-width: 480px) {
+    .container {
+        padding: 1.5rem;
+    }
+}
+
+/* Médio (>= 768px) */
+@media (min-width: 768px) {
+    .container {
+        font-size: 16px;
+        padding: 2rem;
+    }
+}
+
+/* Grande (>= 1024px) */
+@media (min-width: 1024px) {
+    .container {
+        font-size: 18px;
+        padding: 3rem;
+    }
+}
+
+/* Extra grande (>= 1280px) */
+@media (min-width: 1280px) {
+    .container {
+        font-size: 20px;
+    }
+}
+
+/* 2x Extra grande (>= 1536px) */
+@media (min-width: 1536px) {
+    .container {
+        max-width: 1400px;
+        margin: 0 auto;
+    }
+}
+
+@media (max-height: 720px) {}

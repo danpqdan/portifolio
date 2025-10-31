@@ -1,3 +1,129 @@
+/* Estilos padrão (mobile first) */
+
+.project-card-container {
+    aspect-ratio: 22 / 8;
+    border-radius: 12px;
+}
+
+.project-card-container>div>div>* {
+    padding: 0px 6px;
+}
+
+.tech-span {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background-color: #10b981;
+    border-radius: 6px;
+    font-size: 10px;
+    box-shadow: 0 1px 4px rgba(16, 24, 40, 0.04);
+    white-space: normal;
+    padding: 6px 12px;
+    color: #dbeafe;
+    text-shadow: black 1px 1px 0px;
+}
+
+.container-btn-projects>button {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    border-radius: 6px;
+    font-size: 10px;
+    white-space: normal;
+    padding: 6px 12px;
+    color: #dbeafe;
+    text-shadow: black 1px 1px 0px;
+}
+
+.project-card-front, .project-card-back {
+    opacity: 1;
+    transform: perspective(600px) rotateX(0deg);
+    position: absolute;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    background-color: rgba(255, 255, 255, 0.9);
+    box-shadow: rgba(0, 0, 0, 0.1) 0px 4px 15px;
+    backface-visibility: hidden;
+}
+
+.project-card-front h3,
+.project-card-back h3 {
+    font-size: 18px;
+    font-weight: 700;
+}
+
+.project-card-front p.project-card-description {
+    color: #334155;
+}
+
+/* Pequeno (>= 480px) */
+@media (min-width: 480px) {
+    .container {
+        padding: 1.5rem;
+    }
+}
+
+/* Médio (>= 768px) */
+@media (min-width: 768px) {
+    .container {
+        font-size: 16px;
+        padding: 2rem;
+    }
+}
+
+/* Grande (>= 1024px) */
+@media (min-width: 1024px) {
+    .container {
+        font-size: 18px;
+        padding: 3rem;
+    }
+}
+
+/* Extra grande (>= 1280px) */
+@media (min-width: 1280px) {
+    .container {
+        font-size: 20px;
+    }
+}
+
+/* 2x Extra grande (>= 1536px) */
+@media (min-width: 1536px) {
+    .container {
+        max-width: 1400px;
+        margin: 0 auto;
+    }
+}
+
+@media (max-height: 720px) {
+    .project-card-container {
+        aspect-ratio: 22 / 8;
+        border-radius: 12px;
+    }
+
+    .project-card-container>div>div>* {
+        padding: 0px 6px;
+    }
+
+    .card-top>p {
+        color: #f7f7f7;
+    }
+
+    .card-container-btn-projects {
+        display: flex;
+        flex-direction: row;
+    }
+
+    .container-btn-front, .card-bottom {
+        display: flex;
+        width: 100%;
+        justify-content: space-evenly;
+        margin: 2px 0px;
+    }
+
+}
+
+
 #project-card {
     overflow: hidden;
     max-height: 80vh;
@@ -13,8 +139,7 @@
     border-top: '1px solid rgba(0, 0, 0, 0.1)';
     backdrop-filter: blur(10px);
     max-height: 8vh;
-    padding: 2vh 0px;
-    margin: 0;
+    margin: 2px 0;
 }
 
 #projects_list {
@@ -54,22 +179,9 @@
 
 .project-card-front,
 .project-card-back {
-    /* front/back preenchendo completamente o container do card */
     position: absolute;
     inset: 0;
-    width: 100%;
-    height: 100%;
-    backface-visibility: hidden;
-    -webkit-backface-visibility: hidden;
-    transform-style: preserve-3d;
     border-radius: 12px;
-}
-
-.project-card-front {
-    /* garante que frente fique acima quando não virada */
-    z-index: 2;
-    background-color: #0b1220;
-
 }
 
 .project-card-back {
@@ -77,15 +189,9 @@
     background-color: #dbeafe;
 }
 
-/* ---------- Estilos internos dos cards (tipografia, botões, tags) ---------- */
-.project-card-front>div,
-.project-card-back>div {
-    box-sizing: border-box;
-}
 
-/* Inner wrappers adicionados no JSX */
+
 .card-inner {
-    padding: 12px 6px;
     /* aumentado para mais espaço interno */
     box-sizing: border-box;
     display: flex;
@@ -97,7 +203,6 @@
 
 .card-top {
     display: block;
-    padding-bottom: 12px;
     overflow: auto;
     /* permite rolagem quando o texto for longo */
     flex: 1 1 auto;
@@ -114,7 +219,6 @@
 .card-title {
     display: flex;
     justify-content: center;
-    margin: 0 0 10px 0;
     color: #0b1220;
     font-size: 18px;
 }
@@ -122,7 +226,6 @@
 .project-features {
     margin: 0 0 0 0px;
     line-height: 12px;
-    padding: 0;
     list-style-type: none;
     color: #e2e8f0;
 }
@@ -135,7 +238,6 @@
     background-color: #4f46e5;
     color: #fff;
     border-radius: 8px;
-    padding: 8px 12px;
     border: none;
     cursor: pointer;
 }
@@ -144,7 +246,7 @@
     background-color: #10b981;
     color: #fff;
     border-radius: 8px;
-    padding: 8px 12px;
+
     border: none;
     cursor: pointer;
 }
@@ -154,69 +256,22 @@
     filter: brightness(0.95);
 }
 
-.project-card-front h3,
-.project-card-back h3 {
-    font-size: 18px;
-    margin: 0 0 10px 0;
-    font-weight: 700;
-}
 
-.project-card-front p.project-card-description {
-    color: #334155;
-    font-size: 14px;
-    line-height: 1.45;
-    margin: 0 0 8px 0;
-}
-
-.container-btn-front {
-    display: flex;
-    gap: 8px;
-    flex-wrap: wrap;
-    margin-top: 12px;
-    align-items: center;
-    max-height: 40%;
-    overflow: auto;
-    /* caso badges ocupem várias linhas, permitir rolagem interna */
-}
 
 .tech-span {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    background-color: #10b981;
-    color: #1e293b;
-    padding: 6px 10px;
-    border-radius: 999px;
-    font-size: 12px;
-    box-shadow: 0 1px 4px rgba(16, 24, 40, 0.04);
-    max-width: 100%;
-    white-space: normal;
+
     /* permitir quebra de linha */
 }
 
 .container-btn-projects {
     display: flex;
     gap: 10px;
-    margin-top: 12px;
     flex-wrap: wrap;
 }
-
-.container-btn-projects button {
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
-    padding: 8px 12px;
-    border-radius: 8px;
-    border: none;
-    cursor: pointer;
-    font-size: 13px;
-}
-
 
 .project-card-back ul {
     display: flex;
     margin: 0;
-    /* padding-left: 16px; */
     flex-direction: column;
     align-content: center;
     align-items: center;
@@ -229,28 +284,17 @@
 }
 
 @media (max-width: 1127px) {
-    .project-features>li{
+    .project-features>li {
         display: none;
     }
-
-    .container-btn-front{
-        display: grid;
-        grid-template-columns: 1fr 1fr;
-        overflow: hidden;
-        gap: 6px
-    }
-    
 }
 
-/* Responsividade: em telas pequenas, 1 coluna */
 @media (max-width: 720px) {
+
     .container-projects {
         grid-template-columns: 1fr;
         gap: 14px;
     }
 
-    .project-card-container {
-        aspect-ratio: 16 / 9;
-        border-radius: 12px;
-    }
+
 }

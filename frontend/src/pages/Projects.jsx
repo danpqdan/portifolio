@@ -37,32 +37,22 @@ function ProjectCard({ project, index, cardWidth }) {
       className="project-card-container"
       onClick={() => setFlipped(state => !state)}>
       {/* Frente do card */}
-      <a.div
-        className="project-card-front"
-        style={{
-          opacity: opacity.to(o => 1 - o),
-          transform,
-          position: 'absolute',
-          backgroundColor: 'rgba(255, 255, 255, 0.9)',
-          boxShadow: '0 4px 15px rgba(0, 0, 0, 0.1)',
-          backfaceVisibility: 'hidden'
-        }}
-      >
+      <a.div className="project-card-front" style={{ opacity: opacity.to(o => 1 - o), transform }}>
         <div className="card-inner">
           <div className="card-top">
             <h3 className="card-title">{project.title}</h3>
             <p className="project-card-description">{project.description}</p>
           </div>
 
-          <div className="card-bottom">
-            <div className='container-btn-front'>
-              {project.technologies.map((tech, idx) => (
-                <span className='tech-span' key={idx}>
-                  {tech.icon}
-                  {tech.name}
-                </span>
-              ))}
-            </div>
+        </div>
+        <div className="card-bottom">
+          <div className='container-btn-front'>
+            {project.technologies.map((tech, idx) => (
+              <span className='tech-span' key={idx}>
+                {tech.icon}
+                {tech.name}
+              </span>
+            ))}
           </div>
         </div>
       </a.div>
@@ -82,7 +72,7 @@ function ProjectCard({ project, index, cardWidth }) {
         <div className="card-inner">
           <div className="card-top">
             <h3 className="card-title" style={{ color: '#f1f5f9' }}>{project.title}</h3>
-            <p style={{ margin: '0 0 15px 0', color: '#cbd5e1', fontSize: '14px', lineHeight: '1.4' }}>{project.details}</p>
+            <p>{project.details}</p>
 
             {project.features && (
               <ul className="project-features">
@@ -93,32 +83,32 @@ function ProjectCard({ project, index, cardWidth }) {
             )}
           </div>
 
-          <div className="card-bottom">
-            <div className='container-btn-projects'>
-              {project.githubUrl && (
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    window.open(project.githubUrl, '_blank');
-                  }}
-                  className="btn-github"
-                >
-                  <FaGithub /> GitHub
-                </button>
-              )}
+        </div>
+        <div className="card-bottom">
+          <div className='container-btn-projects'>
+            {project.githubUrl && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  window.open(project.githubUrl, '_blank');
+                }}
+                className="btn-github"
+              >
+                <FaGithub /> GitHub
+              </button>
+            )}
 
-              {project.demoUrl && (
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    window.open(project.demoUrl, '_blank');
-                  }}
-                  className="btn-demo"
-                >
-                  <FaExternalLinkAlt /> Demo
-                </button>
-              )}
-            </div>
+            {project.demoUrl && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  window.open(project.demoUrl, '_blank');
+                }}
+                className="btn-demo"
+              >
+                <FaExternalLinkAlt /> Demo
+              </button>
+            )}
           </div>
         </div>
       </a.div>
@@ -221,8 +211,8 @@ export default function Projects() {
   ];
 
   return (
-    <div style={{ display: 'flex', justifyContent: 'flex-start', alignItems: 'center', height: '100%', width: '100%', marginLeft: '2%' }}>
-      <div id="projects_card" className="card-carousel project-card">
+    <div className='container'>
+      <div id="projects_card" className="container-card">
         <div id="projects_content" className="card-content" >
           <h1 id="projects_title" >Projetos</h1>
           <div
@@ -247,9 +237,6 @@ export default function Projects() {
           id="projects_actions"
           className="card-actions"
         >
-          <button id="projects_btn_view" className="primary-btn">
-            Ver todos os projetos
-          </button>
           <button id="projects_btn_github" className="primary-btn" onClick={enviarDados}>
             <FaGithub style={{ marginRight: '8px' }} />
             GitHub
