@@ -14,6 +14,7 @@
     margin: 8px 0;
 }
 
+
 .contact-list>a {
     display: flex;
     text-align: center;
@@ -25,6 +26,11 @@
     padding: 4px 8px;
     background: linear-gradient(to bottom, rgb(115 247 247 / 56%), rgb(216 219 250));
     border-radius: 4px;
+    text-shadow: rgb(72 73 75 / 85%) -1px 0px 3px;
+}
+
+.contact-list>a>svg {
+    color: rgb(47 29 229);
 }
 
 .skill-badges {
@@ -50,6 +56,23 @@
     justify-content: center;
 }
 
+.skill-badge>span {
+    display: flex;
+    text-align: center;
+    flex-direction: row;
+    justify-content: space-around;
+    align-content: center;
+    align-items: center;
+    gap: 8px;
+    padding: 4px 8px;
+    border-radius: 4px;
+    text-shadow: rgb(72 73 75 / 85%) -1px 0px 3px;
+}
+
+.skill-badge>span>svg {
+    color: rgb(47 29 229);
+}
+
 .about-right>p {
     font-size: 12px !important;
     margin: 0 0 0px 0 !important;
@@ -64,6 +87,54 @@
     justify-content: center;
     gap: 12px;
 }
+
+@keyframes bounce {
+
+    0%,
+    100% {
+        transform: translateY(0);
+    }
+
+    50% {
+        transform: translateY(-5px);
+    }
+}
+
+.primary-btn {
+    background: #343537;
+    color: #f93b3b;
+    border: 1px solid rgb(109, 41, 41);
+    padding: 0px 18px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 14px;
+    animation: bounce 1.8s ease-in-out infinite;
+}
+
+.card-content>h3, .card-content>p{
+    margin: 0 6px;
+}
+
+.primary-btn:nth-child(1) {
+    animation-delay: 0s;
+}
+
+.primary-btn:nth-child(2) {
+    animation-delay: 0.3s;
+}
+
+.primary-btn:nth-child(3) {
+    animation-delay: 0.6s;
+}
+
+.primary-btn:nth-child(4) {
+    animation-delay: 0.9s;
+}
+
+.primary-btn:nth-child(5) {
+    animation-delay: 1.2s;
+}
+
 
 /* Pequeno (>= 480px) */
 @media (min-width: 480px) {

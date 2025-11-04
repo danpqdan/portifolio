@@ -14,6 +14,10 @@
     flex-direction: column;
 }
 
+.card-content {
+    flex: 1;
+}
+
 .container-card>div {
     padding: 0 6px;
 }
@@ -80,12 +84,6 @@
     flex-direction: column;
 }
 
-.card-content {
-    color: #334155;
-    overflow-y: auto;
-    flex: 1;
-    font-size: 16px;
-}
 
 .card-footer {
     display: flex;
@@ -139,19 +137,6 @@
 }
 
 
-.tech-btn {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 8px;
-    background: #0b1220;
-    color: #fff;
-    border-radius: 8px;
-    text-decoration: none;
-    font-size: 12px;
-}
-
-
 
 .info-block {
     width: 100%;
@@ -163,27 +148,8 @@
     border-radius: 8px;
 }
 
-.about-right {
-    width: 66%;
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
-}
-
 .skills-list {
     flex: 1;
-}
-
-
-
-.primary-btn {
-    background: #0f172a;
-    color: #fff;
-    border: none;
-    border-radius: 8px;
-    cursor: pointer;
-    font-weight: 600;
-    font-size: 18px;
 }
 
 .about-info-text {
@@ -194,6 +160,8 @@
     font-weight: 500;
 }
 
+
+
 @media screen and (max-width: 720px) {
 
     .info-block {
@@ -202,16 +170,6 @@
 
     .about_right {
         overflow: hidden;
-    }
-
-    .primary-btn {
-        background: #0f172a;
-        color: #fff;
-        border: none;
-        border-radius: 8px;
-        cursor: pointer;
-        /* font-weight: 600; */
-        font-size: 14px;
     }
 
     #projects_list {
@@ -265,27 +223,11 @@
         gap: 80px !important;
     }
 
-    .card-content {
-        margin: 0px !important;
-    }
-
-
-
-    #about_right {
-        margin-right: 0px !important;
-        overflow-x: hidden !important;
-    }
-
 
     #about_card {
         display: flex !important;
         flex-direction: column !important;
         align-items: center !important;
-    }
-
-    #about_right {
-        width: 100% !important;
-        overflow-x: hidden !important;
     }
 
 
@@ -296,10 +238,6 @@
 }
 
 @media screen and (max-width: 380px) {
-
-    .card-content>p {
-        color: black !important;
-    }
 
     video[src*="torre_eifield"] {
         width: 100% !important;
@@ -352,14 +290,6 @@
         align-items: center !important;
     }
 
-    #about_right {
-        width: 100% !important;
-        overflow-x: hidden !important;
-    }
-
-    /* Ajustar skill badges sem ícones */
-
-    /* Exceções para elementos que não devem ter padding alterado */
     .card-carousel img,
     .about-card img,
     .avatar {
@@ -372,18 +302,6 @@
         list-style-type: none;
     }
 
-    
-    .about-right,
-    .card-content,
-    .card-header,
-    .card-footer {
-        gap: 0px;
-    }
-
-
-
-
-    /* Esconder botões de navegação do carousel em telas muito pequenas */
     #prev-button,
     #next-button {
         display: none !important;

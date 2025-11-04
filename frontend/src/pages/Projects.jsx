@@ -6,7 +6,10 @@ import {
   FaPython,
   FaGithub,
   FaExternalLinkAlt,
-  FaJava
+  FaJava,
+  FaHandPointer,
+  FaMousePointer,
+  FaArrowRight
 } from 'react-icons/fa';
 import {
   SiTypescript,
@@ -23,27 +26,182 @@ import "../styles/project.css";
 // Card individual com animação flip
 function ProjectCard({ project, index, cardWidth }) {
   const [flipped, setFlipped] = useState(false);
+  const [isClicked, setIsClicked] = useState(false);
 
-
-
+  // Animação principal do flip
   const { transform, opacity } = useSpring({
     opacity: flipped ? 1 : 0,
     transform: `perspective(600px) rotateX(${flipped ? 180 : 0}deg)`,
     config: { mass: 5, tension: 500, friction: 80 },
   });
 
+  // Animação de clique (rotação de 15°)
+  const { rotate } = useSpring({
+    rotate: isClicked ? 15 : 0,
+    config: { tension: 300, friction: 10, duration: 150 },
+  });
+
+  const handleClick = () => {
+    // Ativa a animação de clique
+    setIsClicked(true);
+
+    // Alterna o flip após um pequeno delay
+    setTimeout(() => {
+      setFlipped(state => !state);
+      setIsClicked(false);
+    }, 150);
+  };
+
   return (
     <div
       className="project-card-container"
-      onClick={() => setFlipped(state => !state)}>
+      onClick={handleClick}
+      style={{
+        cursor: 'pointer',
+        transform: rotate.to(r => `rotate(${r}deg)`),
+        transition: 'transform 0.15s ease-out',
+      }}
+    >
       {/* Frente do card */}
-      <a.div className="project-card-front" style={{ opacity: opacity.to(o => 1 - o), transform }}>
+      <a.div className="project-card-front" style={{
+        opacity: opacity.to(o => 1 - o),
+        transform
+      }}>
+        <div className="card-inner">
+          <div className="card-top">
+            <div className="card-title-container">
+              <h3 className="card-title">{project.title}</h3>
+              <div className="click-indicator-icon">
+                <FaHandPointer className="click-icon" />
+              </div>
+            </div>
+            <p className="project-card-description">{project.description}</p>
+          </div>
+        </div>
+        <div className="card-bottom">
+          <div className='container-btn-front'>
+            {project.technologies.map((tech, idx) => (
+              <span className='tech-span' key={idx}>
+                {tech.icon}
+                {tech.name}
+              </span>
+            ))}
+          </div>
+        </div>
+      </a.div>
+
+      {/* Verso do card */}
+      <a.div
+        className="project-card-back"
+        style={{
+          opacity,
+          transform: transform.to(t => `${t} rotateX(180deg)`),
+          position: 'absolute',
+          backfaceVisibility: 'hidden',
+          boxShadow: '0 4px 15px rgba(0, 0, 0, 0.2)',
+          backgroundColor: 'rgba(30, 41, 59, 0.95)',
+        }}
+      >
+        <div className="card-inner">
+          <div className="card-top">
+            <div className="card-title-container">
+              <h3 className="card-title" style={{ color: '#f1f5f9' }}>{project.title}</h3>
+              <div className="click-indicator-icon">
+                <FaHandPointer className="click-icon" />
+              </div>
+            </div>
+            <p>{project.details}</p>
+
+            {project.features && (
+              <ul className="project-features">
+                {project.features.map((feature, idx) => (
+                  <li key={idx}>{feature}</li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </div>
+        <div className="card-bottom">
+          <div className='container-btn-projects'>
+            {project.githubUrl && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  window.open(project.githubUrl, '_blank');
+                }}
+                className="btn-github"
+              >
+                <FaGithub /> GitHub
+              </button>
+            )}
+
+            {project.demoUrl && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  window.open(project.demoUrl, '_blank');
+                }}
+                className="btn-demo"
+              >
+                <FaExternalLinkAlt /> Demo
+              </button>
+            )}
+          </div>
+        </div>
+      </a.div>
+    </div>
+  );
+}
+
+// Versão alternativa com animação de "tilt" mais suave
+function ProjectCardWithTilt({ project, index, cardWidth }) {
+  const [flipped, setFlipped] = useState(false);
+  const [isPressed, setIsPressed] = useState(false);
+
+  // Animação principal do flip
+  const { transform, opacity } = useSpring({
+    opacity: flipped ? 1 : 0,
+    transform: `perspective(600px) rotateX(${flipped ? 180 : 0}deg)`,
+    config: { mass: 5, tension: 500, friction: 80 },
+  });
+
+  // Animação de tilt (alternando entre -8° e 8°)
+  const { tilt } = useSpring({
+    tilt: isPressed ? 8 : -8,
+    config: { tension: 200, friction: 15 },
+  });
+
+  const handleClick = () => {
+    // Animação de press
+    setIsPressed(true);
+
+    // Alterna o flip e reseta a animação
+    setTimeout(() => {
+      setFlipped(state => !state);
+      setIsPressed(false);
+    }, 300);
+  };
+
+  return (
+    <div
+      className="project-card-container"
+      onClick={handleClick}
+      style={{
+        cursor: 'pointer',
+        transform: tilt.to(t => `rotate(${t}deg)`),
+        transition: 'transform 0.3s ease-in-out',
+      }}
+    >
+      {/* Frente do card */}
+      <a.div className="project-card-front" style={{
+        opacity: opacity.to(o => 1 - o),
+        transform
+      }}>
         <div className="card-inner">
           <div className="card-top">
             <h3 className="card-title">{project.title}</h3>
             <p className="project-card-description">{project.description}</p>
           </div>
-
         </div>
         <div className="card-bottom">
           <div className='container-btn-front'>
@@ -82,7 +240,6 @@ function ProjectCard({ project, index, cardWidth }) {
               </ul>
             )}
           </div>
-
         </div>
         <div className="card-bottom">
           <div className='container-btn-projects'>
@@ -215,11 +372,8 @@ export default function Projects() {
       <div id="projects_card" className="container-card">
         <div id="projects_content" className="card-content" >
           <h1 id="projects_title" >Projetos</h1>
-          <div
-            id="projects_list"
-          >
+          <div id="projects_list">
             <div className="container-projects">
-
               {projects.map((project, index) => (
                 <ProjectCard
                   key={index}
@@ -227,6 +381,7 @@ export default function Projects() {
                   index={index}
                   cardWidth={cardWidth}
                 />
+                // Ou use ProjectCardWithTilt para a versão alternativa
               ))}
             </div>
           </div>
@@ -245,5 +400,4 @@ export default function Projects() {
       </div>
     </div >
   );
-
 }
