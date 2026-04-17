@@ -110,7 +110,7 @@ class WebSocketService {
                     }
                 });
 
-                this.socket.on('connect_error', (error: Error) => {
+                this.socket.on('connect_error', (_error: Error) => {
                     clearTimeout(connectTimeout);
 
                     // Tentar reconectar com backoff
@@ -124,15 +124,15 @@ class WebSocketService {
                 });
 
                 // Resposta do servidor quando recebe dados de analytics
-                this.socket.on('analytics_received', (data: any) => {
+                this.socket.on('analytics_received', (_data: any) => {
                 });
 
-                this.socket.on('analytics_error', (data: any) => {
+                this.socket.on('analytics_error', (_data: any) => {
                 });
 
-                this.socket.on('connection_response', (data: any) => {
+                this.socket.on('connection_response', (_data: any) => {
                 });
-            } catch (error) {
+            } catch {
                 resolve(false);
             }
         });
@@ -202,13 +202,13 @@ class WebSocketService {
             }, 5000);
 
             // Configurar handlers para resposta do servidor
-            const onSuccess = (data: any) => {
+            const onSuccess = (_data: any) => {
                 clearTimeout(emitTimeout);
                 this.socket?.off('analytics_error', onError);
                 resolve(true);
             };
 
-            const onError = (error: any) => {
+            const onError = (_error: any) => {
                 clearTimeout(emitTimeout);
                 this.socket?.off('analytics_received', onSuccess);
                 resolve(false);

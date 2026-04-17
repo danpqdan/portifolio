@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import { useSpring, a } from '@react-spring/web';
 import {
-  FaReact,
   FaJs,
   FaPython,
   FaGithub,
@@ -9,10 +8,6 @@ import {
   FaJava
 } from 'react-icons/fa';
 import {
-  SiTypescript,
-  SiDjango,
-  SiInfluxdb,
-  SiPostgresql,
   SiPython,
   SiApachekafka,
   SiDocker,
@@ -21,7 +16,7 @@ import {
 
 
 // Card individual com animação flip
-function ProjectCard({ project, index }) {
+function ProjectCard({ project }) {
   const [flipped, setFlipped] = useState(false);
 
   const { transform, opacity } = useSpring({
@@ -301,7 +296,6 @@ export default function Projects() {
                 <ProjectCard
                   key={index}
                   project={project}
-                  index={index}
                 />
               ))}
             </div>
