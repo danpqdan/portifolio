@@ -1,8 +1,8 @@
 # Configuração InfluxDB para Série Temporal
 
 ## Dados da Conexão
-- **URL**: dsplayground.com.br/influxdb/
-- **Token**: ***REMOVED***
+- **URL**: localhost:8086/
+- **Token**: <INFLUXDB_TOKEN>
 - **Bucket**: portfolio_analytics (ou conforme configurado)
 - **Organization**: (a ser definida)
 
