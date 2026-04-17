@@ -220,8 +220,6 @@ export default function SlidesCarousel({ slides }) {
                     // Movimento horizontal - prevenir scroll e ativar swipe
                     e.preventDefault();
                 }
-            } else if (!isScrolling && diffX > 10) {
-                e.preventDefault();
             }
         };
 
