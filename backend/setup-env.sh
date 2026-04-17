@@ -3,47 +3,47 @@
 
 set -e  # Parar em caso de erro
 
-echo "🐍 Configurando ambiente Python para OLS..."
+echo " Configurando ambiente Python para OLS..."
 
-# Verificar diretório atual
+# Verificar diretrio atual
 BACKEND_DIR="/usr/local/lsws/portifolio/html/portifolio/backend"
 PROJECT_ROOT="/usr/local/lsws/portifolio/html/portifolio"
 
-echo "📂 Navegando para: $BACKEND_DIR"
+echo " Navegando para: $BACKEND_DIR"
 cd "$BACKEND_DIR"
 
-# Verificar se Python3 está disponível
+# Verificar se Python3 est disponvel
 if ! command -v python3 &> /dev/null; then
-    echo "❌ Python3 não encontrado. Instalando..."
+    echo " Python3 no encontrado. Instalando..."
     sudo apt update
     sudo apt install -y python3 python3-pip python3-venv
 fi
 
-echo "✅ Python3 encontrado: $(python3 --version)"
+echo " Python3 encontrado: $(python3 --version)"
 
-# Criar ambiente virtual se não existir
+# Criar ambiente virtual se no existir
 if [ ! -d "venv" ]; then
-    echo "🔧 Criando ambiente virtual..."
+    echo " Criando ambiente virtual..."
     python3 -m venv venv
-    echo "✅ Ambiente virtual criado"
+    echo " Ambiente virtual criado"
 else
-    echo "✅ Ambiente virtual já existe"
+    echo " Ambiente virtual j existe"
 fi
 
 # Ativar ambiente virtual
-echo "🔌 Ativando ambiente virtual..."
+echo " Ativando ambiente virtual..."
 source venv/bin/activate
 
-# Verificar se está no ambiente virtual
+# Verificar se est no ambiente virtual
 if [[ "$VIRTUAL_ENV" != "" ]]; then
-    echo "✅ Ambiente virtual ativo: $VIRTUAL_ENV"
+    echo " Ambiente virtual ativo: $VIRTUAL_ENV"
 else
-    echo "❌ Erro: Ambiente virtual não foi ativado"
+    echo " Erro: Ambiente virtual no foi ativado"
     exit 1
 fi
 
 # Atualizar pip
-echo "📦 Atualizando pip..."
+echo " Atualizando pip..."
 pip install --upgrade pip
 
 # Instalar wheel para melhor compatibilidade
@@ -51,41 +51,41 @@ pip install wheel
 
 # Verificar se requirements.txt existe
 if [ ! -f "requirements.txt" ]; then
-    echo "❌ requirements.txt não encontrado!"
+    echo " requirements.txt no encontrado!"
     exit 1
 fi
 
-echo "📋 Instalando dependências do requirements.txt..."
+echo " Instalando dependncias do requirements.txt..."
 pip install -r requirements.txt
 
-# Verificar se todas as dependências foram instaladas
-echo "🔍 Verificando instalação das dependências principais..."
+# Verificar se todas as dependncias foram instaladas
+echo " Verificando instalao das dependncias principais..."
 
-# Lista de dependências críticas
+# Lista de dependncias crticas
 CRITICAL_DEPS=("flask" "flask-cors" "flask-socketio" "flask-limiter" "influxdb-client" "gunicorn" "eventlet")
 
 for dep in "${CRITICAL_DEPS[@]}"; do
     if pip show "$dep" &> /dev/null; then
         VERSION=$(pip show "$dep" | grep Version | cut -d' ' -f2)
-        echo "✅ $dep==$VERSION"
+        echo " $dep==$VERSION"
     else
-        echo "❌ $dep não está instalado!"
+        echo " $dep no est instalado!"
         exit 1
     fi
 done
 
 # Gerar requirements.txt completo com pip freeze
-echo "📄 Gerando requirements-freeze.txt com todas as dependências..."
+echo " Gerando requirements-freeze.txt com todas as dependncias..."
 pip freeze > requirements-freeze.txt
 
-echo "📊 Comparando arquivos de requirements..."
+echo " Comparando arquivos de requirements..."
 echo "requirements.txt (manual):"
 wc -l requirements.txt
 echo "requirements-freeze.txt (completo):"
 wc -l requirements-freeze.txt
 
-# Testar importações Python
-echo "🧪 Testando importações críticas..."
+# Testar importaes Python
+echo " Testando importaes crticas..."
 python3 -c "
 import flask
 import flask_cors
@@ -94,37 +94,37 @@ import flask_limiter
 import influxdb_client
 import gunicorn
 import eventlet
-print('✅ Todas as importações funcionando!')
+print(' Todas as importaes funcionando!')
 "
 
-# Testar configuração da aplicação
-echo "🔍 Testando configuração da aplicação..."
-if python3 -c "from app import app; print('✅ App Flask carregado com sucesso')"; then
-    echo "✅ Aplicação configurada corretamente"
+# Testar configurao da aplicao
+echo " Testando configurao da aplicao..."
+if python3 -c "from app import app; print(' App Flask carregado com sucesso')"; then
+    echo " Aplicao configurada corretamente"
 else
-    echo "❌ Erro na configuração da aplicação"
+    echo " Erro na configurao da aplicao"
     exit 1
 fi
 
-# Criar arquivo de variáveis de ambiente se não existir
+# Criar arquivo de variveis de ambiente se no existir
 if [ ! -f ".env" ]; then
-    echo "🔧 Criando arquivo .env para produção..."
+    echo " Criando arquivo .env para produo..."
     cat > .env << 'EOF'
-# Configuração de produção OLS
+# Configurao de produo OLS
 FLASK_ENV=production
 FLASK_APP=app.py
 FLASK_DEBUG=False
 
-# Segurança
+# Segurana
 SECRET_KEY=your-super-secret-key-change-this-in-production
 
 # CORS
-CORS_ORIGINS=https://dsplayground.com.br,https://www.dsplayground.com.br,http://dsplayground.com.br
+CORS_ORIGINS=http://localhost:5173,http://localhost:3000
 
 # InfluxDB
 INFLUXDB_MODE=local
 INFLUXDB_URL_LOCAL=http://127.0.0.1:8086
-INFLUXDB_URL_REMOTE=http://dsplayground.com.br:8086
+INFLUXDB_URL_REMOTE=http://localhost:8086
 INFLUXDB_TOKEN=your-influxdb-token-here
 INFLUXDB_ORG=zen
 INFLUXDB_BUCKET=portifolio
@@ -140,29 +140,29 @@ RATE_LIMIT_STORAGE_URL=memory://
 SESSION_TIMEOUT=3600
 MAX_REQUESTS_PER_MINUTE=100
 EOF
-    echo "✅ Arquivo .env criado"
+    echo " Arquivo .env criado"
 fi
 
-# Configurar permissões
-echo "🔒 Configurando permissões..."
+# Configurar permisses
+echo " Configurando permisses..."
 chmod +x ../deploy.sh
-chmod 600 .env  # Apenas proprietário pode ler/escrever
+chmod 600 .env  # Apenas proprietrio pode ler/escrever
 
 echo ""
-echo "🎉 Configuração do ambiente Python concluída!"
+echo " Configurao do ambiente Python concluda!"
 echo ""
-echo "📋 Resumo:"
+echo " Resumo:"
 echo "   Python: $(python3 --version)"
 echo "   Pip: $(pip --version)"
 echo "   Ambiente virtual: $VIRTUAL_ENV"
-echo "   Dependências instaladas: $(pip list | wc -l) pacotes"
+echo "   Dependncias instaladas: $(pip list | wc -l) pacotes"
 echo ""
-echo "📁 Arquivos gerados:"
-echo "   ✅ venv/ (ambiente virtual)"
-echo "   ✅ requirements-freeze.txt (todas as dependências)"
-echo "   ✅ .env (configuração de produção)"
+echo " Arquivos gerados:"
+echo "    venv/ (ambiente virtual)"
+echo "    requirements-freeze.txt (todas as dependncias)"
+echo "    .env (configurao de produo)"
 echo ""
-echo "🚀 Próximos passos:"
+echo " Prximos passos:"
 echo "   1. ./deploy.sh (iniciar servidor)"
 echo "   2. tail -f flask.log (monitorar logs)"
 echo "   3. curl http://127.0.0.1:5000/api/ (testar API)"
