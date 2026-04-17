@@ -1,15 +1,15 @@
 #!/bin/bash
-# Script de deploy para produção OLS
+# Script de deploy para produo OLS
 
 set -e  # Parar em caso de erro
 
-echo "🚀 Iniciando deploy para produção OLS..."
+echo " Iniciando deploy para produo OLS..."
 
-# Definir diretórios
+# Definir diretrios
 BACKEND_DIR="/usr/local/lsws/portifolio/html/portifolio/backend"
 PROJECT_ROOT="/usr/local/lsws/portifolio/html/portifolio"
 
-# Função para logs
+# Funo para logs
 log_info() {
     echo "[INFO] $1"
 }
@@ -22,13 +22,13 @@ log_success() {
     echo "[SUCCESS] $1"
 }
 
-# Navegar para o diretório do backend
+# Navegar para o diretrio do backend
 log_info "Navegando para: $BACKEND_DIR"
 cd "$BACKEND_DIR"
 
 # Verificar se ambiente virtual existe
 if [ ! -d "venv" ]; then
-    log_error "Ambiente virtual não encontrado!"
+    log_error "Ambiente virtual no encontrado!"
     log_info "Execute primeiro: ./setup-env.sh"
     exit 1
 fi
@@ -37,7 +37,7 @@ fi
 log_info "Ativando ambiente virtual..."
 source venv/bin/activate
 
-# Verificar se está no ambiente virtual
+# Verificar se est no ambiente virtual
 if [[ "$VIRTUAL_ENV" == "" ]]; then
     log_error "Falha ao ativar ambiente virtual"
     exit 1
@@ -45,23 +45,23 @@ fi
 
 log_success "Ambiente virtual ativo: $VIRTUAL_ENV"
 
-# Carregar variáveis de ambiente
+# Carregar variveis de ambiente
 if [ -f ".env" ]; then
-    log_info "Carregando variáveis de ambiente..."
-    set -a  # Exportar automaticamente variáveis
+    log_info "Carregando variveis de ambiente..."
+    set -a  # Exportar automaticamente variveis
     source .env
     set +a
-    log_success "Variáveis carregadas"
+    log_success "Variveis carregadas"
 else
-    log_info "Arquivo .env não encontrado, usando configurações padrão..."
+    log_info "Arquivo .env no encontrado, usando configuraes padro..."
     export FLASK_ENV=production
     export INFLUXDB_MODE=local
 fi
 
-# Verificar e instalar dependências se necessário
-log_info "Verificando dependências..."
+# Verificar e instalar dependncias se necessrio
+log_info "Verificando dependncias..."
 if ! pip show flask &> /dev/null; then
-    log_info "Instalando dependências..."
+    log_info "Instalando dependncias..."
     pip install -r requirements.txt
 fi
 
@@ -73,19 +73,19 @@ if [ ! -z "$FLASK_PID" ]; then
     kill $FLASK_PID
     sleep 2
     
-    # Forçar kill se necessário
+    # Forar kill se necessrio
     if pgrep -f "python.*app.py" &> /dev/null; then
-        log_info "Forçando parada do processo..."
+        log_info "Forando parada do processo..."
         pkill -9 -f "python.*app.py"
     fi
 fi
 
-# Testar configuração
-log_info "Testando configuração Flask..."
+# Testar configurao
+log_info "Testando configurao Flask..."
 if python3 -c "from app import app; print('Flask configurado corretamente')"; then
-    log_success "Configuração Flask válida"
+    log_success "Configurao Flask vlida"
 else
-    log_error "Erro na configuração Flask"
+    log_error "Erro na configurao Flask"
     exit 1
 fi
 
@@ -97,9 +97,9 @@ fi
 # Iniciar servidor Flask
 log_info "Iniciando servidor Flask..."
 
-# Usar gunicorn para produção se disponível
+# Usar gunicorn para produo se disponvel
 if command -v gunicorn &> /dev/null; then
-    log_info "Usando Gunicorn para produção..."
+    log_info "Usando Gunicorn para produo..."
     nohup gunicorn --worker-class eventlet -w 4 --bind 127.0.0.1:5000 --timeout 60 --keep-alive 2 --max-requests 1000 app:app > flask.log 2>&1 &
     FLASK_PID=$!
 else
@@ -108,16 +108,16 @@ else
     FLASK_PID=$!
 fi
 
-# Aguardar inicialização
+# Aguardar inicializao
 sleep 3
 
-# Verificar se processo está rodando
+# Verificar se processo est rodando
 if ps -p $FLASK_PID > /dev/null; then
     log_success "Servidor Flask iniciado (PID: $FLASK_PID)"
     echo $FLASK_PID > flask.pid
 else
     log_error "Falha ao iniciar servidor Flask"
-    log_error "Últimas linhas do log:"
+    log_error "ltimas linhas do log:"
     tail -10 flask.log
     exit 1
 fi
@@ -129,25 +129,25 @@ sleep 2
 if curl -s http://127.0.0.1:5000/api/ > /dev/null; then
     log_success "API respondendo corretamente"
 else
-    log_error "API não está respondendo"
+    log_error "API no est respondendo"
     log_error "Verificar logs: tail -f flask.log"
 fi
 
 echo ""
-log_success "Deploy concluído com sucesso!"
+log_success "Deploy concludo com sucesso!"
 echo ""
-echo "📊 Informações do deploy:"
+echo " Informaes do deploy:"
 echo "   PID do processo: $FLASK_PID"
 echo "   Logs: tail -f $BACKEND_DIR/flask.log"
 echo "   Parar servidor: kill $FLASK_PID"
 echo ""
-echo "🌐 URLs de teste:"
+echo " URLs de teste:"
 echo "   API Local: http://127.0.0.1:5000/api/"
-echo "   API Produção: https://dsplayground.com.br/api/"
-echo "   Health Check: https://dsplayground.com.br/api/health"
-echo "   WebSocket: https://dsplayground.com.br/api/socket.io/"
+echo "   API Produo: http://localhost:5000/api/"
+echo "   Health Check: http://localhost:5000/api/health"
+echo "   WebSocket: http://localhost:5000/api/socket.io/"
 echo ""
-echo "🔍 Comandos úteis:"
+echo " Comandos teis:"
 echo "   Ver logs: tail -f flask.log"
 echo "   Verificar processo: ps -p $FLASK_PID"
 echo "   Parar servidor: kill \$(cat flask.pid)"

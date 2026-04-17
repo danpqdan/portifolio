@@ -1,56 +1,81 @@
 import os
+from pathlib import Path
+
+from dotenv import load_dotenv
+
+
+load_dotenv(Path(__file__).resolve().parent / ".env")
+
+
+def obter_bool(nome_variavel: str, padrao: str = "false") -> bool:
+    return os.environ.get(nome_variavel, padrao).strip().lower() == "true"
+
+
+def obter_lista(nome_variavel: str, padrao: str = "") -> list[str]:
+    valor = os.environ.get(nome_variavel, padrao)
+    return [item.strip() for item in valor.split(",") if item.strip()]
+
+
+def exigir_variavel(nome_variavel: str) -> str:
+    valor = os.environ.get(nome_variavel)
+    if not valor:
+        raise RuntimeError(f"Variavel de ambiente obrigatoria ausente: {nome_variavel}")
+    return valor
+
 
 class Config:
-    """Configuração base"""
-    SECRET_KEY = os.environ.get('SECRET_KEY') or 'dev-secret-key-change-in-production'
+    """Configuracao base carregada exclusivamente por variaveis de ambiente."""
+
+    SECRET_KEY = exigir_variavel("SECRET_KEY")
     DEBUG = False
     TESTING = False
-    
-    # Configurações para coleta temporal
-    TEMPORAL_REALTIME_INTERVAL = int(os.environ.get('TEMPORAL_REALTIME_INTERVAL', '5000'))  # 5s
-    TEMPORAL_REGULAR_INTERVAL = int(os.environ.get('TEMPORAL_REGULAR_INTERVAL', '15000'))  # 15s
-    TEMPORAL_CACHE_SIZE = int(os.environ.get('TEMPORAL_CACHE_SIZE', '1000'))
-    TEMPORAL_CLEANUP_INTERVAL = int(os.environ.get('TEMPORAL_CLEANUP_INTERVAL', '300'))  # 5min
 
-    # Configurações InfluxDB
-    INFLUXDB_URL = os.environ.get('INFLUXDB_URL_LOCAL', 'http://dsplayground.com.br:8086/')
-    INFLUXDB_TOKEN = os.environ.get('INFLUXDB_TOKEN', '***REMOVED***')
-    INFLUXDB_ORG = os.environ.get('INFLUXDB_ORG', 'zen')
-    INFLUXDB_BUCKET = os.environ.get('INFLUXDB_BUCKET', 'portifolio')
-    INFLUXDB_ENABLED = os.environ.get('INFLUXDB_ENABLED', 'true').lower() == 'true'
+    TEMPORAL_REALTIME_INTERVAL = int(os.environ.get("TEMPORAL_REALTIME_INTERVAL", "5000"))
+    TEMPORAL_REGULAR_INTERVAL = int(os.environ.get("TEMPORAL_REGULAR_INTERVAL", "15000"))
+    TEMPORAL_CACHE_SIZE = int(os.environ.get("TEMPORAL_CACHE_SIZE", "1000"))
+    TEMPORAL_CLEANUP_INTERVAL = int(os.environ.get("TEMPORAL_CLEANUP_INTERVAL", "300"))
+
+    INFLUXDB_ENABLED = obter_bool("INFLUXDB_ENABLED")
+    INFLUXDB_URL = os.environ.get("INFLUXDB_URL", "")
+    INFLUXDB_TOKEN = os.environ.get("INFLUXDB_TOKEN", "")
+    INFLUXDB_ORG = os.environ.get("INFLUXDB_ORG", "")
+    INFLUXDB_BUCKET = os.environ.get("INFLUXDB_BUCKET", "")
+
+    if INFLUXDB_ENABLED:
+        INFLUXDB_URL = exigir_variavel("INFLUXDB_URL")
+        INFLUXDB_TOKEN = exigir_variavel("INFLUXDB_TOKEN")
+        INFLUXDB_ORG = exigir_variavel("INFLUXDB_ORG")
+        INFLUXDB_BUCKET = exigir_variavel("INFLUXDB_BUCKET")
+
+    CORS_ORIGINS = obter_lista("CORS_ORIGINS", "http://localhost:5173,http://localhost:3000")
+    HOST = os.environ.get("HOST", "127.0.0.1")
+    PORT = int(os.environ.get("PORT", "5000"))
+
 
 class DevelopmentConfig(Config):
-    """Configuração para desenvolvimento"""
+    """Configuracao local de desenvolvimento."""
+
     DEBUG = True
-    CORS_ORIGINS = ["http://localhost:5173", "http://localhost:3000"]
-    
-    # Configurações temporais para desenvolvimento (intervalos menores para teste)
-    TEMPORAL_REALTIME_INTERVAL = 3000  # 3s para desenvolvimento
-    TEMPORAL_REGULAR_INTERVAL = 10000  # 10s para desenvolvimento
+
 
 class ProductionConfig(Config):
-    """Configuração para produção"""
+    """Configuracao reservada para uso futuro em ambiente separado."""
+
     DEBUG = False
-    # Adicione aqui as origens permitidas em produção
-    CORS_ORIGINS = ["https://dsplayground.com.br"]
-    
-    # Configurações temporais para produção (intervalos padrão)
-    TEMPORAL_REALTIME_INTERVAL = 5000  # 5s
-    TEMPORAL_REGULAR_INTERVAL = 15000  # 15s
+
 
 class TestingConfig(Config):
-    """Configuração para testes"""
+    """Configuracao para testes."""
+
     TESTING = True
     DEBUG = True
-    
-    # Configurações temporais para testes (intervalos muito menores)
-    TEMPORAL_REALTIME_INTERVAL = 1000  # 1s para testes
-    TEMPORAL_REGULAR_INTERVAL = 3000   # 3s para testes
+    TEMPORAL_REALTIME_INTERVAL = 1000
+    TEMPORAL_REGULAR_INTERVAL = 3000
 
-# Dicionário de configurações
+
 config = {
-    'development': DevelopmentConfig,
-    'production': ProductionConfig,
-    'testing': TestingConfig,
-    'default': DevelopmentConfig
+    "development": DevelopmentConfig,
+    "production": ProductionConfig,
+    "testing": TestingConfig,
+    "default": DevelopmentConfig,
 }

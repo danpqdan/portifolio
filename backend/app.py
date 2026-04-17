@@ -89,13 +89,8 @@ logging.basicConfig(
 )
 security_logger = logging.getLogger('security')
 
-# ✅ CORS COM SUPORTE A PROXY REVERSO
+# ✅ CORS configurado por ambiente
 cors_origins = app.config.get("CORS_ORIGINS", ["http://localhost:5173"])
-if env == 'production':
-    cors_origins.extend([
-        "https://dsplayground.com.br",
-        "https://www.dsplayground.com.br"
-    ])
 
 CORS(app, 
      origins=cors_origins,
@@ -477,7 +472,7 @@ if __name__ == "__main__":
         log_safe(security_logger, 'info', "[CONFIG] Iniciando servidor em modo DESENVOLVIMENTO")
     
     socketio.run(
-        app, host="0.0.0.0", port=5000,
+        app, host=app.config.get("HOST", "127.0.0.1"), port=app.config.get("PORT", 5000),
         debug=(env == 'development'),
         allow_unsafe_werkzeug=(env == 'development')
     )
