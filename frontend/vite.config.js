@@ -1,9 +1,9 @@
-import { defineConfig, loadEnv } from 'vite';
+﻿import { defineConfig, loadEnv } from 'vite';
 import react from '@vitejs/plugin-react-swc';
 import { fileURLToPath } from 'url';
 import { dirname, resolve } from 'path';
 
-// Criar equivalentes para __dirname e __filename em módulos ESM
+// Equivalentes para __dirname e __filename em modulos ESM.
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
@@ -11,8 +11,8 @@ const __dirname = dirname(__filename);
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '');
 
-  // Variáveis adicionais do arquivo .env personalizado
-  let customEnv = {};
+  // Espaco reservado para variaveis carregadas de fonte customizada.
+  const customEnv = {};
 
   const safeEnv = {
     NODE_ENV: mode,
@@ -24,14 +24,13 @@ export default defineConfig(({ mode }) => {
   return {
     plugins: [react()],
     define: {
-      // SEGURANÇA: Não exponha todo o process.env, apenas as variáveis específicas
-      // que você deseja tornar disponíveis no cliente
+      // Nao exponha todo o process.env, apenas variaveis liberadas para o cliente.
       'process.env.NODE_ENV': JSON.stringify(mode),
       'process.env.VITE_API_URL': JSON.stringify(safeEnv.VITE_API_URL),
       'process.env.VITE_WEBSOCKET_URL': JSON.stringify(safeEnv.VITE_WEBSOCKET_URL),
       'process.env.VITE_DEBUG': JSON.stringify(safeEnv.VITE_DEBUG),
 
-      // Para compatibilidade com código que usa import.meta.env
+      // Compatibilidade com codigo que usa import.meta.env.
       'import.meta.env.VITE_API_URL': JSON.stringify(safeEnv.VITE_API_URL),
       'import.meta.env.VITE_WEBSOCKET_URL': JSON.stringify(safeEnv.VITE_WEBSOCKET_URL),
       'import.meta.env.VITE_DEBUG': JSON.stringify(safeEnv.VITE_DEBUG)
@@ -45,6 +44,11 @@ export default defineConfig(({ mode }) => {
       port: 3000,
       strictPort: false,
       host: true,
+    },
+    test: {
+      environment: 'jsdom',
+      globals: true,
+      setupFiles: './src/testes/setupTests.js',
     }
   };
 });

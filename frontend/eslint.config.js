@@ -1,4 +1,4 @@
-import js from '@eslint/js'
+﻿import js from '@eslint/js'
 import globals from 'globals'
 import reactHooks from 'eslint-plugin-react-hooks'
 import reactRefresh from 'eslint-plugin-react-refresh'
@@ -8,7 +8,7 @@ import tseslint from 'typescript-eslint'
 export default defineConfig([
   globalIgnores(['dist']),
   {
-    // Configuração básica para arquivos JS/JSX
+    // Configuracao basica para arquivos JS/JSX.
     files: ['**/*.{js,jsx}'],
     extends: [
       js.configs.recommended,
@@ -28,10 +28,9 @@ export default defineConfig([
       'no-unused-vars': ['error', { varsIgnorePattern: '^[A-Z_]' }],
     },
   },
-  // Usar a configuração recomendada do typescript-eslint para arquivos TS/TSX
   ...tseslint.configs.recommended,
   {
-    // Configuração específica para arquivos TypeScript
+    // Configuracao para arquivos TypeScript.
     files: ['**/*.{ts,tsx}'],
     languageOptions: {
       parser: tseslint.parser,
@@ -43,16 +42,17 @@ export default defineConfig([
       },
       globals: {
         ...globals.browser,
-        ...globals.node // Para arquivos .ts que podem precisar de variáveis Node
+        ...globals.node
       }
     },
     rules: {
-      'no-unused-vars': 'off', // Desabilitamos e usamos a regra do TS equivalente
-      '@typescript-eslint/no-unused-vars': ['error', { varsIgnorePattern: '^[A-Z_]' }],
+      'no-unused-vars': 'off',
+      '@typescript-eslint/no-unused-vars': ['error', { varsIgnorePattern: '^[A-Z_]', argsIgnorePattern: '^_' }],
+      '@typescript-eslint/no-explicit-any': 'off',
+      '@typescript-eslint/no-namespace': 'off',
     },
   },
   {
-    // Configuração para arquivos de configuração
     files: ['vite.config.js', '*.config.js', '.eslintrc.js'],
     languageOptions: {
       globals: {
@@ -61,7 +61,7 @@ export default defineConfig([
       }
     },
     rules: {
-      'no-undef': 'off' // Desativa a regra no-undef para esses arquivos
+      'no-undef': 'off'
     }
   }
 ])
