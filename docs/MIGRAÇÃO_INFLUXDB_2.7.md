@@ -77,11 +77,11 @@ from(bucket: "portifolio")  // ✅ Bucket correto
 
 ```bash
 === CONFIGURAÇÕES INFLUXDB 2.7 ===
-URL: http://dsplayground.com.br/influxdb
+URL: http://localhost:8086
 Organização: zen          ✅ Correto
 Bucket: portifolio        ✅ Correto  
 Habilitado: True          ✅ Ativo
-Token: answThmmRah9s...   ✅ Configurado
+Token: <INFLUXDB_TOKEN>   ✅ Configurado
 ```
 
 ## 🚀 **Próximos Passos**

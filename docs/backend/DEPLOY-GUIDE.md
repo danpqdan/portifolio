@@ -5,7 +5,7 @@
 ### 1. **Configuração Inicial do Ambiente**
 ```bash
 # Conectar no servidor OLS
-ssh ubuntu@dsplayground.com.br
+ssh usuario@servidor-exemplo
 
 # Navegar para o diretório do projeto
 cd /usr/local/lsws/portifolio/html/portifolio/backend
@@ -82,7 +82,7 @@ O arquivo `requirements.txt` foi organizado com:
 ```bash
 FLASK_ENV=production
 SECRET_KEY=sua-chave-secreta-super-segura-min-32-chars
-CORS_ORIGINS=https://dsplayground.com.br,https://www.dsplayground.com.br
+CORS_ORIGINS=http://localhost:5173,http://localhost:3000
 INFLUXDB_TOKEN=seu-token-influxdb-real
 APPLICATION_ROOT=/api
 PREFERRED_URL_SCHEME=https
@@ -91,10 +91,10 @@ PREFERRED_URL_SCHEME=https
 ## 🌐 **URLs de Teste**
 
 Após o deploy, testar:
-- **API Root**: `https://dsplayground.com.br/api/`
-- **Health Check**: `https://dsplayground.com.br/api/health`
-- **Analytics**: `https://dsplayground.com.br/api/analytics/stats/temporal`
-- **Security**: `https://dsplayground.com.br/api/analytics/security/status`
+- **API Root**: `http://localhost:5000/api/`
+- **Health Check**: `http://localhost:5000/api/health`
+- **Analytics**: `http://localhost:5000/api/analytics/stats/temporal`
+- **Security**: `http://localhost:5000/api/analytics/security/status`
 
 ## 🚨 **Resolução do Problema "Page Not Found"**
 
