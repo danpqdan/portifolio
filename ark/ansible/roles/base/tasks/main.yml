@@ -4,6 +4,7 @@
     name:
       - curl
       - git
+      - rsync
       - ufw
       - fail2ban
       - python3
@@ -11,6 +12,8 @@
       - ca-certificates
       - gnupg
       - lsb-release
+      - locales
+      - openssl
     state: present
     update_cache: true
 
