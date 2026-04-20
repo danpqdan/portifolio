@@ -56,7 +56,7 @@ Prometido no README do SDK. Sem isso, o ciclo "revogar consentimento" nao fecha.
 - [ ] **D.2** Endpoint `/metrics` Prometheus no backend Flask — follow-up. A stack de scrape ja esta pronta em `ark/monitoring/` (Prometheus + Grafana com datasource InfluxDB + dashboard inicial); basta adicionar `prometheus-client` ao backend e registrar as metricas.
 - [x] **D.3** `fila_pendente()` exposto em `InfluxDBService`; servico de ingestao emite log `evento=backpressure` quando ultrapassa 50 itens na fila. Rejeicao dura fica para quando tivermos metrica de latencia.
 - [x] **D.4** `docs/backend/DEPLOY-GUIDE.md` ganhou secoes "Producao com Docker + Gunicorn + Nginx", variaveis obrigatorias, observabilidade em producao e endpoints publicos/admin.
-- [x] **D.5** Dockerfile de producao esbocado em `docs/backend/DEPLOY-GUIDE.md`. Provisionamento ponta-a-ponta (Docker + Nginx + Certbot + CrowdSec + monitoring) coberto pelos roles Ansible em `ark/ansible/roles/`.
+- [x] **D.5** Dockerfile de producao implementado: `backend/Dockerfile` roda como user `app:analytics (UID 10001, GID 10001)` nao-root, `frontend/Dockerfile` como `node:analytics (UID 1000, GID 10001)`. Grupo `analytics` GID 10001 batendo com o do host (role `base`) permite bind-mounts seguros. Provisionamento ponta-a-ponta (Docker + Nginx + Certbot + CrowdSec + monitoring) coberto pelos roles Ansible em `ark/ansible/roles/`.
 - [x] **D.6** Secao "Backup e Restore do InfluxDB" com comandos `influx backup`/`influx restore` em `docs/backend/DEPLOY-GUIDE.md`.
 
 ### Frente E — Multi-cliente (bloqueada pelo plano separado)

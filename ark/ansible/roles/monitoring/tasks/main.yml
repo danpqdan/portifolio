@@ -4,7 +4,8 @@
     path: "{{ repo_dir }}/ark/monitoring"
     state: directory
     owner: "{{ deploy_user }}"
-    group: "{{ deploy_user }}"
+    group: analytics
+    mode: "0750"
 
 - name: Criar .env do Grafana
   copy:
@@ -14,8 +15,8 @@
       INFLUXDB_TOKEN={{ influxdb_token }}
     dest: "{{ repo_dir }}/ark/monitoring/.env"
     owner: "{{ deploy_user }}"
-    group: "{{ deploy_user }}"
-    mode: "0600"
+    group: analytics
+    mode: "0640"
 
 - name: Subir Prometheus + Grafana + node-exporter
   community.docker.docker_compose_v2:
