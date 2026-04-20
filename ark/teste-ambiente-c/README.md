@@ -18,7 +18,7 @@ A tabela completa vive em `ark/docs/servidor-producao.md`. Na validacao (Passo 7
 
 - VirtualBox 7.x instalado em `D:\oracle_vm\` (ja temos)
 - ISO Rocky-8.10-x86_64-minimal **ou** Ubuntu 22.04 (recomendado Ubuntu — os roles Ansible sao apt-based; usar Rocky exige refator pra dnf/yum)
-- ~2 GB RAM e ~15 GB disco em D:
+- **~2 GB RAM e ~25 GB disco em D:** (aprendido na pratica — 15 GB nao sobrevive ao build dos 3 containers + cache do buildx; o installer Ubuntu LVM ainda deixa ~50% do VG como espaco livre)
 - (Opcional, para certbot real) Dominio publico com A-record apontando para o IP publico que a VM vai expor
 
 ## Passo 1 — Baixar a ISO Ubuntu (pular se for usar a Rocky que ja tem)
@@ -52,8 +52,8 @@ $iso  = "D:\oracle_vm\isos\ubuntu-22.04.5-live-server-amd64.iso"  # ou caminho d
     --nic2 hostonly --hostonlyadapter2 "VirtualBox Host-Only Ethernet Adapter"
 # (se nao tiver host-only adapter ainda, criar com: & $vbox hostonlyif create)
 
-# Disco virtual 15 GB
-& $vbox createmedium disk --filename "D:\virtualbox-vms\$nome\$nome.vdi" --size 15360 --format VDI
+# Disco virtual 25 GB (1 GB do installer + 9-10 GB Ubuntu base + 13 GB Docker images/cache)
+& $vbox createmedium disk --filename "D:\virtualbox-vms\$nome\$nome.vdi" --size 25600 --format VDI
 
 # Controllers SATA (disco) e IDE (DVD)
 & $vbox storagectl $nome --name "SATA" --add sata --controller IntelAhci
@@ -63,12 +63,17 @@ $iso  = "D:\oracle_vm\isos\ubuntu-22.04.5-live-server-amd64.iso"  # ou caminho d
 & $vbox storagectl $nome --name "IDE" --add ide
 & $vbox storageattach $nome --storagectl "IDE" --port 0 --device 0 --type dvddrive --medium $iso
 
-# Port forward 22 (SSH) -> 2222 do host, 5000 (backend) -> 5000, 80, 443
+# Port forwards: SSH (2222), backend (5000), frontend (3000), nginx http (8080) e https (8443)
 & $vbox modifyvm $nome --natpf1 "ssh,tcp,127.0.0.1,2222,,22"
 & $vbox modifyvm $nome --natpf1 "backend,tcp,127.0.0.1,5000,,5000"
+& $vbox modifyvm $nome --natpf1 "frontend,tcp,127.0.0.1,3000,,3000"
 & $vbox modifyvm $nome --natpf1 "http,tcp,127.0.0.1,8080,,80"
 & $vbox modifyvm $nome --natpf1 "https,tcp,127.0.0.1,8443,,443"
 ```
+
+> **Por que 25 GB e nao 15**: na primeira execucao, build dos 3 containers (backend ~919 MB, frontend ~1.45 GB, influxdb 2.7) + cache de buildx + base Ubuntu enchem 9.6 GB de 9.8 GB usados pelo LV padrao do installer. Frontend morre com `ENOSPC: no space left on device`. 25 GB de VDI deixa folga real.
+
+> **Esqueci de adicionar uma porta?** Pode adicionar com a VM rodando: `& $vbox controlvm ark-teste-c natpf1 "nome-regra,tcp,127.0.0.1,<host>,,<vm>"`.
 
 ## Passo 3 — Iniciar a VM e instalar o Ubuntu
 
@@ -84,7 +89,7 @@ A janela do VirtualBox abre com o instalador. Siga:
 4. Network: dejar DHCP em ambas as NICs
 5. Proxy: vazio
 6. Mirror: default
-7. Storage: use entire disk, set up LVM nao
+7. Storage: **escolha "Custom storage layout"** ou, se for "use entire disk", **edite o LV** para usar 100% do VG (default deixa metade livre — voce vai bater em `ENOSPC` no docker compose). Se ja instalou com default, da pra estender depois — ver Troubleshooting.
 8. Profile setup:
    - Your name: deploy
    - Server name: ark-teste-c
@@ -295,3 +300,106 @@ $vbox = "D:\oracle_vm\VBoxManage.exe"
 | reproducao manual de incidentes | dificil | **direta** |
 
 Ambiente C e o que mais se aproxima de "entregar a um SRE pra ele provisionar". Os passos acima sao executaveis em qualquer cloud trocando "VBoxManage" por "Terraform/aws-cli" e "ssh -p 2222 deploy@127.0.0.1" pelo IP publico real.
+
+## Troubleshooting
+
+Surpresas reais que apareceram durante a primeira execucao deste ambiente — todas viraram fix no repo, mas se voce esta seguindo um snapshot antigo ou subiu a VM com defaults diferentes, pode bater nelas.
+
+### A — `locale_gen` falha com "package locales missing"
+
+Sintoma: a primeira task da role `base` apos `apt install` quebra com:
+```
+"/var/lib/locales/supported.d/ and /etc/locale.gen are missing. Is the package "locales" installed?"
+```
+
+Causa: Ubuntu Server "minimized" nao traz o pacote `locales`. Foi adicionado a lista em `ark/ansible/roles/base/tasks/main.yml`. Workaround para repos antigos:
+```bash
+sudo apt-get install -y locales rsync openssl
+```
+Depois rerun do playbook.
+
+### B — Repo em `/tmp/portifolio` em vez de `/opt/portifolio`
+
+Sintoma: `cd /opt/portifolio` retorna `No such file or directory`. Playbook acha tudo, mas as roles esperam o repo no caminho default.
+
+Causa: o SCP do Passo 5 cai em `/tmp/portifolio` e o `mv` precisa ser explicito. Fix:
+```bash
+sudo mv /tmp/portifolio /opt/portifolio
+sudo chown -R deploy:deploy /opt/portifolio
+```
+
+### C — `Aguardar backend responder health` falha mesmo com backend subindo
+
+Sintoma: `PLAY RECAP failed=1` na task de health, mas `curl http://127.0.0.1:5000/health/app` no shell funciona.
+
+Causa: build + pull das imagens (especialmente `influxdb:2.7`) na primeira execucao consome quase todo o timeout antigo (60s). Aumentado para 120s em `ark/ansible/roles/analytics-stack/tasks/main.yml` (`retries: 40 delay: 3`). Para um host muito lento, pode subir mais.
+
+### D — Frontend `ENOSPC: no space left on device`
+
+Sintoma: backend e influxdb sobem, frontend crash loopa com `Error: ENOSPC: no space left on device, mkdir '/app/node_modules/.vite-temp'`.
+
+Causa: VDI de 15 GB + LVM padrao do installer (so usa metade do VG) deixa apenas ~3 GB livres apos build dos containers. Vite tenta criar arquivo de bundle e falha.
+
+Fix permanente (na criacao da VM): use 25 GB e escolha LVM com 100% do VG.
+
+Fix em VM ja instalada (estende o LV pro restante do VG):
+```bash
+sudo vgs                                                          # ver espaco livre no VG
+sudo lvextend -l +100%FREE /dev/mapper/ubuntu--vg-ubuntu--lv      # alocar tudo no LV
+sudo resize2fs /dev/mapper/ubuntu--vg-ubuntu--lv                  # crescer o filesystem
+df -h /                                                            # confirmar 13+ GB
+```
+Depois:
+```bash
+cd /opt/portifolio
+sudo docker volume rm portifolio_frontend_node_modules 2>/dev/null
+sudo docker compose up -d frontend
+```
+
+### E — `localhost:3000` nao abre no host
+
+Sintoma: dentro da VM `curl http://127.0.0.1:3000` funciona, no host Windows nao.
+
+Causa: port-forward NAT do VirtualBox nao tinha a regra para 3000. Fix em runtime (sem parar a VM):
+```powershell
+& "D:\oracle_vm\VBoxManage.exe" controlvm ark-teste-c natpf1 "frontend,tcp,127.0.0.1,3000,,3000"
+```
+A versao atualizada do Passo 2 ja inclui esta regra.
+
+### F — `Invoke-RestMethod: command not found`
+
+Sintoma: aparece dentro do shell da VM Linux.
+
+Causa: `Invoke-RestMethod` e cmdlet do PowerShell (host Windows). Dentro da VM use `curl`. As secoes do README marcadas "Do host Windows (PowerShell)" rodam **fora** da VM; "Dentro da VM" rodam **dentro**, via SSH ou console.
+
+### G — `community.docker.docker_compose_v2` nao funciona com Ansible 2.10
+
+Sintoma: `Could not find imported module support code for ... docker_compose_v2`.
+
+Causa: o pacote `ansible` que vem do `apt` no Ubuntu 22.04 e a versao 2.10, antiga demais para a collection `community.docker` 5.x. Solucao:
+```bash
+sudo apt-get install -y python3-pip
+sudo pip3 install --upgrade 'ansible>=8'
+ansible-galaxy collection install community.docker --force
+```
+
+Ja esta no Passo 6, mas se voce pulou, e por isso que Ansible nao acha o modulo.
+
+### H — `git clone file:///portifolio` recusa por "dubious ownership"
+
+Sintoma: git 2.35+ recusa clonar de repo cujo dono e diferente do user.
+
+Causa: bind-mount Vagrant ou outro mount com UID diferente. Fix (somente para teste):
+```bash
+sudo git config --system --add safe.directory '*'
+```
+
+So aparece no Ambiente B. No C, voce ja copia para `/opt/portifolio` chown `deploy`, entao git roda sem essa friccao.
+
+### I — Sudo pede senha em meio a sequencia de comandos
+
+Cole `sudo -v` antes do bloco de validacoes — o sudo cacheia credenciais por ~15 min e os proximos `sudo` rodam sem prompt.
+
+### Lembrete final
+
+Se algum item da tabela do Passo 7 ("Validacao do hardening") falhar, e diagnostico direto de qual role nao aplicou. Reanalise a tarefa correspondente em `ark/ansible/roles/<role>/tasks/main.yml`.
