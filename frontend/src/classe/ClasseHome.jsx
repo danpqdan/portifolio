@@ -1,5 +1,4 @@
-import { HeatmapUtils } from '../utils/HeatmapUtils';
-import WebSocketService from '../utils/WebSocketService.tsx';
+import { HeatmapUtils, WebSocketService } from '../sdk';
 import { DEBUG_ENABLED } from '../config.js';
 
 // Controle global de página ativa para evitar coleta simultânea
@@ -10,7 +9,7 @@ export default class ClasseHome {
     constructor(root) {
         this.root = root;
         this.executando = false;
-        this.pageType = 'home';
+        this.pageType = '/';
         this.isPageVisible = true; // Controle de visibilidade
 
         // Definindo seletores específicos usando os IDs padronizados
@@ -27,8 +26,7 @@ export default class ClasseHome {
             '#home_btn_vite'
         ].join(', ');
 
-        // Especificar o tipo de página como 'home'
-        this.heatmap = new HeatmapUtils(root, seletoresInteresse, 'home');
+        this.heatmap = new HeatmapUtils(root, seletoresInteresse, this.pageType);
 
         // Mapeia elementos específicos para uso direto
         this.elementos = {
@@ -125,25 +123,17 @@ export default class ClasseHome {
         // Parar coleta temporal
         this.colecaoTemporalAtiva = false;
 
-        // Parar o HeatmapUtils
+        // heatmap.parar() emite o delta residual via callback antes de liberar timers
         this.heatmap.parar();
 
-        // Enviar dados uma última vez antes de parar (envio prioritário)
-        const dados = this.heatmap.getDados();
-        WebSocketService.sendAnalyticsDataImmediate(dados, true);
-
         if (DEBUG_ENABLED) {
-            console.log('🛑 [ClasseHome] Coleta parada e dados finais enviados');
+            console.log('[ClasseHome] Coleta parada e delta residual enviado');
         }
     }
 
     enviarDados() {
         if (!this.heatmap) return false;
-
-        const dados = this.heatmap.getDados();
-
-        // Enviar dados via WebSocket
-        WebSocketService.sendAnalyticsData(dados);
+        this.heatmap.emitirDeltaAgora();
         return true;
     }
 

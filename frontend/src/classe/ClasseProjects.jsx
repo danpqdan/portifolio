@@ -1,5 +1,4 @@
-import { HeatmapUtils } from '../utils/HeatmapUtils';
-import WebSocketService from '../utils/WebSocketService.tsx';
+import { HeatmapUtils, WebSocketService } from '../sdk';
 import { DEBUG_ENABLED } from '../config.js';
 
 // Usar o mesmo controle global das outras classes
@@ -7,7 +6,7 @@ export default class ClasseProjects {
     constructor(root) {
         this.root = root;
         this.executando = false;
-        this.pageType = 'projects';
+        this.pageType = '/projects';
         this.isPageVisible = true; // Controle de visibilidade
 
         // Definindo seletores específicos para Projects
@@ -19,7 +18,7 @@ export default class ClasseProjects {
             '.card-actions button'
         ].join(', ');
 
-        this.heatmap = new HeatmapUtils(root, seletoresInteresse, 'projects');
+        this.heatmap = new HeatmapUtils(root, seletoresInteresse, this.pageType);
 
         // Controle para coleta temporal
         this.colecaoTemporalAtiva = false;
@@ -116,23 +115,17 @@ export default class ClasseProjects {
         // Parar coleta temporal
         this.colecaoTemporalAtiva = false;
 
+        // heatmap.parar() emite o delta residual via callback antes de liberar timers
         this.heatmap.parar();
-        
-        // Enviar dados finais com prioridade
-        const dados = this.heatmap.getDados();
-        WebSocketService.sendAnalyticsDataImmediate(dados, true);
 
         if (DEBUG_ENABLED) {
-            console.log('🛑 [ClasseProjects] Coleta parada e dados finais enviados');
+            console.log('[ClasseProjects] Coleta parada e delta residual enviado');
         }
     }
 
     enviarDados() {
         if (!this.heatmap) return false;
-
-        const dados = this.heatmap.getDados();
-
-        WebSocketService.sendAnalyticsData(dados);
+        this.heatmap.emitirDeltaAgora();
         return true;
     }
 
