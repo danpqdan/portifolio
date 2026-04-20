@@ -7,10 +7,10 @@ services:
     environment:
       DOCKER_INFLUXDB_INIT_MODE: setup
       DOCKER_INFLUXDB_INIT_USERNAME: admin
-      DOCKER_INFLUXDB_INIT_PASSWORD: admin-local-12345
+      DOCKER_INFLUXDB_INIT_PASSWORD: ${INFLUXDB_INIT_PASSWORD:?defina em .env}
       DOCKER_INFLUXDB_INIT_ORG: zen
       DOCKER_INFLUXDB_INIT_BUCKET: portifolio_dev
-      DOCKER_INFLUXDB_INIT_ADMIN_TOKEN: dev-local-influxdb-token
+      DOCKER_INFLUXDB_INIT_ADMIN_TOKEN: ${INFLUXDB_TOKEN:?defina em .env}
     volumes:
       - influxdb_data:/var/lib/influxdb2
       - influxdb_config:/etc/influxdb2
@@ -32,11 +32,12 @@ services:
     environment:
       FLASK_ENV: development
       FLASK_APP: app.py
-      SECRET_KEY: dev-local-compose-secret
+      SECRET_KEY: ${SECRET_KEY:?defina em .env}
       CORS_ORIGINS: https://dsplayground.com.br
       INFLUXDB_ENABLED: "true"
       INFLUXDB_URL: http://influxdb:8086
-      INFLUXDB_TOKEN: dev-local-influxdb-token
+      INFLUXDB_TOKEN: ${INFLUXDB_TOKEN:?defina em .env}
+      ADMIN_API_TOKEN: ${ADMIN_API_TOKEN:?defina em .env}
       INFLUXDB_ORG: zen
       INFLUXDB_BUCKET: portifolio_dev
       TEMPORAL_REALTIME_INTERVAL: "5000"
