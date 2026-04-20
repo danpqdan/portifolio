@@ -1,4 +1,4 @@
-from flask import Flask, jsonify, request, session
+from flask import Blueprint, Flask, jsonify, request, session
 from flask_cors import CORS
 from flask_socketio import SocketIO, emit, disconnect
 from flask_limiter import Limiter
@@ -17,9 +17,8 @@ import logging
 import sys
 
 from config import config
-from dto.Dados import HeatmapDados
 import json
-from influxdb_service import get_influxdb_service, create_temporal_metric_from_heatmap, TemporalMetric
+from influxdb_service import get_influxdb_service
 
 # ==================== CONFIGURAÇÃO DE SEGURANÇA ====================
 
@@ -31,7 +30,6 @@ app.config.from_object(config[env])
 # ✅ CONFIGURAR PREFIXO /api PARA PRODUÇÃO
 if env == 'production':
     # Blueprint para organizar rotas com prefixo
-    from flask import Blueprint
     api_bp = Blueprint('api', __name__, url_prefix='/api')
 else:
     # Em desenvolvimento, usar sem prefixo
@@ -62,10 +60,14 @@ limiter = Limiter(
     storage_uri="memory://"
 )
 
-# ✅ LOGGING SEGURO
-class SafeFileHandler(logging.FileHandler):
-    def __init__(self, filename, mode='a', encoding='utf-8', delay=False):
-        super().__init__(filename, mode, encoding, delay)
+# ✅ LOGGING SEGURO com rotacao
+from logging.handlers import RotatingFileHandler
+
+
+class SafeRotatingFileHandler(RotatingFileHandler):
+    def __init__(self, filename, max_bytes=10 * 1024 * 1024, backup_count=5, encoding='utf-8'):
+        super().__init__(filename, maxBytes=max_bytes, backupCount=backup_count, encoding=encoding)
+
 
 class SafeStreamHandler(logging.StreamHandler):
     def emit(self, record):
@@ -78,11 +80,12 @@ class SafeStreamHandler(logging.StreamHandler):
         except Exception:
             self.handleError(record)
 
+
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(levelname)s - %(message)s',
     handlers=[
-        SafeFileHandler('security.log', encoding='utf-8'),
+        SafeRotatingFileHandler('security.log'),
         SafeStreamHandler(sys.stdout)
     ],
     force=True
@@ -194,7 +197,11 @@ def check_suspicious_activity(session_id: str, request) -> bool:
 def security_middleware(f):
     @wraps(f)
     def decorated_function(*args, **kwargs):
-        if not check_suspicious_activity(request.sid if hasattr(request, 'sid') else 'http', request):
+        session_id = request.sid if hasattr(request, 'sid') else 'http'
+        if not check_suspicious_activity(session_id, request):
+            log_safe(security_logger, 'warning',
+                     f"evento=acesso_bloqueado session_id={session_id} "
+                     f"ip={request.environ.get('REMOTE_ADDR', 'unknown')} motivo=suspicious")
             return jsonify({"error": "Acesso negado"}), 403
         session_id = request.sid if hasattr(request, 'sid') else request.headers.get('X-Session-Token')
         if session_id:
@@ -235,23 +242,6 @@ def cleanup_temporal_cache():
                 temporal_stats_cache["realtime_data"][page] = temporal_stats_cache["realtime_data"][page][-TEMPORAL_CONFIG["MAX_CACHE_ENTRIES"]//2:]
         temporal_stats_cache["last_cleanup"] = current_time
 
-def detect_data_type(data: dict) -> str:
-    current_time = int(time.time() * 1000)
-    if data.get('timestamp_final'):
-        time_diff = current_time - data['timestamp_final']
-        if time_diff < 10000:
-            return "temporal"
-    total_interactions = 0
-    for page_name in ['home', 'about', 'projects']:
-        if page_name in data and data[page_name]:
-            for session in data[page_name]:
-                total_interactions += len(session.get('cliques', []))
-                total_interactions += len(session.get('toques', []))
-                total_interactions += len(session.get('scrolls', []))
-    if total_interactions < 5:
-        return "temporal"
-    return "regular"
-
 # Inicializar InfluxDB
 try:
     influxdb_service = get_influxdb_service()
@@ -259,6 +249,10 @@ try:
 except Exception as e:
     log_safe(security_logger, 'warning', f"[WARNING] Erro ao inicializar InfluxDB: {str(e)}")
     influxdb_service = None
+
+# Servico de ingestao — handler Socket.IO apenas delega para este servico.
+from ingestao import ServicoIngestao  # noqa: E402
+servico_ingestao = ServicoIngestao(influxdb_service=influxdb_service)
 
 # ==================== ROTAS COM BLUEPRINT ====================
 
@@ -277,13 +271,67 @@ def index():
 @api_bp.route("/health", methods=["GET"])
 @limiter.limit("30 per minute")
 def health_check():
+    """Resumo agregado. Mantem formato anterior para compat."""
     return jsonify({
         "status": "healthy",
         "timestamp": datetime.now().isoformat(),
         "security": "enabled",
         "active_sessions": len(active_sessions),
-        "influxdb": "connected" if influxdb_service else "disconnected"
+        "influxdb": "connected" if (influxdb_service and _influxdb_saudavel()) else "disconnected"
     })
+
+
+def _influxdb_saudavel() -> bool:
+    if not influxdb_service:
+        return False
+    try:
+        return bool(influxdb_service.is_healthy())
+    except Exception:
+        return False
+
+
+@api_bp.route("/health/app", methods=["GET"])
+@limiter.limit("60 per minute")
+def health_app():
+    return jsonify({
+        "status": "healthy",
+        "detalhe": {
+            "timestamp": datetime.now().isoformat(),
+            "active_sessions": len(active_sessions),
+        },
+    })
+
+
+@api_bp.route("/health/socketio", methods=["GET"])
+@limiter.limit("60 per minute")
+def health_socketio():
+    # Se a aplicacao responde e o socketio foi inicializado, considera saudavel.
+    return jsonify({
+        "status": "healthy" if socketio is not None else "unavailable",
+        "detalhe": {"conexoes_ativas": len(active_sessions)},
+    })
+
+
+@api_bp.route("/health/influxdb", methods=["GET"])
+@limiter.limit("60 per minute")
+def health_influxdb():
+    if influxdb_service is None:
+        return jsonify({
+            "status": "unavailable",
+            "detalhe": "InfluxDB service nao inicializado",
+        }), 503
+
+    if _influxdb_saudavel():
+        url = getattr(influxdb_service, 'url', None)
+        return jsonify({
+            "status": "healthy",
+            "detalhe": {"url": url if isinstance(url, str) else None},
+        })
+
+    return jsonify({
+        "status": "degraded",
+        "detalhe": "InfluxDB configurado mas is_healthy() retornou False",
+    }), 503
 
 @api_bp.route("/analytics/security/status", methods=["GET"])
 @limiter.limit("5 per minute")
@@ -337,6 +385,162 @@ def get_temporal_statistics():
         log_safe(security_logger, 'error', f"[ERROR] Erro ao obter estatisticas temporais: {str(e)}")
         return jsonify({"error": "Erro interno do servidor"}), 500
 
+
+def _parametros_consulta_comuns():
+    """Extrai os parametros de filtro usados em todos os endpoints de query."""
+    app_id = request.args.get('app_id')
+    page_type = request.args.get('page_type')
+    ambiente = request.args.get('ambiente')
+    inicio = request.args.get('inicio', '-24h')
+    fim = request.args.get('fim', 'now()')
+    try:
+        limit = int(request.args.get('limit', '100'))
+    except ValueError:
+        limit = 100
+    limit = max(1, min(limit, 1000))
+    return {
+        'app_id': app_id,
+        'page_type': page_type,
+        'ambiente': ambiente,
+        'inicio': inicio,
+        'fim': fim,
+        'limit': limit,
+    }
+
+
+@api_bp.route("/analytics/metricas", methods=["GET"])
+@limiter.limit("30 per minute")
+@security_middleware
+def get_analytics_metricas():
+    """Soma contadores agregados de `page_analytics` por pagina e periodo."""
+    if not influxdb_service:
+        return jsonify({"status": "unavailable", "detalhe": "InfluxDB nao inicializado"}), 503
+
+    params = _parametros_consulta_comuns()
+    pontos = influxdb_service.query_metricas_agregadas(**params)
+    return jsonify({
+        "status": "success",
+        "filtros": params,
+        "pontos": pontos,
+    })
+
+
+@api_bp.route("/analytics/web-vitals", methods=["GET"])
+@limiter.limit("30 per minute")
+@security_middleware
+def get_analytics_web_vitals():
+    """Lista pontos de Web Vitals (LCP/CLS/INP)."""
+    if not influxdb_service:
+        return jsonify({"status": "unavailable"}), 503
+
+    params = _parametros_consulta_comuns()
+    nome = request.args.get('nome')
+    # page_type/ambiente nao sao usados no filter do web-vitals atualmente
+    pontos = influxdb_service.query_web_vitals(
+        app_id=params['app_id'],
+        page_type=params['page_type'],
+        nome=nome,
+        inicio=params['inicio'],
+        fim=params['fim'],
+        limit=params['limit'],
+    )
+    return jsonify({
+        "status": "success",
+        "filtros": {**params, "nome": nome},
+        "pontos": pontos,
+    })
+
+
+@api_bp.route("/analytics/custom-events", methods=["GET"])
+@limiter.limit("30 per minute")
+@security_middleware
+def get_analytics_custom_events():
+    """Soma ocorrencias de eventos customizados por nome e pagina."""
+    if not influxdb_service:
+        return jsonify({"status": "unavailable"}), 503
+
+    params = _parametros_consulta_comuns()
+    nome = request.args.get('nome')
+    pontos = influxdb_service.query_custom_events(
+        app_id=params['app_id'],
+        nome=nome,
+        page_type=params['page_type'],
+        inicio=params['inicio'],
+        fim=params['fim'],
+        limit=params['limit'],
+    )
+    return jsonify({
+        "status": "success",
+        "filtros": {**params, "nome": nome},
+        "pontos": pontos,
+    })
+
+
+# ==================== LGPD — ADMIN ====================
+
+
+def _verificar_token_admin():
+    token_esperado = os.environ.get('ADMIN_API_TOKEN')
+    if not token_esperado:
+        return False, "ADMIN_API_TOKEN nao configurado"
+    header = request.headers.get('Authorization', '')
+    if not header.startswith('Bearer '):
+        return False, "Header Authorization: Bearer <token> ausente"
+    token = header[len('Bearer '):].strip()
+    if token != token_esperado:
+        return False, "Token invalido"
+    return True, None
+
+
+def _registrar_audit(acao: str, session_id: str, resultado: str):
+    """Grava linha de auditoria administrativa."""
+    log_safe(security_logger, 'info',
+             f"[ADMIN-AUDIT] acao={acao} session_id={session_id} "
+             f"resultado={resultado} ip={request.environ.get('REMOTE_ADDR', 'unknown')} "
+             f"timestamp={datetime.now().isoformat()}")
+
+
+@api_bp.route("/admin/analytics/sessao/<session_id>", methods=["GET"])
+@limiter.limit("60 per minute")
+def admin_sessao_consultar(session_id):
+    """LGPD — acesso: retorna todos os pontos de uma sessao."""
+    ok, motivo = _verificar_token_admin()
+    if not ok:
+        return jsonify({"status": "error", "code": "UNAUTHORIZED", "message": motivo}), 401
+
+    if not influxdb_service:
+        return jsonify({"status": "unavailable"}), 503
+
+    dados = influxdb_service.consultar_por_session_id(session_id)
+    _registrar_audit('consultar', session_id, 'ok')
+    return jsonify({
+        "status": "success",
+        "session_id": session_id,
+        "dados": dados,
+    })
+
+
+@api_bp.route("/admin/analytics/sessao/<session_id>", methods=["DELETE"])
+@limiter.limit("20 per minute")
+def admin_sessao_apagar(session_id):
+    """LGPD — exclusao: apaga todos os pontos de uma sessao em todos os measurements."""
+    ok, motivo = _verificar_token_admin()
+    if not ok:
+        return jsonify({"status": "error", "code": "UNAUTHORIZED", "message": motivo}), 401
+
+    if not influxdb_service:
+        _registrar_audit('apagar', session_id, 'falha_influxdb_ausente')
+        return jsonify({"status": "unavailable"}), 503
+
+    sucesso = influxdb_service.apagar_por_session_id(session_id)
+    _registrar_audit('apagar', session_id, 'ok' if sucesso else 'falha')
+    return jsonify({
+        "status": "success" if sucesso else "partial",
+        "session_id": session_id,
+        "apagado": sucesso,
+    })
+
+
 # ✅ REGISTRAR BLUEPRINT
 app.register_blueprint(api_bp)
 
@@ -362,7 +566,8 @@ def handle_connect():
         'created_at': time.time(), 'last_activity': time.time(), 'request_count': 0
     }
     
-    log_safe(security_logger, 'info', f"[WEBSOCKET] Nova conexao WebSocket: {session_id} de {ip_address}")
+    log_safe(security_logger, 'info',
+             f"evento=conectado session_id={session_id} ip={ip_address}")
     
     emit("connection_response", {
         "status": "connected", "session_token": session_token,
@@ -376,7 +581,8 @@ def handle_disconnect():
     if session_id in active_sessions:
         session_data = active_sessions[session_id]
         duration = time.time() - session_data.get('created_at', 0)
-        log_safe(security_logger, 'info', f"[WEBSOCKET] Desconexao WebSocket: {session_id} (duracao: {duration:.1f}s)")
+        log_safe(security_logger, 'info',
+                 f"evento=desconectado session_id={session_id} duracao_s={duration:.1f}")
         del active_sessions[session_id]
     if session_id in temporal_stats_cache["active_sessions"]:
         del temporal_stats_cache["active_sessions"][session_id]
@@ -386,82 +592,57 @@ def handle_disconnect():
 def handle_analytics_data(data):
     try:
         session_id = request.sid
-        
+
         if not validate_session_integrity(session_id, request):
             log_safe(security_logger, 'warning', f"[SECURITY] Sessao invalida tentando enviar dados: {session_id}")
-            emit("analytics_error", {"error": "Sessão inválida"})
+            emit("analytics_error", {"status": "error", "code": "INVALID_SESSION", "message": "Sessao invalida"})
             disconnect()
             return
-        
+
         active_sessions[session_id]['last_activity'] = time.time()
         active_sessions[session_id]['request_count'] += 1
-        
+
         if active_sessions[session_id]['request_count'] > 100:
             log_safe(security_logger, 'warning', f"[WARNING] Rate limit de sessao excedido: {session_id}")
-            emit("analytics_error", {"error": "Rate limit excedido"})
-            return
-        
-        cleanup_temporal_cache()
-        
-        if not data:
-            emit("analytics_error", {"error": "Nenhum dado foi enviado"})
+            emit("analytics_error", {"status": "error", "code": "RATE_LIMIT", "message": "Rate limit excedido"})
             return
 
-        data_type = detect_data_type(data)
-        is_temporal = data_type == "temporal"
-        
-        heatmap_dados = HeatmapDados.from_dict(data)
-        
-        if is_temporal:
+        cleanup_temporal_cache()
+
+        if not data:
+            emit("analytics_error", {"status": "error", "code": "EMPTY_PAYLOAD", "message": "Nenhum dado foi enviado"})
+            return
+
+        user_agent = request.headers.get('User-Agent', 'unknown')
+        ip_address = request.environ.get('REMOTE_ADDR', 'unknown')
+
+        resumo = servico_ingestao.ingerir(
+            session_id=session_id,
+            data=data,
+            user_agent=user_agent,
+            ip_address=ip_address,
+        )
+
+        if resumo.status == 'success':
             temporal_stats_cache["total_sessions"] += 1
             temporal_stats_cache["active_sessions"][session_id] = {
                 "last_update": datetime.now().isoformat(),
-                "data": heatmap_dados, "security_validated": True,
-                "ip_address": active_sessions[session_id]['ip_address']
+                "id_registro": resumo.id_registro,
+                "security_validated": True,
+                "ip_address": active_sessions[session_id]['ip_address'],
             }
-        
-        log_safe(security_logger, 'info', f"[ANALYTICS] Dados analytics recebidos: {session_id} ({data_type})")
-        
-        if influxdb_service:
-            try:
-                user_agent = request.headers.get('User-Agent', 'unknown')
-                ip_address = request.environ.get('REMOTE_ADDR', 'unknown')
-                
-                temporal_metrics = create_temporal_metric_from_heatmap(
-                    session_id=session_id, heatmap_data=data,
-                    user_agent=user_agent, ip_address=ip_address
-                )
-                
-                for metric in temporal_metrics:
-                    influxdb_service.write_temporal_metrics_async(metric)
-                    
-            except Exception as influx_error:
-                log_safe(security_logger, 'error', f"[ERROR] Erro InfluxDB: {str(influx_error)}")
 
-        emit("analytics_received", {
-            "status": "success",
-            "message": f"Dados recebidos com segurança ({data_type})",
-            "id_registro": heatmap_dados.id_registro,
-            "timestamp_recebimento": datetime.now().isoformat(),
-            "tipo_envio": data_type, "security_validated": True,
-            "resumo": {
-                "total_visualizacoes": heatmap_dados.get_total_visualizacoes(),
-                "total_cliques": heatmap_dados.get_total_cliques(),
-                "tempo_total_segundos": heatmap_dados.get_total_tempo_segundos(),
-                "duracao_sessao_segundos": heatmap_dados.get_duracao_sessao_segundos(),
-                "paginas_visitadas": {
-                    "home": len(heatmap_dados.home), "about": len(heatmap_dados.about),
-                    "projects": len(heatmap_dados.projects),
-                }
-            }
-        })
+            log_safe(security_logger, 'info',
+                     f"[ANALYTICS] validado session={session_id} id_registro={resumo.id_registro}")
+            emit("analytics_received", resumo.to_dict())
+        else:
+            log_safe(security_logger, 'warning',
+                     f"[ANALYTICS] rejeitado session={session_id} erros={resumo.erros}")
+            emit("analytics_error", resumo.to_dict())
 
-    except ValueError as e:
-        log_safe(security_logger, 'warning', f"[ERROR] Dados invalidos de {session_id}: {str(e)}")
-        emit("analytics_error", {"error": f"Dados inválidos: {str(e)}"})
     except Exception as e:
         log_safe(security_logger, 'error', f"[ERROR] Erro interno analytics de {session_id}: {str(e)}")
-        emit("analytics_error", {"error": "Erro interno do servidor"})
+        emit("analytics_error", {"status": "error", "code": "INTERNAL_ERROR", "message": "Erro interno do servidor"})
 
 # ==================== INICIALIZAÇÃO ====================
 
