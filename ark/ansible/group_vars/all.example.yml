@@ -1,0 +1,39 @@
+---
+# Copie para all.yml e substitua pelos valores reais.
+# Em producao: ansible-vault encrypt group_vars/all.yml
+#
+# Nada em all.example.yml deve ser segredo real.
+
+deploy_user: deploy
+repo_url: git@github.com:danpqdan/portifolio.git
+repo_dir: /opt/portifolio
+repo_branch: main
+
+# === Aplicacao ===
+flask_secret_key: trocar-em-producao
+cors_origins:
+  - https://analytics.example.com
+
+# === InfluxDB ===
+influxdb_url: http://influxdb:8086
+influxdb_token: trocar-token-real
+influxdb_org: zen
+influxdb_bucket: portifolio_prod
+influxdb_enabled: true
+influxdb_retencao_dias: 90
+
+# === Admin LGPD ===
+admin_api_token: ""  # gerar com `python -c "import secrets; print(secrets.token_urlsafe(32))"`
+
+# === Monitoring ===
+grafana_admin_user: admin
+grafana_admin_password: trocar-em-producao
+
+# === Seguranca ===
+ssh_port: 22
+ufw_allow_ports:
+  - 22
+  - 80
+  - 443
+habilitar_crowdsec: true
+habilitar_monitoring: true

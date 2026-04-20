@@ -1,0 +1,55 @@
+---
+- name: Garantir diretorio do repo com dono correto
+  file:
+    path: "{{ repo_dir }}"
+    state: directory
+    owner: "{{ deploy_user }}"
+    group: "{{ deploy_user }}"
+    mode: "0755"
+
+- name: Clonar/atualizar repo do portifolio
+  git:
+    repo: "{{ repo_url }}"
+    dest: "{{ repo_dir }}"
+    version: "{{ repo_branch }}"
+    accept_hostkey: true
+    force: true
+  become_user: "{{ deploy_user }}"
+  tags: [git-clone]
+
+- name: Gerar .env do backend
+  template:
+    src: backend.env.j2
+    dest: "{{ repo_dir }}/backend/.env"
+    owner: "{{ deploy_user }}"
+    group: "{{ deploy_user }}"
+    mode: "0600"
+
+- name: Subir stack com docker compose
+  community.docker.docker_compose_v2:
+    project_src: "{{ repo_dir }}"
+    state: present
+    build: always
+  become_user: "{{ deploy_user }}"
+
+- name: Aguardar backend responder health
+  uri:
+    url: http://127.0.0.1:5000/health/app
+    status_code: 200
+  retries: 20
+  delay: 3
+  register: backend_ok
+  until: backend_ok.status == 200
+
+- name: Aplicar retencao do bucket no InfluxDB
+  command: >
+    docker compose exec -T backend python scripts/configurar_retencao.py
+    --dias {{ influxdb_retencao_dias | default(90) }}
+  args:
+    chdir: "{{ repo_dir }}"
+  become_user: "{{ deploy_user }}"
+  register: retencao
+  changed_when: "'OK' in retencao.stdout"
+  failed_when:
+    - retencao.rc != 0
+    - "'nao encontrado' in retencao.stderr"
