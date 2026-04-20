@@ -41,10 +41,19 @@
     enabled: true
   tags: [firewall]
 
+# Grupo compartilhado entre host e containers. GID fixa 10001 casa com
+# os groupadd dos Dockerfiles do backend e frontend — bind-mounts ficam
+# legiveis/gravaveis sem UID mismatch.
+- name: Grupo analytics (GID 10001) para compartilhar com containers
+  group:
+    name: analytics
+    gid: 10001
+    state: present
+
 - name: Criar usuario de deploy
   user:
     name: "{{ deploy_user }}"
     shell: /bin/bash
-    groups: sudo
+    groups: "sudo,analytics"
     append: true
     create_home: true
