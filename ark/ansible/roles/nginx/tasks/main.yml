@@ -1,12 +1,15 @@
 ---
+# Role nginx — Rocky Linux 9.
+# EPEL traz nginx, certbot e python3-certbot-nginx.
+# Layout Rocky usa /etc/nginx/conf.d/*.conf (sem sites-available).
+
 - name: Instalar Nginx e Certbot
-  apt:
+  dnf:
     name:
       - nginx
       - certbot
       - python3-certbot-nginx
     state: present
-    update_cache: true
 
 - name: Garantir diretorio de snippets
   file:
@@ -28,31 +31,38 @@
 - name: Renderizar vhost do portifolio
   template:
     src: portifolio.conf.j2
-    dest: /etc/nginx/sites-available/portifolio.conf
+    dest: /etc/nginx/conf.d/portifolio.conf
     owner: root
     group: root
     mode: "0644"
   notify: reload nginx
 
-- name: Ativar vhost
+- name: Remover default.conf (se existir da instalacao)
   file:
-    src: /etc/nginx/sites-available/portifolio.conf
-    dest: /etc/nginx/sites-enabled/portifolio.conf
-    state: link
-    force: true
-  notify: reload nginx
-
-- name: Remover default-site
-  file:
-    path: /etc/nginx/sites-enabled/default
+    path: /etc/nginx/conf.d/default.conf
     state: absent
   notify: reload nginx
+
+- name: Garantir Nginx ativo
+  service:
+    name: nginx
+    state: started
+    enabled: true
 
 - name: Obter certificado Let's Encrypt
   command: >
     certbot --nginx -d {{ dominio }}
     --agree-tos --non-interactive
     -m {{ letsencrypt_email }}
+    --redirect
   args:
     creates: "/etc/letsencrypt/live/{{ dominio }}/fullchain.pem"
+  tags: [tls]
+
+- name: Habilitar renovacao automatica do certbot (timer)
+  service:
+    name: certbot-renew.timer
+    state: started
+    enabled: true
+  ignore_errors: true
   tags: [tls]

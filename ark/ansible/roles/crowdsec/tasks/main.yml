@@ -1,5 +1,10 @@
 ---
-- name: Subir agente CrowdSec
+# Role crowdsec — Rocky Linux 9.
+# Agente CrowdSec roda em container (cross-platform). O bouncer Nginx
+# vem do repo oficial CrowdSec (packagecloud) — instalado opcionalmente
+# quando habilitar_crowdsec_bouncer=true.
+
+- name: Subir agente CrowdSec via Docker Compose
   community.docker.docker_compose_v2:
     project_src: "{{ repo_dir }}/ark/crowdsec"
     files:
@@ -7,9 +12,17 @@
     state: present
   become_user: "{{ deploy_user }}"
 
-- name: Instalar bouncer Nginx para CrowdSec (plugin host)
-  apt:
+- name: Adicionar repo CrowdSec (script oficial idempotente)
+  shell: |
+    set -e
+    curl -s https://install.crowdsec.net | bash
+  args:
+    creates: /etc/yum.repos.d/crowdsec_crowdsec.repo
+  when: habilitar_crowdsec_bouncer | default(true)
+
+- name: Instalar bouncer Nginx para CrowdSec
+  dnf:
     name: crowdsec-nginx-bouncer
     state: present
-  when: ansible_facts['os_family'] == 'Debian'
-  ignore_errors: true  # pacote pode nao estar disponivel em todas as distros; documentar manual fallback
+  when: habilitar_crowdsec_bouncer | default(true)
+  ignore_errors: true  # se o repo nao publicar pra el9, documentar fallback manual

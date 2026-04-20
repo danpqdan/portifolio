@@ -5,14 +5,14 @@
 # Nada em all.example.yml deve ser segredo real.
 
 deploy_user: deploy
-repo_url: git@github.com:danpqdan/portifolio.git
+repo_url: https://github.com/danpqdan/portifolio.git
 repo_dir: /opt/portifolio
 repo_branch: main
 
 # === Aplicacao ===
 flask_secret_key: trocar-em-producao
 cors_origins:
-  - https://analytics.example.com
+  - https://dsplayground.com.br
 
 # === InfluxDB ===
 influxdb_url: http://influxdb:8086
@@ -29,11 +29,15 @@ admin_api_token: ""  # gerar com `python -c "import secrets; print(secrets.token
 grafana_admin_user: admin
 grafana_admin_password: trocar-em-producao
 
-# === Seguranca ===
-ssh_port: 22
-ufw_allow_ports:
-  - 22
+# === SSH / Firewall (Rocky 9 usa firewalld, nao UFW) ===
+# A porta SSH veio definida pelo provedor (HostGator: 22022).
+# Se mudar, atualize tambem aqui e no inventory.
+ssh_port: 22022
+firewalld_allow_ports:
+  - 22022
   - 80
   - 443
+
 habilitar_crowdsec: true
+habilitar_crowdsec_bouncer: true
 habilitar_monitoring: true
