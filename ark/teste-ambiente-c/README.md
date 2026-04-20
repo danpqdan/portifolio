@@ -4,6 +4,16 @@ VM Ubuntu 22.04 LTS provisionada **manualmente** no Oracle VirtualBox, sem Vagra
 
 Este ambiente e voce quem dirige — eu te guio passo a passo, voce executa pelo VirtualBox/PowerShell.
 
+## Modelo de permissoes (hardening ja aplicado no repo)
+
+Os containers rodam **non-root** e compartilham um grupo `analytics` com GID fixa `10001`:
+
+- Host: role `base` cria o grupo `analytics` (GID 10001) e adiciona `deploy` nele.
+- Containers: `backend` roda como `app:analytics (10001:10001)`, `frontend` como `node (1000)` com grupo suplementar `analytics (10001)`.
+- `/opt/portifolio` fica `deploy:analytics 0750`; `backend/` tem SGID (`2770`) para herdar o grupo em novos arquivos; `.env` fica `0640`; `security.log` fica `0660`.
+
+A tabela completa vive em `ark/docs/servidor-producao.md`. Na validacao (Passo 7) abaixo conferimos se tudo ficou como esperado.
+
 ## Pre-requisitos
 
 - VirtualBox 7.x instalado em `D:\oracle_vm\` (ja temos)
@@ -197,6 +207,35 @@ sudo systemctl status fail2ban      # active (running)
 sudo ufw status                     # 22/80/443 ALLOW, deny incoming
 sudo cscli metrics                  # CrowdSec saudavel
 sudo tail -f /opt/portifolio/backend/security.log  # logs estruturados evento=...
+```
+
+### Validacao do hardening (owner:group)
+
+```bash
+# Host — grupo analytics GID 10001 existe e deploy participa
+getent group analytics
+# Esperado: analytics:x:10001:deploy
+
+id deploy
+# Esperado: uid=1000(deploy) gid=1000(deploy) groups=1000(deploy),27(sudo),10001(analytics),<gid-docker>(docker)
+
+# Ownership do /opt/portifolio
+ls -ld /opt/portifolio /opt/portifolio/backend /opt/portifolio/backend/.env
+# Esperado:
+#   /opt/portifolio                       drwxr-x--- deploy analytics
+#   /opt/portifolio/backend               drwxrws--- deploy analytics   (SGID = 's' no grupo)
+#   /opt/portifolio/backend/.env          -rw-r----- deploy analytics   (0640)
+
+# Users dentro dos containers
+sudo docker exec portifolio-backend id
+# Esperado: uid=10001(app) gid=10001(analytics) groups=10001(analytics)
+
+sudo docker exec portifolio-frontend id
+# Esperado: uid=1000(node) gid=1000(node) groups=1000(node),10001(analytics)
+
+# security.log pode ser escrito pelo container backend (grupo 10001)
+sudo docker exec portifolio-backend sh -c 'echo teste >> /app/security.log && tail -n1 /app/security.log'
+# Esperado: `teste` (sem permission denied)
 ```
 
 ## Passo 8 — Cenarios de validacao adicionais
