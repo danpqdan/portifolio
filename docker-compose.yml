@@ -3,7 +3,8 @@ services:
     image: influxdb:2.7
     container_name: portifolio-influxdb
     ports:
-      - "8086:8086"
+      # Acesso publico via nginx → influx.dsplayground.com.br. Sem bypass direto.
+      - "127.0.0.1:8086:8086"
     environment:
       DOCKER_INFLUXDB_INIT_MODE: setup
       DOCKER_INFLUXDB_INIT_USERNAME: admin
