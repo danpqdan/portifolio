@@ -1,16 +1,29 @@
 ---
-- name: Adicionar chave GPG do Docker
-  apt_key:
-    url: https://download.docker.com/linux/ubuntu/gpg
+# Role docker — Rocky Linux 9.
+# Remove podman/buildah (conflito com docker-ce), adiciona repo oficial
+# docker-ce da CentOS (compativel com Rocky), instala engine + compose plugin.
+
+- name: Remover podman/buildah (conflitam com docker-ce em Rocky)
+  dnf:
+    name:
+      - podman
+      - buildah
+      - runc
+    state: absent
+
+- name: Instalar dnf-plugins-core
+  dnf:
+    name: dnf-plugins-core
     state: present
 
-- name: Adicionar repositorio do Docker
-  apt_repository:
-    repo: "deb [arch=amd64] https://download.docker.com/linux/ubuntu {{ ansible_distribution_release }} stable"
-    state: present
+- name: Adicionar repositorio docker-ce (CentOS/Rocky)
+  get_url:
+    url: https://download.docker.com/linux/centos/docker-ce.repo
+    dest: /etc/yum.repos.d/docker-ce.repo
+    mode: "0644"
 
 - name: Instalar Docker Engine + Compose plugin
-  apt:
+  dnf:
     name:
       - docker-ce
       - docker-ce-cli
@@ -18,7 +31,6 @@
       - docker-buildx-plugin
       - docker-compose-plugin
     state: present
-    update_cache: true
 
 - name: Garantir servico docker ativo
   service:
