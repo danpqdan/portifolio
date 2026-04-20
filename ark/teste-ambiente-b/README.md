@@ -1,6 +1,6 @@
-# Ambiente B — VM Ubuntu real via Multipass
+# Ambiente B — VM Ubuntu real via Vagrant + VirtualBox
 
-VM Ubuntu 22.04 LTS rodando localmente via Multipass. Diferenca para Ambiente A: tem **systemd real**, **kernel real**, **rede de host real**. Permite validar Docker rodando, UFW aplicando regras, fail2ban com jails, e a stack `analytics-stack` (backend + InfluxDB) subindo de verdade.
+VM Ubuntu 22.04 LTS rodando localmente via **Vagrant + VirtualBox**. Diferenca para Ambiente A: tem **systemd real**, **kernel real**, **rede de host real**. Permite validar Docker rodando, UFW aplicando regras, fail2ban com jails, e a stack `analytics-stack` (backend + InfluxDB) subindo de verdade.
 
 ## O que valida (alem do que A ja cobre)
 
@@ -8,6 +8,7 @@ VM Ubuntu 22.04 LTS rodando localmente via Multipass. Diferenca para Ambiente A:
 - Docker engine instalado e funcional
 - `analytics-stack` rodando: backend Flask + Socket.IO + InfluxDB sobem em containers dentro da VM
 - Health check do backend respondendo via loopback (`/health/app`)
+- Retencao do bucket aplicada via `configurar_retencao.py`
 - Idempotencia em apply real
 
 ## O que continua fora
@@ -17,62 +18,62 @@ VM Ubuntu 22.04 LTS rodando localmente via Multipass. Diferenca para Ambiente A:
 
 ## Pre-requisitos
 
-- Multipass instalado no Windows. Verificar:
-  ```powershell
-  & "C:\Program Files\Multipass\bin\multipass.exe" version
-  ```
-- ~2 GB de RAM livre, ~10 GB de disco para a VM.
+- VirtualBox (`D:\oracle_vm\VBoxManage.exe` no setup deste host)
+- Vagrant (`C:\Program Files\Vagrant\bin\vagrant.exe`)
+- `machinefolder` do VirtualBox apontando para `D:\virtualbox-vms` (ja configurado neste host com `VBoxManage setproperty machinefolder D:\virtualbox-vms`)
+- ~2 GB de RAM livre, ~10 GB de disco em D:
 
 ## Rodar (Windows PowerShell)
 
-Os atalhos abaixo assumem que o repo esta em `D:\portifolio` e que `multipass` ja esta acessivel — pelo PATH ou pelo path absoluto `C:\Program Files\Multipass\bin\multipass.exe`. Use o que funcionar no seu shell.
-
 ```powershell
-# Atalho de path (use se o PATH ainda nao recarregou)
-$mp = "C:\Program Files\Multipass\bin\multipass.exe"
+cd D:\portifolio\ark\teste-ambiente-b
 
-# 1. Subir VM (~2-3 min na primeira vez baixando a imagem)
-& $mp launch 22.04 --name ark-teste-b --cpus 2 --memory 2G --disk 10G
+# 1. Subir a VM (~3-5 min na primeira vez baixando a box bento/ubuntu-22.04)
+vagrant up
 
-# 2. Montar o repo dentro da VM em /portifolio
-& $mp mount D:\portifolio ark-teste-b:/portifolio
+# 2. Ansible 2.10 da apt e antigo demais para community.docker.docker_compose_v2.
+#    Atualizar para >= 2.14 via pip:
+vagrant ssh -c "sudo apt-get install -y python3-pip && sudo pip3 install --upgrade 'ansible>=8'"
 
-# 3. Instalar Ansible + collection community.docker
-& $mp exec ark-teste-b -- sudo apt-get update
-& $mp exec ark-teste-b -- sudo apt-get install -y ansible python3-docker
-& $mp exec ark-teste-b -- ansible-galaxy collection install community.docker
+# 3. Apply do playbook (firewall ON, certbot OFF)
+vagrant ssh -c "sudo bash -c 'ANSIBLE_ROLES_PATH=/portifolio/ark/ansible/roles ansible-playbook -i /portifolio/ark/teste-ambiente-a/inventory-localhost.ini /portifolio/ark/teste-ambiente-b/playbook-teste-b.yml --skip-tags tls'"
 
-# 4. Rodar o playbook completo (firewall ON, certbot OFF)
-& $mp exec ark-teste-b -- sudo bash -c "ANSIBLE_ROLES_PATH=/portifolio/ark/ansible/roles ansible-playbook -i /portifolio/ark/teste-ambiente-a/inventory-localhost.ini /portifolio/ark/teste-ambiente-b/playbook-teste-b.yml --skip-tags tls"
+# 4. Verificar que o backend subiu na VM
+vagrant ssh -c "curl -s http://127.0.0.1:5000/health/app"
 
-# 5. Verificar que o backend subiu na VM
-& $mp exec ark-teste-b -- curl -fsS http://localhost:5000/health/app
+# 5. Idempotencia (re-rodar deve dar failed=0)
+vagrant ssh -c "sudo bash -c 'ANSIBLE_ROLES_PATH=/portifolio/ark/ansible/roles ansible-playbook -i /portifolio/ark/teste-ambiente-a/inventory-localhost.ini /portifolio/ark/teste-ambiente-b/playbook-teste-b.yml --skip-tags tls'"
 
-# 6. Idempotencia
-& $mp exec ark-teste-b -- sudo bash -c "ANSIBLE_ROLES_PATH=/portifolio/ark/ansible/roles ansible-playbook -i /portifolio/ark/teste-ambiente-a/inventory-localhost.ini /portifolio/ark/teste-ambiente-b/playbook-teste-b.yml --skip-tags tls"
-
-# 7. Limpar
-& $mp delete ark-teste-b
-& $mp purge
+# 6. Limpar quando terminar
+vagrant destroy -f
 ```
+
+## Resultado validado
+
+```
+1ª execucao: ok=30  changed=12  failed=0
+2ª execucao: ok=29  changed= 6  failed=0   (handlers + retencao re-disparam — esperado)
+curl /health/app -> { "status": "healthy", "detalhe": { "active_sessions": 0, "timestamp": "..." } }
+```
+
+Ciclo aplicado: pacotes base + UFW + fail2ban + Docker engine + git clone do mount via `file:///portifolio` + `.env` renderizado + `docker compose up` (frontend, backend, influxdb) + retencao InfluxDB + nginx vhost ativo + handler reload nginx OK. Backend respondeu `/health/app` apos retries (containers do docker compose levam ~30s).
 
 ## Diferencas do `playbook-teste-b.yml`
 
-Reusa `group_vars/all.yml` e o `inventory-localhost.ini` do Ambiente A (sao identicos), mas:
+Em vez de `vars_files:` (que tem precedencia maior que play `vars:` no Ansible — surpresa), todas as vars ficam inline no proprio playbook. Pre-tasks adicionais:
 
-- **NAO pula `firewall`** — UFW e fail2ban devem aplicar de verdade dentro da VM.
-- **Inclui `analytics-stack`** — nao depende de `--skip-tags`, mas precisa que o Docker esteja instalado (o role `docker` cuida disso, vem antes na ordem).
-- **`repo_url=file:///portifolio`** — usa o mount em vez de `git clone` do GitHub. Permite testar sem expor a chave SSH na VM.
+- `git config --system --add safe.directory '*'` — git 2.35+ recusa clonar de repo cujo dono e diferente do user (mount Vagrant aparece como root, deploy clona).
+- `openssl` + cert self-signed em `/etc/letsencrypt/live/{{ dominio }}/` — substitui o certbot que esta `--skip-tags tls`.
 
-## Resultado esperado
+Roles aplicadas: `base` (firewall ON), `docker`, `analytics-stack` (clone+compose+retencao), `nginx` (sem certbot). `monitoring` e `crowdsec` ficam pra runs separados via `--tags`.
 
-```
-PLAY RECAP ******
-localhost  : ok=N  changed=N  unreachable=0  failed=0  skipped=M  rescued=0  ignored=0
-```
+## Ajustes descobertos durante a execucao
 
-E em seguida `curl /health/app` retorna `{"status": "healthy", "detalhe": {...}}`.
+- `vars_files` perde para `play vars` na precedencia do Ansible. Inlinar varaveis evita confusao silenciosa de override.
+- Git clone exige `safe.directory '*'` quando rodando contra um mount Vagrant (cross-uid).
+- O backend Flask precisa de ate ~30s pos `docker compose up` para responder `/health/app` — o role `analytics-stack` ja faz `retries: 20 + delay: 3`.
+- A box Ubuntu vem com Ansible 2.10 (apt) — incompativel com `community.docker.docker_compose_v2`. Upgrade via pip resolve.
 
 ## Limpeza
 
-A VM consome 2 GB RAM enquanto rodando. Sempre `multipass stop ark-teste-b` quando nao estiver testando, e `multipass delete + purge` quando terminar de vez.
+A VM consome 2 GB RAM e ~3-5 GB em disco. Sempre `vagrant halt` quando nao estiver testando, `vagrant destroy -f` quando terminar de vez.
