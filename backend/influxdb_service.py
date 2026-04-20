@@ -1,12 +1,19 @@
-"""
-Serviço InfluxDB para coleta de dados temporais em tempo real
+"""Integracao com InfluxDB 2.7.
+
+Responsabilidades:
+- Escrever metricas agregadas (`page_analytics`) e Web Vitals individuais (`web_vitals`)
+- Escrever eventos customizados (`custom_events`) — um Point por evento
+- Expor queries agregadas para a API REST de consulta
+- Expor operacoes LGPD (consulta e exclusao por `session_id`)
+
+Semantica: cada tick do SDK e um delta. Contadores somam — dashboards usam `sum()`,
+nao `mean()`. `permanencia_segundos` tambem soma (tempo visivel adicional na janela).
 """
 import logging
-from datetime import datetime, timezone
-from typing import Dict, Any, Optional, List
-from dataclasses import dataclass
-import asyncio
 from concurrent.futures import ThreadPoolExecutor
+from dataclasses import dataclass
+from datetime import datetime, timezone
+from typing import Any, Dict, List, Optional
 
 try:
     from influxdb_client import InfluxDBClient, Point
@@ -14,11 +21,12 @@ try:
     INFLUXDB_AVAILABLE = True
 except ImportError:
     INFLUXDB_AVAILABLE = False
-    logging.warning("InfluxDB client não instalado. Execute: pip install influxdb-client")
+    logging.warning("InfluxDB client nao instalado. Execute: pip install influxdb-client")
+
 
 @dataclass
 class TemporalMetric:
-    """Estrutura para métricas temporais"""
+    """Metrica agregada por pagina por tick."""
     session_id: str
     page_type: str
     permanencia_segundos: float
@@ -27,323 +35,571 @@ class TemporalMetric:
     scrolls: int = 0
     mouse_moves: int = 0
     toques: int = 0
+    hovers: int = 0
+    exposicoes: int = 0
+    custom_events: int = 0
     timestamp: Optional[datetime] = None
     user_agent: Optional[str] = None
     ip_address: Optional[str] = None
+    app_id: Optional[str] = None
+    ambiente: Optional[str] = None
+
+
+@dataclass
+class WebVitalMetric:
+    """Metrica de performance (LCP/CLS/INP) por evento."""
+    session_id: str
+    page_type: str
+    nome: str
+    valor: float
+    rating: Optional[str] = None
+    metric_id: Optional[str] = None
+    timestamp: Optional[datetime] = None
+    user_agent: Optional[str] = None
+    ip_address: Optional[str] = None
+    app_id: Optional[str] = None
+    ambiente: Optional[str] = None
+
+
+@dataclass
+class CustomEventMetric:
+    """Evento de negocio enviado via `enviarEvento(nome, propriedades)`."""
+    session_id: str
+    page_type: str
+    nome: str
+    propriedades: Dict[str, Any]
+    timestamp: Optional[datetime] = None
+    user_agent: Optional[str] = None
+    ip_address: Optional[str] = None
+    app_id: Optional[str] = None
+    ambiente: Optional[str] = None
+
 
 class InfluxDBService:
-    """Serviço para integração com InfluxDB"""
-    
-    def __init__(self, url: str, token: str, org: str, bucket: str, enabled: bool = True):
+    def __init__(self, url: str, token: str, org: str, bucket: str, enabled: bool = True,
+                 executor_max_workers: int = 2):
         self.url = url
         self.token = token
         self.org = org
         self.bucket = bucket
         self.enabled = enabled and INFLUXDB_AVAILABLE
-        
+
         self.client = None
         self.write_api = None
-        self.executor = ThreadPoolExecutor(max_workers=2)
-        
+        self.executor = ThreadPoolExecutor(max_workers=executor_max_workers)
+
         if self.enabled:
             self._initialize_client()
         else:
-            logging.warning("InfluxDB desabilitado ou cliente não disponível")
-    
+            logging.warning("InfluxDB desabilitado ou cliente nao disponivel")
+
     def _initialize_client(self):
-        """Inicializa cliente InfluxDB"""
         try:
-            self.client = InfluxDBClient(
-                url=self.url,
-                token=self.token,
-                org=self.org,
-                timeout=5000  # 5 segundos de timeout
-            )
+            self.client = InfluxDBClient(url=self.url, token=self.token, org=self.org, timeout=5000)
             self.write_api = self.client.write_api(write_options=SYNCHRONOUS)
-            
-            # Testar conexão
+
             health = self.client.health()
             if health.status == "pass":
-                logging.info(f"✅ InfluxDB conectado: {self.url}")
+                logging.info(f"InfluxDB conectado: {self.url}")
             else:
-                logging.error(f"❌ InfluxDB health check falhou: {health.message}")
+                logging.error(f"InfluxDB health check falhou: {health.message}")
                 self.enabled = False
-                
         except Exception as e:
-            logging.error(f"❌ Erro ao conectar InfluxDB: {str(e)}")
+            logging.error(f"Erro ao conectar InfluxDB: {str(e)}")
             self.enabled = False
-    
-    def write_temporal_metrics(self, metrics: TemporalMetric) -> bool:
-        """Escreve métricas temporais no InfluxDB"""
+
+    # ==================== ESCRITA ====================
+
+    def write_temporal_metrics(self, metric: TemporalMetric) -> bool:
         if not self.enabled:
             return False
-        
         try:
-            # Criar point para page_analytics
             point = (
                 Point("page_analytics")
-                .tag("session_id", metrics.session_id)
-                .tag("page_type", metrics.page_type)
-                .tag("user_agent", metrics.user_agent or "unknown")
-                .tag("ip_address", metrics.ip_address or "unknown")
-                .field("permanencia_segundos", float(metrics.permanencia_segundos))
-                .field("visualizacoes", int(metrics.visualizacoes))
-                .field("cliques", int(metrics.cliques))
-                .field("scrolls", int(metrics.scrolls))
-                .field("mouse_moves", int(metrics.mouse_moves))
-                .field("toques", int(metrics.toques))
-                .time(metrics.timestamp or datetime.now(timezone.utc))
+                .tag("session_id", metric.session_id)
+                .tag("page_type", metric.page_type)
+                .tag("app_id", metric.app_id or "desconhecido")
+                .tag("ambiente", metric.ambiente or "desconhecido")
+                .tag("ip_address", metric.ip_address or "unknown")
+                .field("permanencia_segundos", float(metric.permanencia_segundos))
+                .field("visualizacoes", int(metric.visualizacoes))
+                .field("cliques", int(metric.cliques))
+                .field("scrolls", int(metric.scrolls))
+                .field("mouse_moves", int(metric.mouse_moves))
+                .field("toques", int(metric.toques))
+                .field("hovers", int(metric.hovers))
+                .field("exposicoes", int(metric.exposicoes))
+                .field("custom_events", int(metric.custom_events))
+                .field("user_agent", metric.user_agent or "unknown")
+                .time(metric.timestamp or datetime.now(timezone.utc))
             )
-            
             self.write_api.write(bucket=self.bucket, record=point)
             return True
-            
         except Exception as e:
-            logging.error(f"❌ Erro ao escrever métricas no InfluxDB: {str(e)}")
+            logging.error(f"Erro ao escrever page_analytics: {str(e)}")
             return False
-    
-    def write_temporal_metrics_async(self, metrics: TemporalMetric):
-        """Escreve métricas temporais de forma assíncrona"""
+
+    def write_temporal_metrics_async(self, metric: TemporalMetric):
         if not self.enabled:
             return
-        
-        def _write():
-            return self.write_temporal_metrics(metrics)
-        
-        # Executar em thread separada para não bloquear
-        self.executor.submit(_write)
-    
-    def write_navigation_event(self, session_id: str, from_page: str, to_page: str, 
-                             navigation_time: float, user_agent: str = None, 
-                             ip_address: str = None) -> bool:
-        """Registra evento de navegação entre páginas"""
+        self.executor.submit(lambda: self.write_temporal_metrics(metric))
+
+    def write_web_vital(self, metric: WebVitalMetric) -> bool:
         if not self.enabled:
             return False
-        
         try:
             point = (
-                Point("realtime_navigation")
-                .tag("session_id", session_id)
-                .tag("from_page", from_page)
-                .tag("to_page", to_page)
-                .tag("user_agent", user_agent or "unknown")
-                .tag("ip_address", ip_address or "unknown")
-                .field("navigation_time", float(navigation_time))
-                .time(datetime.now(timezone.utc))
+                Point("web_vitals")
+                .tag("session_id", metric.session_id)
+                .tag("page_type", metric.page_type)
+                .tag("nome", metric.nome)
+                .tag("rating", metric.rating or "unknown")
+                .tag("app_id", metric.app_id or "desconhecido")
+                .tag("ambiente", metric.ambiente or "desconhecido")
+                .tag("ip_address", metric.ip_address or "unknown")
+                .field("valor", float(metric.valor))
+                .field("user_agent", metric.user_agent or "unknown")
+                .time(metric.timestamp or datetime.now(timezone.utc))
             )
-            
+            if metric.metric_id:
+                point = point.tag("metric_id", metric.metric_id)
             self.write_api.write(bucket=self.bucket, record=point)
             return True
-            
         except Exception as e:
-            logging.error(f"❌ Erro ao escrever navegação no InfluxDB: {str(e)}")
+            logging.error(f"Erro ao escrever web_vitals: {str(e)}")
             return False
-    
-    def write_session_summary(self, session_id: str, total_duration: float, 
-                            pages_visited: int, total_clicks: int,
-                            device_type: str = "unknown", 
-                            user_agent: str = None, ip_address: str = None) -> bool:
-        """Registra resumo da sessão"""
+
+    def write_web_vital_async(self, metric: WebVitalMetric):
+        if not self.enabled:
+            return
+        self.executor.submit(lambda: self.write_web_vital(metric))
+
+    def write_custom_event(self, metric: CustomEventMetric) -> bool:
         if not self.enabled:
             return False
-        
         try:
             point = (
-                Point("session_analytics")
-                .tag("session_id", session_id)
-                .tag("device_type", device_type)
-                .tag("user_agent", user_agent or "unknown")
-                .tag("ip_address", ip_address or "unknown")
-                .field("total_duration", float(total_duration))
-                .field("pages_visited", int(pages_visited))
-                .field("total_clicks", int(total_clicks))
-                .field("bounce_rate", 1.0 if pages_visited == 1 else 0.0)
-                .time(datetime.now(timezone.utc))
+                Point("custom_events")
+                .tag("session_id", metric.session_id)
+                .tag("page_type", metric.page_type)
+                .tag("nome", metric.nome)
+                .tag("app_id", metric.app_id or "desconhecido")
+                .tag("ambiente", metric.ambiente or "desconhecido")
+                .tag("ip_address", metric.ip_address or "unknown")
+                .field("ocorrencias", 1)
+                .field("user_agent", metric.user_agent or "unknown")
+                .time(metric.timestamp or datetime.now(timezone.utc))
             )
-            
+            for chave, valor in (metric.propriedades or {}).items():
+                # Apenas primitivos sao aceitos (ja sanitizado pelo SDK)
+                chave_sanitizada = f"prop_{chave}"
+                if isinstance(valor, bool):
+                    point = point.field(chave_sanitizada, valor)
+                elif isinstance(valor, (int, float)):
+                    point = point.field(chave_sanitizada, float(valor))
+                elif isinstance(valor, str):
+                    point = point.field(chave_sanitizada, valor)
+                # None/outros descartados
             self.write_api.write(bucket=self.bucket, record=point)
             return True
-            
         except Exception as e:
-            logging.error(f"❌ Erro ao escrever sessão no InfluxDB: {str(e)}")
+            logging.error(f"Erro ao escrever custom_events: {str(e)}")
             return False
-    
-    def query_realtime_metrics(self, time_range: str = "-5m") -> List[Dict[str, Any]]:
-        """Consulta métricas em tempo real com fallback"""
+
+    def write_custom_event_async(self, metric: CustomEventMetric):
+        if not self.enabled:
+            return
+        self.executor.submit(lambda: self.write_custom_event(metric))
+
+    # ==================== QUERIES ====================
+
+    def query_metricas_agregadas(
+        self,
+        app_id: Optional[str] = None,
+        page_type: Optional[str] = None,
+        ambiente: Optional[str] = None,
+        inicio: str = "-24h",
+        fim: str = "now()",
+        limit: int = 100,
+    ) -> List[Dict[str, Any]]:
+        """Soma contadores de `page_analytics` por pagina/periodo."""
         if not self.enabled:
             return []
-        
+
+        filtros = ['r._measurement == "page_analytics"']
+        if app_id:
+            filtros.append(f'r.app_id == "{app_id}"')
+        if page_type:
+            filtros.append(f'r.page_type == "{page_type}"')
+        if ambiente:
+            filtros.append(f'r.ambiente == "{ambiente}"')
+        filtro_str = ' and '.join(filtros)
+
+        campos_numericos = [
+            "permanencia_segundos", "visualizacoes", "cliques", "scrolls",
+            "mouse_moves", "toques", "hovers", "exposicoes", "custom_events",
+        ]
+        filtro_campos = ' or '.join([f'r._field == "{c}"' for c in campos_numericos])
+
+        query = f'''
+        from(bucket: "{self.bucket}")
+          |> range(start: {inicio}, stop: {fim})
+          |> filter(fn: (r) => {filtro_str})
+          |> filter(fn: (r) => {filtro_campos})
+          |> group(columns: ["page_type", "_field"])
+          |> sum()
+          |> limit(n: {int(limit)})
+        '''
         try:
-            # Primeiro tentar consulta com agregação
-            query_aggregated = f'''
-            from(bucket: "{self.bucket}")
-              |> range(start: {time_range})
-              |> filter(fn: (r) => r._measurement == "page_analytics")
-              |> filter(fn: (r) => r._field == "permanencia_segundos")
-              |> group(columns: ["page_type"])
-              |> aggregateWindow(every: 30s, fn: mean, createEmpty: false)
-              |> sort(columns: ["_time"], desc: true)
-            '''
-            
-            query_api = self.client.query_api()
-            result = query_api.query(query=query_aggregated)
-            
-            metrics = []
-            for table in result:
-                for record in table.records:
-                    try:
-                        metric = {
-                            'time': record.get_time(),
-                            'page_type': record.values.get('page_type', 'unknown'),
-                            'value': round(record.get_value(), 2) if record.get_value() else 0,
-                            'measurement': record.get_measurement(),
-                            'type': 'aggregated_30s'
-                        }
-                        metrics.append(metric)
-                    except (KeyError, AttributeError):
-                        continue
-            
-            # Se não houver dados agregados, usar consulta simples
-            if not metrics:
-                query_simple = f'''
-                from(bucket: "{self.bucket}")
-                  |> range(start: {time_range})
-                  |> filter(fn: (r) => r._measurement == "page_analytics")
-                  |> filter(fn: (r) => r._field == "permanencia_segundos")
-                  |> sort(columns: ["_time"], desc: true)
-                  |> limit(n: 20)
-                '''
-                
-                result = query_api.query(query=query_simple)
-                
-                for table in result:
-                    for record in table.records:
-                        try:
-                            metric = {
-                                'time': record.get_time(),
-                                'page_type': record.values.get('page_type', 'unknown'),
-                                'value': round(record.get_value(), 2) if record.get_value() else 0,
-                                'measurement': record.get_measurement(),
-                                'session_id': record.values.get('session_id', 'unknown'),
-                                'type': 'raw_data'
-                            }
-                            metrics.append(metric)
-                        except (KeyError, AttributeError):
-                            continue
-            
-            return metrics
-            
+            resultado = self.client.query_api().query(query=query)
+            agregado: Dict[str, Dict[str, float]] = {}
+            for tabela in resultado:
+                for registro in tabela.records:
+                    pagina = registro.values.get('page_type', 'desconhecido')
+                    campo = registro.values.get('_field')
+                    valor = registro.get_value() or 0
+                    if pagina not in agregado:
+                        agregado[pagina] = {}
+                    agregado[pagina][campo] = valor
+            return [{"page_type": k, "totais": v} for k, v in agregado.items()]
         except Exception as e:
-            logging.error(f"❌ Erro ao consultar InfluxDB: {str(e)}")
+            logging.error(f"Erro em query_metricas_agregadas: {str(e)}")
             return []
-    
-    def get_page_analytics_summary(self, time_range: str = "-1h") -> Dict[str, Any]:
-        """Retorna resumo de analytics por página"""
+
+    def query_web_vitals(
+        self,
+        app_id: Optional[str] = None,
+        page_type: Optional[str] = None,
+        nome: Optional[str] = None,
+        inicio: str = "-24h",
+        fim: str = "now()",
+        limit: int = 500,
+    ) -> List[Dict[str, Any]]:
+        """Lista pontos de Web Vitals com filtros. Inclui percentis agregados por nome."""
         if not self.enabled:
-            return {}
-        
+            return []
+
+        filtros = ['r._measurement == "web_vitals"', 'r._field == "valor"']
+        if app_id:
+            filtros.append(f'r.app_id == "{app_id}"')
+        if page_type:
+            filtros.append(f'r.page_type == "{page_type}"')
+        if nome:
+            filtros.append(f'r.nome == "{nome}"')
+        filtro_str = ' and '.join(filtros)
+
+        query = f'''
+        from(bucket: "{self.bucket}")
+          |> range(start: {inicio}, stop: {fim})
+          |> filter(fn: (r) => {filtro_str})
+          |> limit(n: {int(limit)})
+        '''
         try:
+            resultado = self.client.query_api().query(query=query)
+            pontos: List[Dict[str, Any]] = []
+            for tabela in resultado:
+                for registro in tabela.records:
+                    pontos.append({
+                        "time": registro.get_time().isoformat() if registro.get_time() else None,
+                        "nome": registro.values.get('nome'),
+                        "page_type": registro.values.get('page_type'),
+                        "rating": registro.values.get('rating'),
+                        "valor": registro.get_value(),
+                    })
+            return pontos
+        except Exception as e:
+            logging.error(f"Erro em query_web_vitals: {str(e)}")
+            return []
+
+    def query_custom_events(
+        self,
+        app_id: Optional[str] = None,
+        nome: Optional[str] = None,
+        page_type: Optional[str] = None,
+        inicio: str = "-24h",
+        fim: str = "now()",
+        limit: int = 100,
+    ) -> List[Dict[str, Any]]:
+        """Soma ocorrencias de eventos customizados por nome e pagina."""
+        if not self.enabled:
+            return []
+
+        filtros = ['r._measurement == "custom_events"', 'r._field == "ocorrencias"']
+        if app_id:
+            filtros.append(f'r.app_id == "{app_id}"')
+        if nome:
+            filtros.append(f'r.nome == "{nome}"')
+        if page_type:
+            filtros.append(f'r.page_type == "{page_type}"')
+        filtro_str = ' and '.join(filtros)
+
+        query = f'''
+        from(bucket: "{self.bucket}")
+          |> range(start: {inicio}, stop: {fim})
+          |> filter(fn: (r) => {filtro_str})
+          |> group(columns: ["nome", "page_type"])
+          |> sum()
+          |> limit(n: {int(limit)})
+        '''
+        try:
+            resultado = self.client.query_api().query(query=query)
+            contagens: List[Dict[str, Any]] = []
+            for tabela in resultado:
+                for registro in tabela.records:
+                    contagens.append({
+                        "nome": registro.values.get('nome'),
+                        "page_type": registro.values.get('page_type'),
+                        "ocorrencias": int(registro.get_value() or 0),
+                    })
+            return contagens
+        except Exception as e:
+            logging.error(f"Erro em query_custom_events: {str(e)}")
+            return []
+
+    # ==================== LGPD ====================
+
+    def consultar_por_session_id(self, session_id: str, inicio: str = "-30d") -> Dict[str, List[Dict[str, Any]]]:
+        """Retorna todos os pontos de uma sessao (LGPD — acesso)."""
+        if not self.enabled:
+            return {"page_analytics": [], "web_vitals": [], "custom_events": []}
+
+        saida: Dict[str, List[Dict[str, Any]]] = {
+            "page_analytics": [],
+            "web_vitals": [],
+            "custom_events": [],
+        }
+
+        for measurement in saida.keys():
             query = f'''
             from(bucket: "{self.bucket}")
-              |> range(start: {time_range})
-              |> filter(fn: (r) => r["_measurement"] == "page_analytics")
-              |> group(columns: ["page_type", "_field"])
-              |> mean()
+              |> range(start: {inicio})
+              |> filter(fn: (r) => r._measurement == "{measurement}")
+              |> filter(fn: (r) => r.session_id == "{session_id}")
+              |> limit(n: 5000)
             '''
-            
-            query_api = self.client.query_api()
-            result = query_api.query(query=query)
-            
-            summary = {}
-            for table in result:
-                for record in table.records:
-                    page_type = record.values.get('page_type')
-                    field = record.values.get('_field')
-                    value = record.get_value()
-                    
-                    if page_type not in summary:
-                        summary[page_type] = {}
-                    summary[page_type][field] = value
-            
-            return summary
-            
+            try:
+                resultado = self.client.query_api().query(query=query)
+                for tabela in resultado:
+                    for registro in tabela.records:
+                        saida[measurement].append({
+                            "time": registro.get_time().isoformat() if registro.get_time() else None,
+                            "field": registro.values.get('_field'),
+                            "value": registro.get_value(),
+                            "tags": {k: v for k, v in registro.values.items() if not k.startswith('_') and k not in ('result', 'table')},
+                        })
+            except Exception as e:
+                logging.error(f"Erro ao consultar {measurement} para {session_id}: {str(e)}")
+
+        return saida
+
+    def apagar_por_session_id(self, session_id: str, inicio: str = "1970-01-01T00:00:00Z") -> bool:
+        """Apaga todos os pontos vinculados a uma sessao (LGPD — exclusao).
+
+        Usa o DELETE API do InfluxDB 2.x. Exige que o token tenha permissao de escrita
+        no bucket e que o predicado contenha ao menos um tag match.
+        """
+        if not self.enabled or not self.client:
+            return False
+
+        agora = datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
+        sucesso = True
+        try:
+            delete_api = self.client.delete_api()
+            for measurement in ("page_analytics", "web_vitals", "custom_events"):
+                predicado = f'_measurement="{measurement}" AND session_id="{session_id}"'
+                try:
+                    delete_api.delete(start=inicio, stop=agora,
+                                      predicate=predicado, bucket=self.bucket, org=self.org)
+                except Exception as e:
+                    logging.error(f"Erro ao apagar {measurement} para {session_id}: {str(e)}")
+                    sucesso = False
         except Exception as e:
-            logging.error(f"❌ Erro ao consultar resumo: {str(e)}")
-            return {}
-    
+            logging.error(f"Erro ao iniciar DELETE API: {str(e)}")
+            return False
+        return sucesso
+
+    # ==================== SAUDE ====================
+
+    def is_healthy(self) -> bool:
+        if not self.enabled or not self.client:
+            return False
+        try:
+            health = self.client.health()
+            return health.status == "pass"
+        except Exception:
+            return False
+
+    def fila_pendente(self) -> int:
+        """Tamanho da fila do executor (backpressure signal). Retorna 0 quando nao suportado."""
+        try:
+            return self.executor._work_queue.qsize()  # type: ignore[attr-defined]
+        except Exception:
+            return 0
+
     def close(self):
-        """Fecha conexão com InfluxDB"""
         if self.client:
             self.client.close()
         if self.executor:
             self.executor.shutdown(wait=True)
-    
-    def is_healthy(self) -> bool:
-        """Verifica se o InfluxDB está saudável"""
-        if not self.enabled or not self.client:
-            return False
-        
-        try:
-            health = self.client.health()
-            return health.status == "pass"
-        except:
-            return False
+
 
 # Singleton global
-_influxdb_service = None
+_influxdb_service: Optional[InfluxDBService] = None
+
 
 def get_influxdb_service() -> InfluxDBService:
-    """Retorna instância singleton do serviço InfluxDB"""
     global _influxdb_service
     if _influxdb_service is None:
         from config import config
         import os
-        
+
         config_name = os.environ.get('FLASK_ENV', 'development')
         app_config = config.get(config_name, config['default'])()
-        
+
         _influxdb_service = InfluxDBService(
             url=app_config.INFLUXDB_URL,
             token=app_config.INFLUXDB_TOKEN,
             org=app_config.INFLUXDB_ORG,
             bucket=app_config.INFLUXDB_BUCKET,
-            enabled=app_config.INFLUXDB_ENABLED
+            enabled=app_config.INFLUXDB_ENABLED,
         )
-    
     return _influxdb_service
 
-def create_temporal_metric_from_heatmap(session_id: str, heatmap_data: dict, 
+
+# ==================== FACTORIES (heatmap_data -> metrics) ====================
+
+def _extrair_pagina(page_data):
+    if isinstance(page_data, list) and page_data:
+        return page_data[-1]
+    if isinstance(page_data, dict):
+        return page_data
+    return None
+
+
+def _contar_por_tipo(eventos, tipo: str) -> int:
+    return sum(1 for e in eventos or [] if isinstance(e, dict) and e.get('tipo') == tipo)
+
+
+def create_temporal_metric_from_heatmap(session_id: str, heatmap_data: dict,
                                       user_agent: str = None, ip_address: str = None) -> List[TemporalMetric]:
-    """Converte dados do heatmap para métricas temporais"""
-    metrics = []
-    
-    # Processar cada página nos dados
-    for page_type in ['home', 'about', 'projects']:
-        if page_type in heatmap_data and heatmap_data[page_type]:
-            page_data = heatmap_data[page_type]
-            
-            # Se for lista, pegar o último elemento (dados mais recentes)
-            if isinstance(page_data, list) and page_data:
-                page_info = page_data[-1]  # Dados mais recentes
-            elif isinstance(page_data, dict):
-                page_info = page_data
-            else:
+    """Agrega contagens por tipo de evento em metricas temporais (uma por pagina)."""
+    metrics: List[TemporalMetric] = []
+
+    paginas = {}
+    if isinstance(heatmap_data.get('paginas'), dict):
+        paginas.update(heatmap_data['paginas'])
+
+    app_id = heatmap_data.get('app_id') if isinstance(heatmap_data, dict) else None
+    ambiente = heatmap_data.get('ambiente') if isinstance(heatmap_data, dict) else None
+
+    for page_type, page_data in paginas.items():
+        page_info = _extrair_pagina(page_data)
+        if not page_info:
+            continue
+
+        eventos = page_info.get('eventos', []) or []
+
+        metrics.append(TemporalMetric(
+            session_id=session_id,
+            page_type=page_type,
+            permanencia_segundos=float(page_info.get('segundos', 0)),
+            visualizacoes=int(page_info.get('visualizacoes', 0)),
+            cliques=_contar_por_tipo(eventos, 'click'),
+            scrolls=_contar_por_tipo(eventos, 'scroll_depth'),
+            mouse_moves=_contar_por_tipo(eventos, 'mouse_move'),
+            toques=_contar_por_tipo(eventos, 'touch'),
+            hovers=_contar_por_tipo(eventos, 'hover'),
+            exposicoes=_contar_por_tipo(eventos, 'element_exposure'),
+            custom_events=_contar_por_tipo(eventos, 'custom'),
+            timestamp=datetime.now(timezone.utc),
+            user_agent=user_agent,
+            ip_address=ip_address,
+            app_id=app_id,
+            ambiente=ambiente,
+        ))
+
+    return metrics
+
+
+def create_web_vitals_from_heatmap(session_id: str, heatmap_data: dict,
+                                   user_agent: str = None, ip_address: str = None) -> List[WebVitalMetric]:
+    resultado: List[WebVitalMetric] = []
+
+    paginas = {}
+    if isinstance(heatmap_data.get('paginas'), dict):
+        paginas.update(heatmap_data['paginas'])
+
+    app_id = heatmap_data.get('app_id') if isinstance(heatmap_data, dict) else None
+    ambiente = heatmap_data.get('ambiente') if isinstance(heatmap_data, dict) else None
+
+    for page_type, page_data in paginas.items():
+        page_info = _extrair_pagina(page_data)
+        if not page_info:
+            continue
+
+        for evento in page_info.get('eventos', []) or []:
+            if not isinstance(evento, dict) or evento.get('tipo') != 'web_vital':
                 continue
-            
-            metric = TemporalMetric(
+            dados = evento.get('dados') or {}
+            nome = dados.get('nome')
+            valor = dados.get('valor')
+            if not nome or valor is None:
+                continue
+
+            resultado.append(WebVitalMetric(
                 session_id=session_id,
                 page_type=page_type,
-                permanencia_segundos=float(page_info.get('segundos', 0)),
-                visualizacoes=int(page_info.get('visualizacoes', 0)),
-                cliques=len(page_info.get('cliques', [])),
-                scrolls=len(page_info.get('scrolls', [])),
-                mouse_moves=len(page_info.get('mouseMoves', [])),
-                toques=len(page_info.get('toques', [])),
+                nome=str(nome),
+                valor=float(valor),
+                rating=dados.get('rating'),
+                metric_id=dados.get('id'),
                 timestamp=datetime.now(timezone.utc),
                 user_agent=user_agent,
-                ip_address=ip_address
-            )
-            
-            metrics.append(metric)
-    
-    return metrics
+                ip_address=ip_address,
+                app_id=app_id,
+                ambiente=ambiente,
+            ))
+
+    return resultado
+
+
+def create_custom_events_from_heatmap(session_id: str, heatmap_data: dict,
+                                      user_agent: str = None, ip_address: str = None) -> List[CustomEventMetric]:
+    resultado: List[CustomEventMetric] = []
+
+    paginas = {}
+    if isinstance(heatmap_data.get('paginas'), dict):
+        paginas.update(heatmap_data['paginas'])
+
+    app_id = heatmap_data.get('app_id') if isinstance(heatmap_data, dict) else None
+    ambiente = heatmap_data.get('ambiente') if isinstance(heatmap_data, dict) else None
+
+    for page_type, page_data in paginas.items():
+        page_info = _extrair_pagina(page_data)
+        if not page_info:
+            continue
+
+        for evento in page_info.get('eventos', []) or []:
+            if not isinstance(evento, dict) or evento.get('tipo') != 'custom':
+                continue
+            dados = evento.get('dados') or {}
+            nome = dados.get('nome')
+            if not nome:
+                continue
+            propriedades = dados.get('propriedades') or {}
+            if not isinstance(propriedades, dict):
+                propriedades = {}
+
+            resultado.append(CustomEventMetric(
+                session_id=session_id,
+                page_type=page_type,
+                nome=str(nome),
+                propriedades=propriedades,
+                timestamp=datetime.now(timezone.utc),
+                user_agent=user_agent,
+                ip_address=ip_address,
+                app_id=app_id,
+                ambiente=ambiente,
+            ))
+
+    return resultado

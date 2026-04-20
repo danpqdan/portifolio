@@ -177,3 +177,137 @@ watch -n 2 './flask-service.sh status'
 5. **Monitore logs** para debugging
 
 **✅ Com estes scripts, você terá um ambiente Python completo e organizado para o Flask no OLS!**
+
+---
+
+## Producao com Docker + Gunicorn + Nginx
+
+O fluxo recomendado para producao e rodar o backend Flask+Socket.IO em um container dedicado com Gunicorn e worker `eventlet`, atras de Nginx como proxy reverso com TLS.
+
+### Dockerfile de producao (sugerido)
+
+`backend/Dockerfile.prod`:
+
+```dockerfile
+FROM python:3.12-slim
+
+RUN apt-get update && apt-get install -y --no-install-recommends curl \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN useradd --create-home --shell /bin/bash app
+WORKDIR /app
+
+COPY --chown=app:app requirements.txt ./
+RUN pip install --no-cache-dir -r requirements.txt \
+    && pip install --no-cache-dir gunicorn eventlet
+
+COPY --chown=app:app . .
+
+USER app
+EXPOSE 5000
+
+HEALTHCHECK --interval=30s --timeout=5s --retries=3 \
+  CMD curl -fsS http://localhost:5000/health/app || exit 1
+
+CMD ["gunicorn", "--worker-class", "eventlet", "-w", "1", "-b", "0.0.0.0:5000", \
+     "--access-logfile", "-", "--error-logfile", "-", "app:app"]
+```
+
+Observacoes:
+
+- Com `eventlet`, mantenha `-w 1` por processo e escale horizontalmente por replicas.
+- Container roda como `app` (nao-root).
+- Health check reaproveita `/health/app`.
+
+### Nginx como proxy reverso
+
+```nginx
+upstream portifolio_backend {
+    server backend:5000;
+}
+
+server {
+    listen 443 ssl http2;
+    server_name analytics.seudominio.com;
+
+    ssl_certificate     /etc/letsencrypt/live/analytics.seudominio.com/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/analytics.seudominio.com/privkey.pem;
+
+    location / {
+        proxy_pass http://portifolio_backend;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+
+        # Socket.IO precisa de Upgrade:
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_read_timeout 300s;
+    }
+}
+```
+
+Para o backend pegar o IP real do cliente (e nao o do Nginx), confirme que `X-Forwarded-For` esta sendo usado em `check_suspicious_activity` e na tag `ip_address` do InfluxDB. Hoje o codigo usa `request.environ.get('REMOTE_ADDR')` — revisitar em producao se a cadeia de proxies entregar o IP correto.
+
+### Variaveis de ambiente obrigatorias
+
+| variavel | obrigatoria em producao | descricao |
+|---|---|---|
+| `FLASK_ENV` | sim | `production` |
+| `SECRET_KEY` | sim | chave Flask, gerar com `secrets.token_urlsafe(32)` |
+| `CORS_ORIGINS` | sim | lista de origens permitidas (separadas por virgula) |
+| `INFLUXDB_URL` | sim | URL do InfluxDB |
+| `INFLUXDB_TOKEN` | sim | token com permissao de `buckets:read,write` |
+| `INFLUXDB_ORG` | sim | organizacao |
+| `INFLUXDB_BUCKET` | sim | bucket de destino |
+| `INFLUXDB_ENABLED` | sim | `true` em producao |
+| `ADMIN_API_TOKEN` | opcional* | ativa endpoints LGPD `/admin/*` — sem ele retornam 401 |
+
+*Recomendado configurar mesmo se nao for usar ja, pra responder rapido a pedidos do titular.
+
+### Retencao do bucket
+
+Configure logo no primeiro deploy:
+
+```bash
+docker compose exec backend python scripts/configurar_retencao.py --dias 90
+```
+
+## Backup e Restore do InfluxDB
+
+Backup completo (inclui metadados e dados de todos os buckets da org):
+
+```bash
+# dentro do container influxdb
+docker compose exec influxdb influx backup /tmp/backup-$(date +%Y%m%d) \
+  --token $INFLUXDB_TOKEN
+
+# copiar para host
+docker compose cp influxdb:/tmp/backup-$(date +%Y%m%d) ./backups/
+```
+
+Restore (exige o bucket nao existir ou usar `--new-bucket`):
+
+```bash
+docker compose cp ./backups/backup-20260101 influxdb:/tmp/backup-20260101
+docker compose exec influxdb influx restore /tmp/backup-20260101 \
+  --token $INFLUXDB_TOKEN \
+  --bucket portifolio_prod \
+  --new-bucket portifolio_prod_restaurado
+```
+
+Agendar o backup com cron no host ou com um sidecar container. Para backup incremental e disaster recovery avancado, considerar snapshot de volume.
+
+## Observabilidade em producao
+
+- Logs estruturados de analytics seguem formato `evento=<nome> chave=valor` (ver `backend/ingestao/logs.py`). Estagios: `recebido`, `validado`, `rejeitado`, `persistido_temporal`, `persistido_webvital`, `persistido_customevent`, `erro_persistencia`, `backpressure`, `conectado`, `desconectado`, `acesso_bloqueado`.
+- `security.log` tem rotacao automatica (10 MB, 5 arquivos). Em producao, monte um volume dedicado para `backend/security.log`.
+- Health endpoints separados: `/health/app`, `/health/socketio`, `/health/influxdb`.
+- Auditoria LGPD: toda chamada admin gera linha `[ADMIN-AUDIT]` em `security.log`.
+
+## Endpoints de API em producao
+
+- Consulta publica: `/analytics/metricas`, `/analytics/web-vitals`, `/analytics/custom-events`. Atras de rate limit de IP e `security_middleware`. Proteja com IP allowlist ou WAF se o caso de uso nao permite acesso publico.
+- Administracao LGPD: `/admin/analytics/sessao/<id>` (GET e DELETE). Exigem `Authorization: Bearer $ADMIN_API_TOKEN`. Recomendado mTLS ou VPN alem do token.

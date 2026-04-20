@@ -1,0 +1,33 @@
+# Logs em runtime
+backend/security.log
+*.log
+!docs/**/*.log
+
+# Bundles do SDK
+frontend/dist/
+
+# Vagrant
+ark/teste-ambiente-b/.vagrant/
+**/.vagrant/
+
+# Ansible
+ark/ansible/inventory.ini
+ark/ansible/group_vars/all.yml
+
+# Monitoring (.env com senha real)
+ark/monitoring/.env
+ark/crowdsec/.env
+
+# Editor
+.vscode/
+.idea/
+*.swp
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+backend/venv/
+
+# Node
+frontend/node_modules/
