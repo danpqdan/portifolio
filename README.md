@@ -65,39 +65,56 @@ O build de producao e gerado em `frontend/dist/`. Para deploy com Nginx e Gunico
 
 ## Execucao Local com Docker
 
-Use Docker Compose para rodar frontend, backend e InfluxDB 2.7 em containers Linux, sem depender do ambiente Python/Node instalado no Windows:
+Frontend, backend e InfluxDB 2.7 sobem em containers Linux via Docker Compose:
 
 ```bash
-docker compose up --build
+docker compose up --build -d        # sobe todos os servicos em background
+docker compose ps                    # confere estado e portas
+docker compose logs backend --tail=50
+docker compose stop                  # para sem remover containers
+docker compose down                  # para e remove containers e rede
+docker compose down -v               # inclui limpeza de volumes (reset total)
 ```
 
-Servicos locais:
+No Windows com WSL Ubuntu, rode os comandos a partir de `/mnt/d/portifolio` dentro da distro:
 
-- Frontend: `http://localhost:3000`
-- Backend: `http://localhost:5000`
-- InfluxDB: `http://localhost:8086`
+```bash
+wsl -d Ubuntu -- bash -lc "cd /mnt/d/portifolio && docker compose up -d"
+```
 
-O Compose usa bucket `portifolio_dev`, org `zen` e token local `dev-local-influxdb-token`. Esses valores sao apenas para desenvolvimento.
+Caso o usuario nao esteja no grupo `docker`, use `-u root` no WSL.
+
+Health checks:
+
+```bash
+curl http://localhost:5000/health/app
+curl http://localhost:5000/health/socketio
+curl http://localhost:5000/health/influxdb
+```
+
+Servicos locais: frontend `http://localhost:3000`, backend `http://localhost:5000`, InfluxDB `http://localhost:8086`. O Compose usa bucket `portifolio_dev`, org `zen` e token `dev-local-influxdb-token` — apenas para desenvolvimento local.
 
 ## Testes e Qualidade
 
-Backend:
+Backend (dentro do container):
 
 ```bash
-cd backend
-python test_service.py
-python test_influxdb.py
-python test_queries.py
-python test_final.py
+docker compose exec -T backend python -m unittest discover -s . -p 'test_*.py'
 ```
 
-Frontend:
+Cobertura atual: validador de payload, servico de ingestao, contrato Socket.IO, dados dinamicos, sanidade, API de consulta e admin LGPD.
+
+Frontend (dentro do container):
 
 ```bash
-cd frontend
-npm run test
-npm run lint
-npm run build
+docker compose exec -T frontend sh -c 'cd /app && npm run test && npm run lint'
+```
+
+CLI de validacao de payload contra uma fixture:
+
+```bash
+docker compose exec -T backend python scripts/validar_fixture.py fixtures/analytics_payload_sintetico.json
+docker compose exec -T backend python scripts/validar_fixture.py fixtures/analytics_payload_invalido.json
 ```
 
 O frontend usa Vitest + React Testing Library. Antes de novas funcionalidades de analytics, escreva testes para componentes, hooks, objetos e funcoes de coleta/envio, seguindo o guia em `AGENTS.md`.
@@ -106,8 +123,24 @@ O frontend usa Vitest + React Testing Library. Antes de novas funcionalidades de
 
 - Documentos tecnicos ficam em `docs/`.
 - Problemas e decisoes pendentes ficam em `continue/`.
-- O plano de clientes e ambientes fica em `docs/plano-clientes-ambientes.md`.
+- O plano de clientes e ambientes (DB relacional, tokens, pool isolado de WebSocket) fica em `docs/plano-clientes-ambientes.md`.
 - O levantamento atual do SDK de analytics fica em `docs/levantamento-sdk-analytics.md`.
+- Guia de uso do SDK (consumidor) fica em `frontend/src/sdk/README.md`. Exemplo em JS puro em `frontend/src/sdk/examples/vanilla.js`.
+- Catalogo de eventos coletados fica em `docs/eventos-analytics-catalogo.md`.
+- Infraestrutura, Nginx, Ansible, CrowdSec, Prometheus+Grafana e documentacao de servidor ficam em `ark/`.
+
+## Operacao
+
+Atalhos de operacao via `make` (Makefile em `ark/Makefile`):
+
+```bash
+make -f ark/Makefile help             # lista alvos
+make -f ark/Makefile dev              # docker compose up -d
+make -f ark/Makefile test             # backend + frontend
+make -f ark/Makefile monitoring-up    # Prometheus + Grafana (ark/monitoring/)
+make -f ark/Makefile crowdsec-up      # CrowdSec agent
+make -f ark/Makefile ansible-apply    # provisiona servidor via playbook
+```
 - Atualize este `README.md` quando comandos, instalacao, variaveis ou fluxo de execucao mudarem.
 
 ## Direcao de Arquitetura
