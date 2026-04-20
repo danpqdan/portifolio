@@ -31,3 +31,8 @@ backend/venv/
 
 # Node
 frontend/node_modules/
+
+# Segredos do backend (prod nao deve versionar)
+backend/.env
+backend/.env.*
+!backend/.env.example
