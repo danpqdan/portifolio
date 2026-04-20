@@ -1,0 +1,28 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    ambiente: local
+
+scrape_configs:
+  - job_name: prometheus
+    static_configs:
+      - targets: ['localhost:9090']
+
+  - job_name: node-exporter
+    static_configs:
+      - targets: ['node-exporter:9100']
+
+  # Backend do portifolio — quando `/metrics` for exposto (ver docs/plano-backend.md D.2)
+  - job_name: portifolio-backend
+    metrics_path: /metrics
+    scrape_interval: 10s
+    static_configs:
+      - targets: ['backend:5000']
+    honor_labels: true
+
+  # InfluxDB expoe metricas proprias em /metrics quando habilitado
+  - job_name: influxdb
+    metrics_path: /metrics
+    static_configs:
+      - targets: ['influxdb:8086']

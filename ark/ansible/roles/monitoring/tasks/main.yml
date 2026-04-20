@@ -1,0 +1,26 @@
+---
+- name: Criar diretorio para stack de monitoring
+  file:
+    path: "{{ repo_dir }}/ark/monitoring"
+    state: directory
+    owner: "{{ deploy_user }}"
+    group: "{{ deploy_user }}"
+
+- name: Criar .env do Grafana
+  copy:
+    content: |
+      GF_ADMIN_USER={{ grafana_admin_user }}
+      GF_ADMIN_PASSWORD={{ grafana_admin_password }}
+      INFLUXDB_TOKEN={{ influxdb_token }}
+    dest: "{{ repo_dir }}/ark/monitoring/.env"
+    owner: "{{ deploy_user }}"
+    group: "{{ deploy_user }}"
+    mode: "0600"
+
+- name: Subir Prometheus + Grafana + node-exporter
+  community.docker.docker_compose_v2:
+    project_src: "{{ repo_dir }}/ark/monitoring"
+    files:
+      - docker-compose.monitoring.yml
+    state: present
+  become_user: "{{ deploy_user }}"

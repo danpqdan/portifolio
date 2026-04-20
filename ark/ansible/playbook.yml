@@ -1,0 +1,45 @@
+---
+- name: Provisionar servidor do portifolio analytics
+  hosts: analytics
+  become: true
+  gather_facts: true
+
+  pre_tasks:
+    - name: Garantir que variaveis sensiveis existem
+      assert:
+        that:
+          - influxdb_token != "trocar-token-real"
+          - flask_secret_key != "trocar-em-producao"
+          - admin_api_token | length > 0
+        fail_msg: "Variaveis de producao em group_vars/all.yml ainda estao com valores de exemplo."
+
+  roles:
+    - role: base
+      tags: [base, hardening]
+
+    - role: docker
+      tags: [docker]
+
+    - role: analytics-stack
+      tags: [app, analytics-stack]
+
+    - role: nginx
+      tags: [nginx, proxy]
+
+    - role: monitoring
+      tags: [monitoring]
+      when: habilitar_monitoring | default(true)
+
+    - role: crowdsec
+      tags: [crowdsec, security]
+      when: habilitar_crowdsec | default(true)
+
+  post_tasks:
+    - name: Validar que o backend responde em /health/app via loopback
+      uri:
+        url: http://127.0.0.1:5000/health/app
+        status_code: 200
+      retries: 10
+      delay: 5
+      register: health_check
+      until: health_check.status == 200

@@ -1,0 +1,50 @@
+---
+- name: Garantir pacotes basicos
+  apt:
+    name:
+      - curl
+      - git
+      - ufw
+      - fail2ban
+      - python3
+      - python3-pip
+      - ca-certificates
+      - gnupg
+      - lsb-release
+    state: present
+    update_cache: true
+
+- name: Configurar locale para UTF-8
+  locale_gen:
+    name: pt_BR.UTF-8
+    state: present
+
+- name: UFW — policy default
+  ufw:
+    state: enabled
+    policy: deny
+    direction: incoming
+  tags: [firewall]
+
+- name: UFW — permitir portas declaradas
+  ufw:
+    rule: allow
+    port: "{{ item }}"
+    proto: tcp
+  loop: "{{ ufw_allow_ports | default([22, 80, 443]) }}"
+  tags: [firewall]
+
+- name: fail2ban — habilitar jail SSH
+  service:
+    name: fail2ban
+    state: started
+    enabled: true
+  tags: [firewall]
+
+- name: Criar usuario de deploy
+  user:
+    name: "{{ deploy_user }}"
+    shell: /bin/bash
+    groups: sudo
+    append: true
+    create_home: true

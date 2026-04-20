@@ -1,0 +1,15 @@
+---
+- name: Subir agente CrowdSec
+  community.docker.docker_compose_v2:
+    project_src: "{{ repo_dir }}/ark/crowdsec"
+    files:
+      - docker-compose.crowdsec.yml
+    state: present
+  become_user: "{{ deploy_user }}"
+
+- name: Instalar bouncer Nginx para CrowdSec (plugin host)
+  apt:
+    name: crowdsec-nginx-bouncer
+    state: present
+  when: ansible_facts['os_family'] == 'Debian'
+  ignore_errors: true  # pacote pode nao estar disponivel em todas as distros; documentar manual fallback

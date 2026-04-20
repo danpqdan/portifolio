@@ -1,0 +1,58 @@
+---
+- name: Instalar Nginx e Certbot
+  apt:
+    name:
+      - nginx
+      - certbot
+      - python3-certbot-nginx
+    state: present
+    update_cache: true
+
+- name: Garantir diretorio de snippets
+  file:
+    path: /etc/nginx/snippets
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Copiar ssl.conf de hardening (snippet)
+  copy:
+    src: "{{ playbook_dir }}/../nginx/ssl.conf"
+    dest: /etc/nginx/snippets/ssl.conf
+    owner: root
+    group: root
+    mode: "0644"
+  notify: reload nginx
+
+- name: Renderizar vhost do portifolio
+  template:
+    src: portifolio.conf.j2
+    dest: /etc/nginx/sites-available/portifolio.conf
+    owner: root
+    group: root
+    mode: "0644"
+  notify: reload nginx
+
+- name: Ativar vhost
+  file:
+    src: /etc/nginx/sites-available/portifolio.conf
+    dest: /etc/nginx/sites-enabled/portifolio.conf
+    state: link
+    force: true
+  notify: reload nginx
+
+- name: Remover default-site
+  file:
+    path: /etc/nginx/sites-enabled/default
+    state: absent
+  notify: reload nginx
+
+- name: Obter certificado Let's Encrypt
+  command: >
+    certbot --nginx -d {{ dominio }}
+    --agree-tos --non-interactive
+    -m {{ letsencrypt_email }}
+  args:
+    creates: "/etc/letsencrypt/live/{{ dominio }}/fullchain.pem"
+  tags: [tls]
