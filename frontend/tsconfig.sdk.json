@@ -1,0 +1,11 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "rootDir": "src/sdk",
+    "declaration": true,
+    "emitDeclarationOnly": true,
+    "outDir": "dist/sdk"
+  },
+  "include": ["src/sdk/**/*"],
+  "exclude": ["src/sdk/examples/**", "src/sdk/**/*.test.ts"]
+}

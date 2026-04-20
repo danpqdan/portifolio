@@ -4,29 +4,39 @@ import SlidesCarousel from './components/SlidesCarousel';
 import Home from './pages/Home';
 import Projects from './pages/Projects';
 import About from './pages/About';
-import WebSocketService from './utils/WebSocketService.tsx';
-import { HeatmapUtils } from './utils/HeatmapUtils.tsx';
+import { iniciarAnalytics } from './sdk';
+import { WEBSOCKET_URL, DEBUG_ENABLED, NODE_ENV } from './config.js';
+
+const AMBIENTES_SUPORTADOS = ['development', 'test', 'staging', 'production'];
+const ambiente = AMBIENTES_SUPORTADOS.includes(NODE_ENV) ? NODE_ENV : 'development';
+
+iniciarAnalytics({
+  websocketUrl: WEBSOCKET_URL,
+  appId: 'portfolio-local',
+  ambiente,
+  debug: DEBUG_ENABLED,
+  intervaloEnvioMs: 5000,
+});
 
 export default function App() {
   const [showUi, setShowUi] = useState(false);
 
   useEffect(() => {
-    WebSocketService.connect();
-    
     const onTorreStarted = () => setShowUi(true);
     window.addEventListener('torre:started', onTorreStarted);
-    
+
     const handleBeforeUnload = () => {
-      const dadosFinais = HeatmapUtils.getDadosGlobais();
-      WebSocketService.sendAnalyticsData(dadosFinais);
+      const controller = window.__ACTIVE_PAGE_CONTROLLER__;
+      if (controller && typeof controller.parar === 'function') {
+        controller.parar();
+      }
     };
-    
+
     window.addEventListener('beforeunload', handleBeforeUnload);
-    
+
     return () => {
       window.removeEventListener('torre:started', onTorreStarted);
       window.removeEventListener('beforeunload', handleBeforeUnload);
-      WebSocketService.disconnect();
     };
   }, []);
 

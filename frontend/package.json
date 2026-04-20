@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite --mode development",
     "build": "vite build --mode production",
+    "build:sdk": "vite build --config vite.sdk.config.js",
     "lint": "eslint .",
     "preview": "vite preview --mode production",
     "test": "vitest run",
@@ -18,7 +19,8 @@
     "react-icons": "^5.6.0",
     "react-router-dom": "^7.14.1",
     "socket.io-client": "^4.8.3",
-    "uuid": "^13.0.0"
+    "uuid": "^13.0.0",
+    "web-vitals": "^4.2.4"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.4",
@@ -40,6 +42,7 @@
     "jsdom": "^26.1.0",
     "typescript-eslint": "^8.58.2",
     "vite": "^7.3.2",
+    "vite-plugin-dts": "^4.5.4",
     "vitest": "^3.2.4"
   }
 }

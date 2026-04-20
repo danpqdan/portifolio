@@ -1,147 +1,79 @@
 # Sistema de Coleta Temporal em Tempo Real via WebSocket
 
-## Visão Geral
+## Visao Geral
 
-Este sistema foi refatorado para realizar coleta temporal em tempo real do tempo de permanência em tela, enviando dados via WebSocket em intervalos regulares de 5 segundos para cada página (home, about, projects).
+Este sistema realiza coleta temporal em tempo real do tempo de permanencia em tela e envia dados via WebSocket em intervalos regulares. A camada reutilizavel de analytics fica em `frontend/src/sdk`.
 
-## Principais Mudanças
+O SDK nao cria chaves predefinidas para paginas. Cada aplicacao consumidora informa seu proprio `pageId`, e os dados sao agrupados no mapa aberto `paginas`.
 
-### 1. HeatmapUtils.tsx
-- **Novos recursos de coleta temporal**:
-  - `configurarColecaoTempoReal()`: Configura callback para coleta em tempo real
-  - `iniciarColecaoTempoReal()`: Inicia coleta temporal automática
-  - `getTempoPermanciaSegundos()`: Retorna tempo preciso de permanência na página
-  - Controle de visibilidade da página para pausa/retomada da contagem
-  - Timestamps mais precisos considerando quando a página está oculta/visível
+## Componentes
 
-### 2. WebSocketService.tsx
-- **Envios em tempo real**:
-  - Intervalo padrão reduzido para 5 segundos
-  - `sendAnalyticsDataImmediate()`: Envio prioritário bypass da fila
-  - `configureRealtimeCollection()`: Configuração de coleta temporal
-  - `setRealtimeInterval()`: Configuração dinâmica do intervalo
+### `frontend/src/sdk/HeatmapUtils.tsx`
 
-### 3. useHeatmap.tsx
-- **Integração com coleta temporal**:
-  - Opção `realtimeCollection: true` por padrão
-  - Intervalo padrão: 5 segundos para tempo real
-  - `getTempoPermancia()`: Acesso ao tempo de permanência
-  - `setRealtimeInterval()`: Controle dinâmico do intervalo
+- `configurarColecaoTempoReal()`: configura callback para coleta em tempo real.
+- `iniciarColecaoTempoReal()`: inicia coleta temporal automatica.
+- `getTempoPermanciaSegundos()`: retorna tempo de permanencia na pagina.
+- Controla visibilidade da pagina para pausa e retomada da contagem.
+- Agrupa dados por `pageId` dentro de `paginas`.
 
-### 4. Classes de Página (Home, About, Projects)
-- **Coleta temporal automática**:
-  - Configuração automática de coleta a cada 5 segundos
-  - Envio prioritário no `parar()`
-  - Novos métodos: `getTempoPermancia()` e `setIntervaloColecaoTemporal()`
-  - Logs detalhados em modo DEBUG
+### `frontend/src/sdk/WebSocketService.tsx`
+
+- Conecta ao backend via Socket.IO.
+- Envia eventos `analytics_data`.
+- Mantem fila em memoria para dados pendentes.
+- `sendAnalyticsDataImmediate()`: envio prioritario ou imediato.
+- `setRealtimeInterval()`: configuracao dinamica do intervalo.
+
+### `frontend/src/sdk/index.ts`
+
+Ponto publico de exportacao do SDK. Futuro build minificado deve partir deste arquivo, sem incluir componentes, paginas ou estilos do portfolio.
+
+### `frontend/src/hooks/useHeatmap.tsx`
+
+Integra a aplicacao React atual com o SDK.
 
 ## Estrutura de Dados
 
-O sistema mantém a estrutura existente, mas com timestamps mais precisos:
-
 ```json
 {
-   "analytics_data": {
-      "id_registro": "bf87a70e-ea32-48ea-aea4-26be16ebc589",
-      "timestamp_inicial": 1759718338444,
-      "timestamp_final": 1759718414417,
-      "home": [
-         {
-            "visualizacoes": 1,
-            "segundos": 76, // Tempo mais preciso considerando visibilidade
-            "timestamp_inicial": 1759718338444,
-            "timestamp_final": 1759718414417,
-            "cliques": []
-         }
+  "analytics_data": {
+    "id_registro": "bf87a70e-ea32-48ea-aea4-26be16ebc589",
+    "timestamp_inicial": 1759718338444,
+    "timestamp_final": 1759718414417,
+    "paginas": {
+      "/": [
+        {
+          "visualizacoes": 1,
+          "segundos": 76,
+          "timestamp_inicial": 1759718338444,
+          "timestamp_final": 1759718414417,
+          "cliques": []
+        }
       ],
-      "about": [...],
-      "projects": [...]
-   }
+      "/about": [],
+      "/projects": []
+    }
+  }
 }
 ```
-
-## Intervalos de Envio
-
-### Tempo Real (Novo)
-- **Coleta temporal**: 5 segundos
-- **Método**: `sendAnalyticsDataImmediate(dados, false)`
-- **Prioridade**: Normal, usa fila
-
-### Envio Adicional
-- **Intervalo**: 15 segundos (reduzido de 30s)
-- **Método**: `sendAnalyticsData(dados)`
-- **Propósito**: Backup e dados não-temporais
-
-### Envio Prioritário
-- **Quando**: No `parar()` das classes
-- **Método**: `sendAnalyticsDataImmediate(dados, true)`
-- **Prioridade**: Alta, bypass da fila
 
 ## Como Usar
 
-### 1. Com useHeatmap Hook
 ```jsx
-const { getTempoPermancia, setRealtimeInterval } = useHeatmap('home', '#home_content', {
+const { getTempoPermancia, setRealtimeInterval } = useHeatmap('/', '#conteudo', {
   realtimeCollection: true,
-  realtimeInterval: 5000, // 5 segundos
+  realtimeInterval: 5000,
   debug: true
 });
 
-// Obter tempo atual de permanência
 const tempoSegundos = getTempoPermancia();
-
-// Alterar intervalo dinamicamente
-setRealtimeInterval(3000); // 3 segundos
+setRealtimeInterval(3000);
 ```
 
-### 2. Com Classes Diretas
-```jsx
-const classeHome = new ClasseHome(document.body);
-classeHome.iniciar();
+## Regras Para Evolucao
 
-// Obter tempo de permanência
-const tempo = classeHome.getTempoPermancia();
-
-// Configurar intervalo personalizado
-classeHome.setIntervaloColecaoTemporal(8000); // 8 segundos
-```
-
-## Logs de Debug
-
-Com `DEBUG_ENABLED = true`, o sistema exibe logs detalhados:
-
-```
-📊 [ClasseHome] Dados temporais enviados: {
-  timestamp: "2024-10-06T...",
-  tempoPermanciaSegundos: 15,
-  totalVisualizacoes: 1
-}
-
-🛑 [ClasseHome] Coleta parada e dados finais enviados
-```
-
-## Controle de Visibilidade
-
-O sistema pausa a contagem quando:
-- A aba perde o foco
-- A janela é minimizada
-- O usuário muda para outra aba
-
-E retoma automaticamente quando volta ao foco.
-
-## Benefícios
-
-1. **Tempo Real**: Dados temporais enviados a cada 5 segundos
-2. **Precisão**: Considera visibilidade da página
-3. **Flexibilidade**: Intervalos configuráveis dinamicamente
-4. **Confiabilidade**: Múltiplos níveis de envio (tempo real + backup)
-5. **Compatibilidade**: Mantém interface existente das classes
-
-## Próximos Passos
-
-Para testar o sistema:
-1. Abrir o navegador com DevTools
-2. Ativar `DEBUG_ENABLED = true` em `config.js`
-3. Navegar pelas páginas
-4. Observar logs no console
-5. Verificar envios via WebSocket no Network tab
+- Codigo reutilizavel de analytics deve ficar em `frontend/src/sdk`.
+- A UI do portfolio deve consumir o SDK por `frontend/src/sdk/index.ts`.
+- O SDK nao deve importar componentes, paginas, estilos ou classes do portfolio.
+- O SDK nao deve inferir paginas fixas.
+- O build distribuivel e minificado sera definido depois, usando `frontend/src/sdk/index.ts` como entrada.
