@@ -115,20 +115,44 @@ type "$env:USERPROFILE\.ssh\ark-teste-c.pub" | ssh -p 2222 deploy@127.0.0.1 "mkd
 ssh -i "$env:USERPROFILE\.ssh\ark-teste-c" -p 2222 deploy@127.0.0.1 "uname -a"
 ```
 
-## Passo 5 — Subir o repo na VM
+## Passo 5 — Subir o repo em `/opt/portifolio`
 
-Sem mount magico do Vagrant — voce escolhe:
+> **Importante**: o playbook usa `repo_dir: /opt/portifolio` por default. Se o repo ficar em outro lugar (ex.: `/tmp/portifolio`), o `analytics-stack` nao acha e varias tasks falham ou escrevem no lugar errado. Garanta que o destino final e `/opt/portifolio` antes do Passo 6.
 
-**Opcao A: SCP (mais simples)**
+Escolha uma das opcoes. **As duas precisam dos dois passos** (copiar + mover/chown).
+
+**Opcao A — SCP** (mais simples; do host Windows, PowerShell):
+
 ```powershell
+# 1. copiar repo pra /tmp/portifolio dentro da VM
 scp -i "$env:USERPROFILE\.ssh\ark-teste-c" -P 2222 -r D:\portifolio deploy@127.0.0.1:/tmp/
-ssh -i "$env:USERPROFILE\.ssh\ark-teste-c" -p 2222 deploy@127.0.0.1 "sudo mv /tmp/portifolio /opt/ && sudo chown -R deploy:deploy /opt/portifolio"
+
+# 2. mover para /opt/portifolio + ajustar dono (dois comandos separados pra nao travar no prompt de senha)
+ssh -i "$env:USERPROFILE\.ssh\ark-teste-c" -p 2222 deploy@127.0.0.1 "sudo mv /tmp/portifolio /opt/portifolio"
+ssh -i "$env:USERPROFILE\.ssh\ark-teste-c" -p 2222 deploy@127.0.0.1 "sudo chown -R deploy:deploy /opt/portifolio"
 ```
 
-**Opcao B: git clone via HTTPS** (mais real)
+**Opcao B — git clone via HTTPS** (mais real; dentro da VM ou via ssh):
+
 ```powershell
 ssh -i "$env:USERPROFILE\.ssh\ark-teste-c" -p 2222 deploy@127.0.0.1 "sudo apt-get install -y git && sudo git clone https://github.com/danpqdan/portifolio.git /opt/portifolio && sudo chown -R deploy:deploy /opt/portifolio"
 ```
+
+**Validacao rapida do Passo 5** (dentro da VM):
+
+```bash
+ls -ld /opt/portifolio           # deve existir com dono deploy:deploy
+ls /opt/portifolio/ark/ansible/  # deve listar playbook.yml e roles/
+```
+
+Se ver `/tmp/portifolio` mas nao `/opt/portifolio`, so correr:
+
+```bash
+sudo mv /tmp/portifolio /opt/portifolio
+sudo chown -R deploy:deploy /opt/portifolio
+```
+
+(Depois o proprio playbook ajusta o dono para `deploy:analytics` no role `analytics-stack`.)
 
 ## Passo 6 — Provisionar com Ansible
 
