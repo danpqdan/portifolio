@@ -40,12 +40,14 @@
 
 ## Ordem de deploy via Ansible
 
-1. `base` — pacotes, UFW, fail2ban, usuario deploy
-2. `docker` — engine + compose
+1. `base` — pacotes via `dnf`, firewalld, fail2ban, usuario deploy (grupo `wheel`)
+2. `docker` — engine + compose do repo oficial CentOS
 3. `analytics-stack` — clona repo, sobe backend/InfluxDB/frontend, aplica retencao
-4. `nginx` — proxy + certbot
+4. `nginx` — proxy + certbot (layout `/etc/nginx/conf.d/`)
 5. `monitoring` (opt-in) — Prometheus + Grafana
 6. `crowdsec` (opt-in) — agente + bouncer Nginx
+
+> OS alvo: **Rocky Linux 9** (RHEL 9). Para Debian/Ubuntu, ver branch `dev`.
 
 `ansible-playbook -i inventory.ini playbook.yml --tags analytics-stack` para re-deploy apenas da app.
 
@@ -53,7 +55,7 @@
 
 | porta | servico | exposicao |
 |---|---|---|
-| 22 | SSH | publica (com fail2ban) |
+| 22022 | SSH | publica (firewalld + fail2ban) |
 | 80 | Nginx | publica (redireciona para 443) |
 | 443 | Nginx | publica |
 | 5000 | Backend | **loopback** — so Nginx acessa |
@@ -72,7 +74,7 @@ Grupo compartilhado **`analytics` GID 10001** e a ponte entre host e containers 
 
 | Local | User | Grupo primario | Grupos extras |
 |---|---|---|---|
-| Host — operacao | `deploy` | `deploy` | `sudo`, `docker`, **`analytics`** |
+| Host — operacao | `deploy` | `deploy` | `wheel`, `docker`, **`analytics`** |
 | Container `backend` | `app` (UID 10001) | `analytics` (GID 10001) | — |
 | Container `frontend` | `node` (UID 1000) | `node` | **`analytics`** |
 | Container `influxdb` | `influxdb` (UID 1000, image) | `influxdb` | — |
@@ -80,7 +82,7 @@ Grupo compartilhado **`analytics` GID 10001** e a ponte entre host e containers 
 | Container `grafana` | `grafana` (UID 472) | `grafana` | — |
 | Container `crowdsec` | `root` | `root` | (precisa ler logs de varios paths) |
 | Host — nginx master | `root` | `root` | — |
-| Host — nginx workers | `www-data` | `www-data` | — |
+| Host — nginx workers | `nginx` | `nginx` | — |
 
 | Arquivo/diretorio | Dono | Modo | Obs |
 |---|---|---|---|
@@ -90,12 +92,12 @@ Grupo compartilhado **`analytics` GID 10001** e a ponte entre host e containers 
 | `/opt/portifolio/backend/security.log` | `deploy:analytics` | `0660` | grupo pode escrever — container backend (GID 10001) append ok |
 | `/opt/portifolio/ark/monitoring/.env` | `deploy:analytics` | `0640` | Grafana + InfluxDB token |
 | `/etc/nginx/snippets/ssl.conf` | `root:root` | `0644` | |
-| `/etc/nginx/sites-available/portifolio.conf` | `root:root` | `0644` | |
+| `/etc/nginx/conf.d/portifolio.conf` | `root:root` | `0644` | layout Rocky/RHEL |
 | `/etc/letsencrypt/live/<dominio>/privkey.pem` | `root:root` | `0600` | certbot controla |
 | `/var/run/docker.sock` | `root:docker` | `0660` | `deploy` entra pelo grupo `docker` |
-| `/var/log/nginx/portifolio.*.log` | `www-data:adm` | default | |
+| `/var/log/nginx/portifolio.*.log` | `nginx:nginx` | default | |
 
-Regra geral: **user dedicado** por superficie (app/node/deploy/www-data/root), **grupo `analytics`** como denominador comum onde processos precisam compartilhar arquivos atraves de bind-mount.
+Regra geral: **user dedicado** por superficie (app/node/deploy/nginx/root), **grupo `analytics`** como denominador comum onde processos precisam compartilhar arquivos atraves de bind-mount.
 
 ## Observabilidade em producao
 
