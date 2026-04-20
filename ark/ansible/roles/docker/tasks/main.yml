@@ -1,0 +1,33 @@
+---
+- name: Adicionar chave GPG do Docker
+  apt_key:
+    url: https://download.docker.com/linux/ubuntu/gpg
+    state: present
+
+- name: Adicionar repositorio do Docker
+  apt_repository:
+    repo: "deb [arch=amd64] https://download.docker.com/linux/ubuntu {{ ansible_distribution_release }} stable"
+    state: present
+
+- name: Instalar Docker Engine + Compose plugin
+  apt:
+    name:
+      - docker-ce
+      - docker-ce-cli
+      - containerd.io
+      - docker-buildx-plugin
+      - docker-compose-plugin
+    state: present
+    update_cache: true
+
+- name: Garantir servico docker ativo
+  service:
+    name: docker
+    state: started
+    enabled: true
+
+- name: Adicionar usuario de deploy ao grupo docker
+  user:
+    name: "{{ deploy_user }}"
+    groups: docker
+    append: true

@@ -1,0 +1,15 @@
+services:
+  alvo:
+    image: geerlingguy/docker-ubuntu2204-ansible:latest
+    container_name: ark-teste-a-alvo
+    entrypoint: ""
+    command: ["sleep", "infinity"]
+    restart: "no"
+    volumes:
+      - ../:/ark:ro
+    networks:
+      - ark-teste-a
+
+networks:
+  ark-teste-a:
+    driver: bridge

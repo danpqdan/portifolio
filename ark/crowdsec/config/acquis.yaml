@@ -1,0 +1,17 @@
+---
+# Logs do backend analytics (formato estruturado `evento=... session_id=...`)
+filenames:
+  - /var/log/backend/security.log
+labels:
+  type: portifolio-backend
+---
+# Logs do Nginx (acesso e erro)
+filenames:
+  - /var/log/nginx/portifolio.access.log
+labels:
+  type: nginx
+---
+filenames:
+  - /var/log/nginx/portifolio.error.log
+labels:
+  type: nginx-error
