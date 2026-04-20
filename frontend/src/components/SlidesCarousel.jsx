@@ -276,41 +276,20 @@ export default function SlidesCarousel({ slides }) {
 
     useEffect(() => {
         const slide = slides && slides[index];
-        // derive a stable page key: prefer slide.path or slide.id, normalize it
-        let pageKey = slide && (slide.path || slide.id || `slide_${index}`);
-        if (typeof pageKey === 'string') {
-            // remove query/hash
-            pageKey = pageKey.split(/[?#]/)[0];
-            // strip leading slash
-            if (pageKey.startsWith('/')) pageKey = pageKey.slice(1);
-            // if root (''), treat as 'home'
-            if (!pageKey) pageKey = 'home';
-            // if it's a path with segments, use the last segment (e.g. 'foo/bar' -> 'bar')
-            const parts = pageKey.split('/').filter(Boolean);
-            pageKey = parts.length ? parts[parts.length - 1] : 'home';
-        }
-        visiblePageRef.current = pageKey;
+        visiblePageRef.current = normalizarPageId(slide, index);
 
     }, [index, slides]);
 
-    // manage ClasseAbout lifecycle when page becomes 'about'
+    // manage page analytics lifecycle when the visible slide changes
     useEffect(() => {
-        // compute page synchronously from slides[index] to avoid relying on async visiblePageRef
         const slide = slides && slides[index];
-        let page = slide && (slide.path || slide.id || `slide_${index}`);
-        if (typeof page === 'string') {
-            page = page.split(/[?#]/)[0];
-            if (page.startsWith('/')) page = page.slice(1);
-            if (!page) page = 'home';
-            const parts = page.split('/').filter(Boolean);
-            page = parts.length ? parts[parts.length - 1] : 'home';
-        }
+        const page = normalizarPageId(slide, index);
         visiblePageRef.current = page;
         // find the card-carousel node for the current slide from the reported map
         const cardNode = cardNodesRef.current.get(index) || null;
 
-        // manage Home/About/Projects classes based on page key
-        if (page === 'home') {
+        // manage page-specific controllers based on route path
+        if (page === '/') {
             homeRootRef.current = cardNode || null;
 
             if (homeRootRef.current) {
@@ -339,7 +318,7 @@ export default function SlidesCarousel({ slides }) {
             }
         }
 
-        if (page === 'about') {
+        if (page === '/about') {
             // only start when we have a real cardNode to attach to
             aboutRootRef.current = cardNode || null;
             if (aboutRootRef.current) {
@@ -391,7 +370,7 @@ export default function SlidesCarousel({ slides }) {
             }
         }
 
-        if (page === 'projects') {
+        if (page === '/projects') {
             projectsRootRef.current = cardNode || null;
             if (projectsRootRef.current) {
                 if (!classeProjectsRef.current) {
@@ -534,6 +513,16 @@ export default function SlidesCarousel({ slides }) {
             </div>
         </div>
     );
+}
+
+function normalizarPageId(slide, index) {
+    const rawPageId = slide && (slide.path || slide.id || `/slide-${index}`);
+    if (typeof rawPageId !== 'string') {
+        return `/slide-${index}`;
+    }
+
+    const semQuery = rawPageId.split(/[?#]/)[0] || '/';
+    return semQuery.startsWith('/') ? semQuery : `/${semQuery}`;
 }
 
 function SlideItem({ slide, idx, goPrev, goNext, onNodeReady }) {

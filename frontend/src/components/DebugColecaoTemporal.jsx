@@ -1,13 +1,13 @@
 import { useState, useEffect } from 'react';
 import { useHeatmap } from '../hooks/useHeatmap.tsx';
-import WebSocketService from '../utils/WebSocketService.tsx';
+import { WebSocketService } from '../sdk';
 import '../styles/debug.css';
 
 /**
  * Componente de debug para monitorar a coleta temporal em tempo real
  * Adicione este componente a qualquer página para visualizar os dados sendo coletados
  */
-export default function DebugColecaoTemporal({ paginaTipo = 'home' }) {
+export default function DebugColecaoTemporal({ paginaTipo = '/' }) {
     const [debugData, setDebugData] = useState({
         tempoPermancia: 0,
         websocketStatus: { isConnected: false, pendingData: 0 },
