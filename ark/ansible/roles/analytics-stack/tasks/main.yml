@@ -61,7 +61,7 @@
   uri:
     url: http://127.0.0.1:5000/health/app
     status_code: 200
-  retries: 20
+  retries: 40
   delay: 3
   register: backend_ok
   until: backend_ok.status == 200
