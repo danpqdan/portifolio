@@ -6,7 +6,7 @@ type: leaky
 name: portifolio/admin-auth-abuse
 description: "Tentativa repetida de token admin invalido"
 filter: |
-  evt.Parsed.request ~= "/admin/"
+  evt.Parsed.request startsWith "/admin/"
   && evt.Parsed.verb in ["GET", "DELETE"]
   && evt.Meta.http_status == "401"
 groupby: evt.Meta.source_ip
