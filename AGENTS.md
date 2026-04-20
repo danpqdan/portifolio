@@ -45,6 +45,29 @@ Ambiente local containerizado:
 docker compose up --build
 ```
 
+Quando estiver usando WSL no Windows, inicie os containers a partir da distro Ubuntu apontando para o projeto montado em `/mnt/d/portifolio`:
+
+```bash
+wsl -d Ubuntu -- bash -lc "cd /mnt/d/portifolio && docker compose up --build -d"
+```
+
+Se o usuário do WSL ainda não tiver permissão no socket do Docker (`permission denied while trying to connect to the docker API at unix:///var/run/docker.sock`), execute temporariamente como `root`:
+
+```bash
+wsl -d Ubuntu -u root -- bash -lc "cd /mnt/d/portifolio && docker compose up --build -d"
+```
+
+Para verificar o ambiente de teste:
+
+```bash
+wsl -d Ubuntu -u root -- bash -lc "cd /mnt/d/portifolio && docker compose ps"
+curl -I http://localhost:3000
+curl -I http://localhost:5000
+curl -I http://localhost:8086/health
+```
+
+Os serviços esperados são `frontend` em `http://localhost:3000`, `backend` em `http://localhost:5000` e InfluxDB em `http://localhost:8086`.
+
 ## Padrões de Código
 
 Use variáveis, funções, classes de domínio e nomes de arquivos novos em português pt-BR sempre que fizer sentido para o negócio. Preserve nomes técnicos exigidos por bibliotecas, APIs públicas ou padrões de framework. Use 4 espaços em Python e 2 espaços no frontend. Componentes React usam PascalCase; hooks usam `useNome`; módulos Python usam `snake_case`. Documentos devem ser gravados em UTF-8.
