@@ -28,25 +28,13 @@ services:
     depends_on:
       influxdb:
         condition: service_healthy
+    # Backend so e acessivel via Nginx na host. Nunca 0.0.0.0:5000.
     ports:
-      - "5000:5000"
-    environment:
-      FLASK_ENV: development
-      FLASK_APP: app.py
-      SECRET_KEY: ${SECRET_KEY:?defina em .env}
-      CORS_ORIGINS: https://dsplayground.com.br
-      INFLUXDB_ENABLED: "true"
-      INFLUXDB_URL: http://influxdb:8086
-      INFLUXDB_TOKEN: ${INFLUXDB_TOKEN:?defina em .env}
-      ADMIN_API_TOKEN: ${ADMIN_API_TOKEN:?defina em .env}
-      INFLUXDB_ORG: zen
-      INFLUXDB_BUCKET: portifolio_dev
-      TEMPORAL_REALTIME_INTERVAL: "5000"
-      TEMPORAL_REGULAR_INTERVAL: "15000"
-      TEMPORAL_CACHE_SIZE: "1000"
-      TEMPORAL_CLEANUP_INTERVAL: "300"
-      HOST: 0.0.0.0
-      PORT: "5000"
+      - "127.0.0.1:5000:5000"
+    # Fonte unica de verdade: .env gerado pelo Ansible
+    # (ark/ansible/roles/analytics-stack/templates/backend.env.j2).
+    env_file:
+      - ./backend/.env
     volumes:
       - ./backend:/app
 
@@ -56,8 +44,9 @@ services:
     container_name: portifolio-frontend
     depends_on:
       - backend
+    # Frontend so e acessivel via Nginx na host (proxy para dsplayground.com.br).
     ports:
-      - "3000:3000"
+      - "127.0.0.1:3000:3000"
     environment:
       VITE_API_URL: https://api.dsplayground.com.br
       VITE_WEBSOCKET_URL: https://api.dsplayground.com.br
