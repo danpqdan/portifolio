@@ -25,6 +25,13 @@ influxdb_retencao_dias: 90
 # === Admin LGPD ===
 admin_api_token: ""  # gerar com `python -c "import secrets; print(secrets.token_urlsafe(32))"`
 
+# === Tunables do backend (analytics temporal) ===
+# Opcionais: o template aplica defaults via jinja `default()` se nao definidos.
+# temporal_realtime_interval: "5000"    # ms entre pushes de metricas em tempo real
+# temporal_regular_interval: "15000"    # ms entre coletas regulares
+# temporal_cache_size: "1000"           # qtde de sessoes em cache
+# temporal_cleanup_interval: "300"      # segundos entre limpezas de cache
+
 # === Monitoring ===
 grafana_admin_user: admin
 grafana_admin_password: trocar-em-producao
