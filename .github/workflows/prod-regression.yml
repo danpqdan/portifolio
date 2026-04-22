@@ -1,0 +1,66 @@
+name: Prod Security Regression
+
+# Gate contra repeticao do incidente 2026-04-21: backend rodou como Werkzeug
+# dev server com debugger ativo e assets do debugger vazaram publicamente via
+# nginx. Esses checks falham se a regressao voltar.
+
+on:
+  schedule:
+    - cron: '17 3 * * *'  # 03:17 UTC diario
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - docker-compose.yml
+      - ark/ansible/**
+      - backend/app.py
+
+permissions:
+  contents: read
+
+jobs:
+  debugger-leak:
+    name: Werkzeug debugger nao vazou
+    runs-on: ubuntu-latest
+    env:
+      HOST: https://api.dsplayground.com.br
+    steps:
+      - name: debugger.js publico → deve ser !=200
+        run: |
+          code=$(curl -sk -o /dev/null -w '%{http_code}' "${HOST}/?__debugger__=yes&cmd=resource&f=debugger.js")
+          echo "HTTP $code"
+          if [ "$code" = "200" ]; then
+            echo "::error::REGRESSAO: Werkzeug debugger.js servido publicamente. FLASK_ENV provavelmente voltou para development."
+            exit 1
+          fi
+
+      - name: /console publico → deve ser !=200
+        run: |
+          code=$(curl -sk -o /dev/null -w '%{http_code}' "${HOST}/console")
+          echo "HTTP $code"
+          if [ "$code" = "200" ]; then
+            echo "::error::REGRESSAO: /console publicamente acessivel."
+            exit 1
+          fi
+
+      - name: Health endpoint responde 200
+        run: |
+          code=$(curl -sk -o /dev/null -w '%{http_code}' "${HOST}/api/health/app")
+          echo "HTTP $code"
+          if [ "$code" != "200" ]; then
+            echo "::error::Backend nao respondeu saudavel em /api/health/app (HTTP $code)."
+            exit 1
+          fi
+
+      - name: Backend responde em modo producao (sem prefixo antigo)
+        run: |
+          # Em development o blueprint nao tem url_prefix, entao /health/app
+          # responderia 200. Em producao o prefixo vira /api, e essa rota
+          # retorna 404. Se aqui der 200 e porque FLASK_ENV=development
+          # voltou a rodar em producao.
+          code=$(curl -sk -o /dev/null -w '%{http_code}' "${HOST}/health/app")
+          echo "HTTP $code"
+          if [ "$code" = "200" ]; then
+            echo "::error::REGRESSAO: /health/app responde sem prefixo /api, indicando FLASK_ENV=development em producao."
+            exit 1
+          fi
