@@ -14,11 +14,13 @@ export default defineConfig(({ mode }) => {
   // Espaco reservado para variaveis carregadas de fonte customizada.
   const customEnv = {};
 
+  // Prioridade: customEnv > process.env (build args do Docker passam por aqui) >
+  // arquivos .env carregados pelo Vite > defaults de dev.
   const safeEnv = {
     NODE_ENV: mode,
-    VITE_API_URL: customEnv.VITE_API_URL || env.VITE_API_URL || 'http://localhost:5000',
-    VITE_WEBSOCKET_URL: customEnv.VITE_WEBSOCKET_URL || env.VITE_WEBSOCKET_URL || 'http://localhost:5000',
-    VITE_DEBUG: customEnv.VITE_DEBUG || env.VITE_DEBUG || 'false'
+    VITE_API_URL: customEnv.VITE_API_URL || process.env.VITE_API_URL || env.VITE_API_URL || 'http://localhost:5000',
+    VITE_WEBSOCKET_URL: customEnv.VITE_WEBSOCKET_URL || process.env.VITE_WEBSOCKET_URL || env.VITE_WEBSOCKET_URL || 'http://localhost:5000',
+    VITE_DEBUG: customEnv.VITE_DEBUG || process.env.VITE_DEBUG || env.VITE_DEBUG || 'false'
   };
 
   return {

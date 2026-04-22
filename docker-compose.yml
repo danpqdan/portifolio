@@ -62,25 +62,23 @@ services:
   frontend:
     build:
       context: ./frontend
+      args:
+        # URLs embutidas no bundle em build time. Em dev local, defaults do
+        # Dockerfile (http://localhost:5000) valem se as vars nao estiverem no .env.
+        VITE_API_URL: ${VITE_API_URL:-http://localhost:5000}
+        VITE_WEBSOCKET_URL: ${VITE_WEBSOCKET_URL:-http://localhost:5000}
+        VITE_DEBUG: ${VITE_DEBUG:-false}
     container_name: portifolio-frontend
     depends_on:
       - backend
-    # Frontend so e acessivel via Nginx na host (proxy para dsplayground.com.br).
+    # Frontend servido por nginx:alpine no container (porta 80 interna).
+    # Nginx do host faz proxy para 127.0.0.1:3000 → dsplayground.com.br.
     ports:
-      - "127.0.0.1:3000:3000"
-    environment:
-      VITE_API_URL: https://api.dsplayground.com.br
-      VITE_WEBSOCKET_URL: https://api.dsplayground.com.br
-      VITE_DEBUG: "true"
-      CHOKIDAR_USEPOLLING: "true"
-    volumes:
-      - ./frontend:/app
-      - frontend_node_modules:/app/node_modules
-    command: npm run dev -- --host 0.0.0.0
+      - "127.0.0.1:3000:80"
+    restart: unless-stopped
 
 volumes:
   influxdb_data:
   influxdb_config:
-  frontend_node_modules:
   postgres_data:
   backend_keys:
