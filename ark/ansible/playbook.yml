@@ -35,9 +35,9 @@
       when: habilitar_crowdsec | default(true)
 
   post_tasks:
-    - name: Validar que o backend responde em /health/app via loopback
+    - name: Validar que o backend responde em /api/health/app via loopback
       uri:
-        url: http://127.0.0.1:5000/health/app
+        url: http://127.0.0.1:5000/api/health/app
         status_code: 200
       retries: 10
       delay: 5
