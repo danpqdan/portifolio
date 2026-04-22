@@ -65,6 +65,22 @@ jobs:
                exit 1 ;;
           esac
 
+      - name: Probe TCP — alcance do host/porta a partir do runner
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_PORT: ${{ secrets.DEPLOY_PORT }}
+        run: |
+          # Isola se o problema e DNS, TCP upstream, ou auth SSH. Usa /dev/tcp
+          # pra nao depender de nc instalado. Timeout de 10s e conservador.
+          echo "Probe DNS+TCP em ***:***"
+          if timeout 10 bash -c "cat < /dev/null > /dev/tcp/${DEPLOY_HOST}/${DEPLOY_PORT}" 2>/dev/null; then
+            echo "TCP connect OK — runner alcanca o host na porta. Problema (se houver) e de auth SSH."
+          else
+            rc=$?
+            echo "::error::TCP connect falhou (rc=$rc). Possiveis causas: (1) firewall upstream do provedor bloqueando portas nao-padrao para IPs fora do datacenter; (2) valor do DEPLOY_HOST com typo; (3) porta errada no DEPLOY_PORT; (4) sshd parou na VPS. Teste do seu laptop: ssh -p <PORT> <USER>@<HOST>. Se funcionar la e falhar aqui, confirme com o provedor (HostGator) se IPs externos em portas custom sao bloqueados."
+            exit 1
+          fi
+
       - name: Deploy via SSH
         uses: appleboy/ssh-action@v1.2.0
         with:
