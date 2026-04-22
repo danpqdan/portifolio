@@ -1,0 +1,97 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  compose-config:
+    name: docker-compose.yml valido
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Resolver variaveis dummy e validar
+        run: |
+          # compose usa ${VAR} para segredos; CI so precisa garantir que o YAML
+          # e a estrutura sao validos, nao os valores reais.
+          cat > .env <<'EOF'
+          INFLUXDB_INIT_PASSWORD=ci-dummy
+          INFLUXDB_TOKEN=ci-dummy
+          SECRET_KEY=ci-dummy
+          ADMIN_API_TOKEN=ci-dummy
+          EOF
+          mkdir -p backend
+          : > backend/.env
+          docker compose config --quiet
+
+  ansible-syntax:
+    name: Ansible playbook syntax
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Instalar ansible
+        run: pip install 'ansible-core>=2.16' 'ansible>=9'
+      - name: Copiar group_vars de exemplo (o real e vaulted/gitignored)
+        working-directory: ark/ansible
+        run: cp group_vars/all.example.yml group_vars/all.yml
+      - name: Syntax check do playbook
+        working-directory: ark/ansible
+        run: ansible-playbook --syntax-check -i inventory.example.ini playbook.yml
+
+  frontend:
+    name: Frontend (lint + test + build)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run test
+      - run: npm run build
+
+  backend:
+    name: Backend (lint + test)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    env:
+      FLASK_ENV: development
+      INFLUXDB_ENABLED: "false"
+      SECRET_KEY: ci-test-key-nao-usar-em-producao
+      ADMIN_API_TOKEN: ci-test-token
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Normalizar encoding do requirements.txt (UTF-16 BOM do Windows)
+        run: |
+          if file requirements.txt | grep -qi 'UTF-16'; then
+            iconv -f UTF-16 -t UTF-8 requirements.txt > requirements.utf8.txt
+            mv requirements.utf8.txt requirements.txt
+            echo "requirements.txt convertido UTF-16 → UTF-8"
+          fi
+      - name: Instalar dependencias
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest ruff
+      - name: Ruff (lint — nao bloqueante ate configurar regras)
+        run: ruff check . || true
+      - name: Pytest (tests sem dependencias externas)
+        run: pytest -x --tb=short
