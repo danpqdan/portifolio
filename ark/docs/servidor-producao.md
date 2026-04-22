@@ -24,8 +24,9 @@
                   v            v             v                  v
            +-------------+  +-------+   +---------+        +-----------+
            |  Frontend   |  |Backend|   | Grafana |        | InfluxDB  |
-           | Vite :3000  |  | :5000 |   |  :3001  |        |  :8086    |
-           +-------------+  +---+---+   +----+----+        +-----+-----+
+           | nginx:80    |  | :5000 |   |  :3001  |        |  :8086    |
+           | (dist Vite) |  +---+---+   +----+----+        +-----+-----+
+           +-------------+      |            |                   |
                                 |            |                   |
                                 v            v                   |
                           +----------+    Prometheus <-----------+
@@ -67,7 +68,7 @@
 | 80 | Nginx | publica (redireciona para 443) |
 | 443 | Nginx | publica |
 | 5000 | Backend | **loopback** (`127.0.0.1:5000`) — Nginx publica em `api.dsplayground.com.br` |
-| 3000 | Frontend (Vite) | **loopback** (`127.0.0.1:3000`) — Nginx publica no apex `dsplayground.com.br` |
+| 3000 | Frontend (nginx:alpine servindo bundle Vite) | **loopback** (`127.0.0.1:3000→:80`) — Nginx do host publica no apex `dsplayground.com.br` |
 | 8086 | InfluxDB | **loopback** (`127.0.0.1:8086`) — rede docker + nginx em `influx.dsplayground.com.br` |
 | 3001 | Grafana | loopback (`127.0.0.1:3001`) — atras de nginx em `grafana.dsplayground.com.br` |
 | 9090 | Prometheus | **TODO** ainda `0.0.0.0:9090`, deve virar loopback |
@@ -94,16 +95,20 @@ Dois arquivos de vhost em `/etc/nginx/conf.d/`:
 
 | Arquivo | Hostnames | Upstream |
 |---|---|---|
-| `portifolio.conf` | `dsplayground.com.br` | `127.0.0.1:3000` (frontend Vite) |
+| `portifolio.conf` | `dsplayground.com.br` | `127.0.0.1:3000` (frontend — nginx no container servindo dist/) |
 |  | `api.dsplayground.com.br` | `127.0.0.1:5000` (backend Flask) |
 | `portifolio.monitoring.conf` | `grafana.dsplayground.com.br` | `127.0.0.1:3001` |
 |  | `influx.dsplayground.com.br` | `127.0.0.1:8086` |
 
 Socket.IO: o backend monta o blueprint com `url_prefix='/api'`, entao o path real e `/api/socket.io/` — NAO o default `/socket.io/`. O cliente `socket.io-client` tem `path: '/api/socket.io/'` hardcoded em `frontend/src/sdk/WebSocketService.tsx`. Requests WS da forma `wss://api.dsplayground.com.br/api/socket.io/` passam pelo `location /` do vhost da api (upgrade habilitado) e chegam no backend.
 
-Vite dev server aceita so hosts listados em `server.allowedHosts` de `frontend/vite.config.js` (protecao contra DNS rebinding). Lista atual: `localhost`, `dsplayground.com.br`, `api.dsplayground.com.br`.
+Frontend em producao e um bundle estatico (`vite build`) servido por `nginx:alpine` dentro do container `portifolio-frontend` — nao ha dev server exposto. SPA fallback em `docker-nginx.conf` serve `index.html` para qualquer rota nao-estatica. URLs da API sao embutidas no bundle em build time via build args `VITE_API_URL` e `VITE_WEBSOCKET_URL`, vindos do `.env` do compose (gerado pelo Ansible) — alterar esses valores exige rebuild da imagem.
 
 Configuracao do backend: variaveis de runtime moram em `backend/.env` (renderizado por `ark/ansible/roles/analytics-stack/templates/backend.env.j2`). O `docker-compose.yml` consome via `env_file:`, nao ha `environment:` inline. Nunca reintroduzir `FLASK_ENV` ou bucket no bloco `environment:` do compose — regressao direta do incidente dev-em-prod de 2026-04-21.
+
+## Volume `portifolio_backend_keys` (chaves RSA do SDK JWT)
+
+O backend roda como **UID 10001** (ver Dockerfile) e escreve/le `/app/data/keys/sdk_jwt_{private,public}.pem`. Docker cria volumes novos com `root:root`, entao o backend recebe `PermissionError` na primeira geracao das chaves. A role `analytics-stack` garante o chown correto **antes** do `docker compose up` rodando `docker run --rm -v portifolio_backend_keys:/mnt alpine chown -R 10001:10001 /mnt`. Task idempotente — se o volume for recriado (ex.: `down -v`), proximo `ansible-apply` restaura.
 
 ## Segredos
 
@@ -118,7 +123,7 @@ Grupo compartilhado **`analytics` GID 10001** e a ponte entre host e containers 
 |---|---|---|---|
 | Host — operacao | `deploy` | `deploy` | `wheel`, `docker`, **`analytics`** |
 | Container `backend` | `app` (UID 10001) | `analytics` (GID 10001) | — |
-| Container `frontend` | `node` (UID 1000) | `node` | **`analytics`** |
+| Container `frontend` | `nginx` (UID 101, image nginx:alpine) | `nginx` | — |
 | Container `influxdb` | `influxdb` (UID 1000, image) | `influxdb` | — |
 | Container `prometheus` / `node-exporter` | `nobody` | `nogroup` | — |
 | Container `grafana` | `grafana` (UID 472) | `grafana` | — |
