@@ -51,6 +51,22 @@ class Config:
     HOST = os.environ.get("HOST", "127.0.0.1")
     PORT = int(os.environ.get("PORT", "5000"))
 
+    # Autenticacao multi-tenant do SDK
+    JWT_AUDIENCE = os.environ.get("JWT_AUDIENCE", "api.dsplayground.local")
+    JWT_KEYS_DIR = os.environ.get("JWT_KEYS_DIR", str(Path(__file__).resolve().parent / "data" / "keys"))
+    # URL do banco relacional de tenants.
+    #   Producao/compose: `postgresql://user:pass@postgres:5432/portifolio_auth`
+    #   Dev/testes sem container: `sqlite:///...` ou path absoluto para arquivo .db
+    TENANTS_DATABASE_URL = os.environ.get(
+        "TENANTS_DATABASE_URL",
+        "sqlite:///" + str(Path(__file__).resolve().parent / "data" / "tenants.db"),
+    )
+    SDK_TOKEN_TTL_SECONDS = int(os.environ.get("SDK_TOKEN_TTL_SECONDS", "300"))
+    SDK_TOKEN_RATE_LIMIT_PER_KEY = int(os.environ.get("SDK_TOKEN_RATE_LIMIT_PER_KEY", "5"))
+    # Se True, conexoes Socket.IO sem sdk_jwt valido sao rejeitadas.
+    # Durante a migracao (SDK ainda sem suporte a token) deixar False.
+    SDK_AUTH_REQUIRED = obter_bool("SDK_AUTH_REQUIRED", "false")
+
 
 class DevelopmentConfig(Config):
     """Configuracao local de desenvolvimento."""
