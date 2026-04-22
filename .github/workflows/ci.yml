@@ -64,6 +64,26 @@ jobs:
       - run: npm run test
       - run: npm run build
 
+  frontend-docker:
+    name: Frontend (docker build multi-stage)
+    runs-on: ubuntu-latest
+    # Gate contra regressao do Dockerfile: o fix "vite: not found" (NODE_ENV=production
+    # antes do npm ci pulava devDependencies) so quebrou na hora do docker compose up
+    # em producao. Rodar `docker build` aqui pega esse tipo de falha no PR.
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - name: Build da imagem frontend (args dummy)
+        uses: docker/build-push-action@v6
+        with:
+          context: ./frontend
+          push: false
+          load: false
+          build-args: |
+            VITE_API_URL=http://ci-dummy:5000
+            VITE_WEBSOCKET_URL=http://ci-dummy:5000
+            VITE_DEBUG=false
+
   backend:
     name: Backend (lint + test)
     runs-on: ubuntu-latest
