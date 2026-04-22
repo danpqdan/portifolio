@@ -58,6 +58,24 @@
     modification_time: preserve
     access_time: preserve
 
+- name: Garantir volume backend_keys existente (chaves RSA do sdk_jwt)
+  community.docker.docker_volume:
+    name: portifolio_backend_keys
+    state: present
+  become_user: "{{ deploy_user }}"
+
+- name: Chown do volume backend_keys para UID do container backend (10001:10001)
+  # Previne PermissionError ao gerar sdk_jwt_private.pem: docker cria o volume
+  # com root:root, mas o backend roda como UID 10001 (Dockerfile). Se o volume
+  # for recriado (down -v), esta task reaplica o owner.
+  command: >
+    docker run --rm
+    -v portifolio_backend_keys:/mnt
+    alpine:3.19
+    chown -R 10001:10001 /mnt
+  become_user: "{{ deploy_user }}"
+  changed_when: false
+
 - name: Subir stack com docker compose
   community.docker.docker_compose_v2:
     project_src: "{{ repo_dir }}"
