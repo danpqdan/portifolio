@@ -40,6 +40,14 @@
     group: analytics
     mode: "0640"
 
+- name: Gerar .env do compose (POSTGRES_PASSWORD, INFLUXDB_*)
+  template:
+    src: compose.env.j2
+    dest: "{{ repo_dir }}/.env"
+    owner: "{{ deploy_user }}"
+    group: analytics
+    mode: "0640"
+
 - name: Garantir security.log pertence a analytics (0660 permite container escrever via GID)
   file:
     path: "{{ repo_dir }}/backend/security.log"

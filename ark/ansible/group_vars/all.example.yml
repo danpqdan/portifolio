@@ -17,10 +17,25 @@ cors_origins:
 # === InfluxDB ===
 influxdb_url: http://influxdb:8086
 influxdb_token: trocar-token-real
+influxdb_init_password: trocar-em-producao   # senha admin do InfluxDB (root compose .env)
 influxdb_org: zen
 influxdb_bucket: portifolio_prod
 influxdb_enabled: true
 influxdb_retencao_dias: 90
+
+# === Postgres (banco relacional de tenants do SDK) ===
+postgres_db: portifolio_auth
+postgres_user: portifolio
+# Gerar com: python -c "import secrets; print(secrets.token_urlsafe(32))"
+# Minimo 16 chars. Ansible falha em producao se ficar vazio ou com exemplo.
+postgres_password: trocar-em-producao
+
+# === JWT do SDK (multi-tenant) ===
+jwt_audience: api.dsplayground.com.br
+sdk_token_ttl_seconds: 300
+sdk_token_rate_limit_per_key: 5
+# Quando o SDK em producao ja envia publishable_key, virar true para bloquear sockets nao-autenticados.
+sdk_auth_required: false
 
 # === Admin LGPD ===
 admin_api_token: ""  # gerar com `python -c "import secrets; print(secrets.token_urlsafe(32))"`

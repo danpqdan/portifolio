@@ -39,3 +39,8 @@ backend/.env.*
 
 # Compose secrets (raiz)
 /.env
+
+# Dados runtime do backend (auth multi-tenant)
+backend/data/keys/
+backend/data/tenants.db
+backend/data/tenants.db-*
