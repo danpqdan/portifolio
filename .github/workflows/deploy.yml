@@ -33,6 +33,24 @@ jobs:
       (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success')
 
     steps:
+      - name: Pre-flight — secrets obrigatorios presentes
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_PORT: ${{ secrets.DEPLOY_PORT }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+        run: |
+          missing=()
+          [ -z "${DEPLOY_HOST:-}" ]    && missing+=("DEPLOY_HOST")
+          [ -z "${DEPLOY_PORT:-}" ]    && missing+=("DEPLOY_PORT")
+          [ -z "${DEPLOY_USER:-}" ]    && missing+=("DEPLOY_USER")
+          [ -z "${DEPLOY_SSH_KEY:-}" ] && missing+=("DEPLOY_SSH_KEY")
+          if [ ${#missing[@]} -gt 0 ]; then
+            echo "::error::Secrets faltando: ${missing[*]}. Criar em Settings → Secrets and variables → Actions (Repository secrets) ou no Environment 'production'."
+            exit 1
+          fi
+          echo "Secrets OK (host=${DEPLOY_HOST}, port=${DEPLOY_PORT}, user=${DEPLOY_USER}, ssh_key_len=${#DEPLOY_SSH_KEY})"
+
       - name: Deploy via SSH
         uses: appleboy/ssh-action@v1.2.0
         with:
