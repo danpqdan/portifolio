@@ -1,9 +1,11 @@
 name: Deploy Production
 
-# CD automatico: apos CI verde em main, conecta via SSH na VPS,
-# faz git pull e rebuild dos containers de app. Mudancas de
-# infra (roles Ansible, nginx do host, monitoring) continuam via
-# `make ansible-apply` manual.
+# CD automatico via self-hosted runner na VPS (firewall upstream da HostGator
+# bloqueia SSH externo em portas non-standard, entao o runner local puxa jobs
+# via HTTPS outbound). O job roda como o usuario do runner (deploy).
+#
+# Mudancas de infra (roles Ansible, nginx do host, monitoring) continuam
+# exigindo `make -f ark/Makefile ansible-apply` manual.
 
 on:
   workflow_run:
@@ -16,16 +18,15 @@ permissions:
   contents: read
 
 concurrency:
-  # Serializa deploys — nunca dois correndo ao mesmo tempo; uma fila
-  # ordenada e mais seguro que cancelar meio caminho (evita parar um
-  # rebuild e deixar stack em estado intermediario).
+  # Serializa deploys — uma fila ordenada e mais seguro que cancelar meio
+  # caminho (evita parar um rebuild e deixar stack em estado intermediario).
   group: deploy-production
   cancel-in-progress: false
 
 jobs:
   deploy:
     name: Pull + rebuild + health check
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, production-vps]
     environment: production
     # Dispara se chamou manualmente ou se o CI que disparou terminou verde.
     if: >
@@ -33,108 +34,54 @@ jobs:
       (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success')
 
     steps:
-      - name: Pre-flight — secrets obrigatorios presentes
-        env:
-          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
-          DEPLOY_PORT: ${{ secrets.DEPLOY_PORT }}
-          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
-          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+      - name: Pull + rebuild + health
+        # Usa /opt/portifolio diretamente (repo clonado pelo Ansible, owned
+        # por deploy:analytics). Nao usamos actions/checkout porque ele grava
+        # no workspace do runner, nao no repo de producao.
         run: |
-          missing=()
-          [ -z "${DEPLOY_HOST:-}" ]    && missing+=("DEPLOY_HOST")
-          [ -z "${DEPLOY_PORT:-}" ]    && missing+=("DEPLOY_PORT")
-          [ -z "${DEPLOY_USER:-}" ]    && missing+=("DEPLOY_USER")
-          [ -z "${DEPLOY_SSH_KEY:-}" ] && missing+=("DEPLOY_SSH_KEY")
-          if [ ${#missing[@]} -gt 0 ]; then
-            echo "::error::Secrets faltando: ${missing[*]}. Criar em Settings → Secrets and variables → Actions (Repository secrets) ou no Environment 'production'."
+          set -euo pipefail
+          cd /opt/portifolio
+
+          echo "==> git state antes"
+          git rev-parse --short HEAD
+
+          echo "==> fetch + reset para origin/main"
+          git fetch --prune origin main
+          git reset --hard origin/main
+
+          echo "==> git state apos"
+          git rev-parse --short HEAD
+          git log --oneline -1
+
+          echo "==> rebuild + recreate containers de app (backend + frontend)"
+          # --no-deps mantem influxdb/postgres rodando — so toca o que pode
+          # ter mudado no codigo de app.
+          docker compose up -d --build --force-recreate --no-deps backend frontend
+
+          echo "==> aguardando health do backend (timeout ~60s)"
+          ok=0
+          for i in $(seq 1 20); do
+            if curl -sf http://127.0.0.1:5000/api/health/app >/dev/null 2>&1; then
+              ok=1
+              break
+            fi
+            sleep 3
+          done
+
+          if [ "$ok" -ne 1 ]; then
+            echo "::error::Backend nao respondeu saudavel em /api/health/app apos deploy"
+            docker compose logs --tail 100 backend
             exit 1
           fi
-          # Reporta o comprimento de cada um (GitHub mascara o valor, mas len
-          # revelaria truncagem/whitespace ou confusao com env variables).
-          echo "Secrets OK — comprimentos: host=${#DEPLOY_HOST}, port=${#DEPLOY_PORT}, user=${#DEPLOY_USER}, ssh_key=${#DEPLOY_SSH_KEY}"
-          # Checa formato da porta (deve ser numerico, sem espacos).
-          case "${DEPLOY_PORT}" in
-            ''|*[!0-9]*)
-              echo "::error::DEPLOY_PORT nao e um inteiro puro (tem whitespace ou nao-digitos). Valor mascarado; cheque se colou com quebra de linha acidental."
-              exit 1 ;;
-          esac
-          # Chave SSH tem que comecar com o header PEM; -N '' gera 'OPENSSH PRIVATE KEY'.
-          case "${DEPLOY_SSH_KEY}" in
-            "-----BEGIN "*" PRIVATE KEY-----"*) : ;;
-            *) echo "::error::DEPLOY_SSH_KEY nao parece ser uma chave PEM (nao comeca com '-----BEGIN ... PRIVATE KEY-----'). Colou o conteudo inteiro do arquivo?"
-               exit 1 ;;
-          esac
+          echo "==> health do backend: OK"
 
-      - name: Probe TCP — alcance do host/porta a partir do runner
-        env:
-          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
-          DEPLOY_PORT: ${{ secrets.DEPLOY_PORT }}
-        run: |
-          # Isola se o problema e DNS, TCP upstream, ou auth SSH. Usa /dev/tcp
-          # pra nao depender de nc instalado. Timeout de 10s e conservador.
-          echo "Probe DNS+TCP em ***:***"
-          if timeout 10 bash -c "cat < /dev/null > /dev/tcp/${DEPLOY_HOST}/${DEPLOY_PORT}" 2>/dev/null; then
-            echo "TCP connect OK — runner alcanca o host na porta. Problema (se houver) e de auth SSH."
-          else
-            rc=$?
-            echo "::error::TCP connect falhou (rc=$rc). Possiveis causas: (1) firewall upstream do provedor bloqueando portas nao-padrao para IPs fora do datacenter; (2) valor do DEPLOY_HOST com typo; (3) porta errada no DEPLOY_PORT; (4) sshd parou na VPS. Teste do seu laptop: ssh -p <PORT> <USER>@<HOST>. Se funcionar la e falhar aqui, confirme com o provedor (HostGator) se IPs externos em portas custom sao bloqueados."
+          echo "==> smoke no frontend (nginx do container)"
+          code=$(curl -sk -o /dev/null -w '%{http_code}' http://127.0.0.1:3000/)
+          echo "HTTP $code"
+          if [ "$code" != "200" ]; then
+            echo "::error::Frontend nao respondeu 200 em 127.0.0.1:3000"
+            docker compose logs --tail 100 frontend
             exit 1
           fi
 
-      - name: Deploy via SSH
-        uses: appleboy/ssh-action@v1.2.0
-        with:
-          host: ${{ secrets.DEPLOY_HOST }}
-          port: ${{ secrets.DEPLOY_PORT }}
-          username: ${{ secrets.DEPLOY_USER }}
-          key: ${{ secrets.DEPLOY_SSH_KEY }}
-          # Falha rapido; bash -e cobre os steps, o script final valida health.
-          script_stop: true
-          script: |
-            set -euo pipefail
-            cd /opt/portifolio
-
-            echo "==> git state antes"
-            git rev-parse --short HEAD
-
-            echo "==> fetch + reset para origin/main"
-            git fetch --prune origin main
-            git reset --hard origin/main
-
-            echo "==> git state apos"
-            git rev-parse --short HEAD
-            git log --oneline -1
-
-            echo "==> rebuild + recreate containers de app (backend + frontend)"
-            # Mantem influxdb/postgres rodando — so rebuilda o que pode ter mudado.
-            # --no-deps evita restart inadvertido dos databases.
-            docker compose up -d --build --force-recreate --no-deps backend frontend
-
-            echo "==> aguardando health do backend (timeout ~60s)"
-            ok=0
-            for i in $(seq 1 20); do
-              if curl -sf http://127.0.0.1:5000/api/health/app >/dev/null 2>&1; then
-                ok=1
-                break
-              fi
-              sleep 3
-            done
-
-            if [ "$ok" -ne 1 ]; then
-              echo "::error::Backend nao respondeu saudavel em /api/health/app apos deploy"
-              docker compose logs --tail 100 backend
-              exit 1
-            fi
-
-            echo "==> health do backend: OK"
-
-            echo "==> smoke no frontend (nginx do container)"
-            code=$(curl -sk -o /dev/null -w '%{http_code}' http://127.0.0.1:3000/)
-            echo "HTTP $code"
-            if [ "$code" != "200" ]; then
-              echo "::error::Frontend nao respondeu 200 em 127.0.0.1:3000"
-              docker compose logs --tail 100 frontend
-              exit 1
-            fi
-
-            echo "==> deploy OK"
+          echo "==> deploy OK"
