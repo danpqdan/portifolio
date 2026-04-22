@@ -1,8 +1,11 @@
 """Servico de ingestao: recebe payload cru do handler e cuida de validacao,
 transformacao em metricas e delegacao ao InfluxDB. Isola o handler Socket.IO
 da regra de ingestao, o que permite testar o fluxo sem subir socket real.
+
+Schema de ack: 1.1 (ver docs/plano-garantias-sdk-backend.md, secao 1.4).
 """
 import logging
+import time
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
@@ -12,15 +15,43 @@ from influxdb_service import (
     create_temporal_metric_from_heatmap,
     create_web_vitals_from_heatmap,
 )
+from ingestao.idempotencia import (
+    EntradaIdempotencia,
+    obter_cache_idempotencia,
+    obter_registro_ultimo,
+    obter_sequenciador,
+)
 from ingestao.logs import emitir_log
 from ingestao.validador import validar_payload
 
 logger = logging.getLogger('analytics.ingestao')
 
 
+SCHEMA_VERSION_ACK = "1.1"
+
+# Limites do plausibility de timestamp (Onda 2 — ja antecipado aqui porque
+# os timestamps sao calculados neste caminho e o custo e trivial).
+JANELA_PASSADO_MS = 24 * 60 * 60 * 1000       # 24h atras
+JANELA_FUTURO_MS = 5 * 60 * 1000              # 5min no futuro
+JANELA_MAXIMA_MS = 60 * 60 * 1000             # 1h entre timestamp_inicial e timestamp_final
+
+# Thresholds de backpressure (Onda 3) — antecipados para compor o ack desde ja.
+BACKPRESSURE_SLOW_ACIMA = 50
+BACKPRESSURE_STOP_ACIMA = 200
+
+
 @dataclass
 class ResumoIngestao:
-    status: str  # 'success' | 'error'
+    """Contrato de ack schema 1.1.
+
+    Campos novos em relacao a 1.0:
+      - `server_seq`: monotonico por site, detecta gap no cliente.
+      - `server_time_ms`: referencia para correcao de skew no SDK.
+      - `retriable`: indica se erro e transitorio (True) ou definitivo (False).
+      - `backpressure_hint`: 'ok' | 'slow' | 'stop'.
+    """
+
+    status: str
     id_registro: Optional[str] = None
     tipo_envio: Optional[str] = None
     resumo: Optional[Dict[str, Any]] = None
@@ -28,22 +59,69 @@ class ResumoIngestao:
     message: Optional[str] = None
     erros: List[str] = field(default_factory=list)
 
-    def to_dict(self) -> Dict[str, Any]:
-        if self.status == 'success':
-            payload: Dict[str, Any] = {
-                'status': 'success',
-                'id_registro': self.id_registro,
-                'tipo_envio': self.tipo_envio,
-                'resumo': self.resumo or {},
-            }
-            return payload
+    server_seq: Optional[int] = None
+    server_time_ms: Optional[int] = None
+    retriable: Optional[bool] = None
+    backpressure_hint: str = "ok"
+    duplicado: bool = False
 
-        return {
-            'status': 'error',
-            'code': self.code or 'INVALID_ANALYTICS_PAYLOAD',
-            'message': self.message or 'Payload de analytics invalido',
-            'fields': self.erros,
+    def to_dict(self) -> Dict[str, Any]:
+        base: Dict[str, Any] = {
+            "schema_version": SCHEMA_VERSION_ACK,
+            "id_registro": self.id_registro,
+            "server_seq": self.server_seq,
+            "server_time": self.server_time_ms,
+            "backpressure_hint": self.backpressure_hint,
         }
+
+        if self.status == "success":
+            base.update({
+                "status": "success",
+                "tipo_envio": self.tipo_envio,
+                "resumo": self.resumo or {},
+                "duplicado": self.duplicado,
+            })
+            return base
+
+        base.update({
+            "status": "error",
+            "code": self.code or "INVALID_ANALYTICS_PAYLOAD",
+            "message": self.message or "Payload de analytics invalido",
+            "fields": self.erros,
+            "retriable": self.retriable if self.retriable is not None else False,
+        })
+        return base
+
+
+def _now_ms() -> int:
+    return int(time.time() * 1000)
+
+
+def _classificar_backpressure(fila_pendente: int) -> str:
+    if fila_pendente > BACKPRESSURE_STOP_ACIMA:
+        return "stop"
+    if fila_pendente > BACKPRESSURE_SLOW_ACIMA:
+        return "slow"
+    return "ok"
+
+
+def _validar_timestamps(data: dict, server_time_ms: int) -> Optional[str]:
+    """Retorna mensagem de erro ou None se ok."""
+    ti = data.get("timestamp_inicial")
+    tf = data.get("timestamp_final")
+    if not isinstance(ti, (int, float)) or not isinstance(tf, (int, float)):
+        return None  # validador de payload ja trata tipo
+    ti = int(ti)
+    tf = int(tf)
+    if ti < server_time_ms - JANELA_PASSADO_MS:
+        return "timestamp_inicial muito antigo"
+    if ti > server_time_ms + JANELA_FUTURO_MS:
+        return "timestamp_inicial no futuro"
+    if tf < ti:
+        return "timestamp_final anterior a timestamp_inicial"
+    if tf - ti > JANELA_MAXIMA_MS:
+        return "janela de timestamps maior que 1h"
+    return None
 
 
 class ServicoIngestao:
@@ -54,6 +132,9 @@ class ServicoIngestao:
 
     def __init__(self, influxdb_service=None):
         self.influxdb_service = influxdb_service
+        self._cache = obter_cache_idempotencia()
+        self._ultimos = obter_registro_ultimo()
+        self._sequenciador = obter_sequenciador()
 
     def ingerir(
         self,
@@ -61,23 +142,40 @@ class ServicoIngestao:
         data: dict,
         user_agent: Optional[str] = None,
         ip_address: Optional[str] = None,
+        site_id: Optional[str] = None,
     ) -> ResumoIngestao:
         id_registro = data.get('id_registro') if isinstance(data, dict) else None
         app_id = data.get('app_id') if isinstance(data, dict) else None
+        analytics_session_id = data.get('session_id') if isinstance(data, dict) else None
 
         emitir_log(logger, logging.INFO, 'recebido',
-                   session_id=session_id, id_registro=id_registro, app_id=app_id)
+                   session_id=session_id, id_registro=id_registro, app_id=app_id,
+                   site_id=site_id)
 
+        fila_pendente = 0
         if self.influxdb_service:
             try:
-                fila = self.influxdb_service.fila_pendente()
-                if fila > 50:
+                fila_pendente = self.influxdb_service.fila_pendente()
+                if fila_pendente > BACKPRESSURE_SLOW_ACIMA:
                     emitir_log(logger, logging.WARNING, 'backpressure',
                                session_id=session_id, id_registro=id_registro,
-                               fila_pendente=fila)
+                               fila_pendente=fila_pendente)
             except Exception:
                 pass
+        backpressure = _classificar_backpressure(fila_pendente)
 
+        # ---------- idempotencia (Onda 1) ----------
+        if id_registro:
+            hit = self._cache.ver(site_id, id_registro)
+            if hit is not None:
+                emitir_log(logger, logging.INFO, 'duplicado',
+                           session_id=session_id, id_registro=id_registro, site_id=site_id)
+                resumo_hit = dict(hit.resumo_dict)
+                resumo_hit["duplicado"] = True
+                resumo_hit["backpressure_hint"] = backpressure
+                return _dict_para_resumo(resumo_hit)
+
+        # ---------- validacao estrutural ----------
         valido, erros = validar_payload(data)
         if not valido:
             emitir_log(logger, logging.WARNING, 'rejeitado',
@@ -85,21 +183,48 @@ class ServicoIngestao:
                        erros=';'.join(erros))
             return ResumoIngestao(
                 status='error',
+                id_registro=id_registro,
                 code='INVALID_ANALYTICS_PAYLOAD',
                 message='Payload de analytics invalido',
                 erros=erros,
+                retriable=False,
+                server_seq=self._sequenciador.proximo(site_id),
+                server_time_ms=_now_ms(),
+                backpressure_hint=backpressure,
+            )
+
+        # ---------- validacao de timestamps (Onda 2) ----------
+        server_time = _now_ms()
+        erro_ts = _validar_timestamps(data, server_time)
+        if erro_ts:
+            emitir_log(logger, logging.WARNING, 'rejeitado_timestamp',
+                       session_id=session_id, id_registro=id_registro, motivo=erro_ts)
+            return ResumoIngestao(
+                status='error',
+                id_registro=id_registro,
+                code='INVALID_TIMESTAMP',
+                message=erro_ts,
+                erros=['timestamp_inicial', 'timestamp_final'],
+                retriable=False,
+                server_seq=self._sequenciador.proximo(site_id),
+                server_time_ms=server_time,
+                backpressure_hint=backpressure,
             )
 
         heatmap_dados = HeatmapDados.from_dict(data)
         emitir_log(logger, logging.INFO, 'validado',
-                   session_id=session_id, id_registro=heatmap_dados.id_registro, app_id=app_id)
+                   session_id=session_id, id_registro=heatmap_dados.id_registro,
+                   app_id=app_id, site_id=site_id)
 
         self._persistir_com_resiliencia(session_id, data, user_agent, ip_address, app_id=app_id)
 
-        return ResumoIngestao(
+        resumo = ResumoIngestao(
             status='success',
             id_registro=heatmap_dados.id_registro,
             tipo_envio='temporal',
+            server_seq=self._sequenciador.proximo(site_id),
+            server_time_ms=server_time,
+            backpressure_hint=backpressure,
             resumo={
                 'total_visualizacoes': heatmap_dados.get_total_visualizacoes(),
                 'total_cliques': heatmap_dados.get_total_cliques(),
@@ -111,6 +236,18 @@ class ServicoIngestao:
                 },
             },
         )
+
+        # Registra ack em cache de idempotencia e rastreio de ultimo recebido.
+        if id_registro:
+            self._cache.gravar(site_id, id_registro, EntradaIdempotencia(
+                resumo_dict=resumo.to_dict(),
+                server_seq=resumo.server_seq or 0,
+                server_time_ms=resumo.server_time_ms or server_time,
+            ))
+        if analytics_session_id and id_registro:
+            self._ultimos.registrar(analytics_session_id, id_registro, ts_ms=server_time)
+
+        return resumo
 
     def _persistir_com_resiliencia(
         self,
@@ -170,3 +307,21 @@ class ServicoIngestao:
             emitir_log(logger, logging.ERROR, 'erro_persistencia',
                        session_id=session_id, id_registro=id_registro, app_id=app_id,
                        motivo=str(erro))
+
+
+def _dict_para_resumo(d: dict) -> ResumoIngestao:
+    """Reconstrucao do dataclass a partir do dict serializado (para hit de cache)."""
+    return ResumoIngestao(
+        status=d.get("status", "success"),
+        id_registro=d.get("id_registro"),
+        tipo_envio=d.get("tipo_envio"),
+        resumo=d.get("resumo"),
+        code=d.get("code"),
+        message=d.get("message"),
+        erros=d.get("fields") or [],
+        server_seq=d.get("server_seq"),
+        server_time_ms=d.get("server_time"),
+        retriable=d.get("retriable"),
+        backpressure_hint=d.get("backpressure_hint", "ok"),
+        duplicado=d.get("duplicado", True),
+    )

@@ -254,6 +254,25 @@ except Exception as e:
 from ingestao import ServicoIngestao  # noqa: E402
 servico_ingestao = ServicoIngestao(influxdb_service=influxdb_service)
 
+# ==================== AUTENTICACAO MULTI-TENANT ====================
+from auth.jwt_service import obter_servico as obter_jwt_service  # noqa: E402
+from auth.middleware import AuthError, normalizar_origin, validar_token_socketio  # noqa: E402
+from auth.routes import auth_bp  # noqa: E402
+from auth.tenants_repo import obter_repo as obter_tenants_repo  # noqa: E402
+
+try:
+    obter_tenants_repo(app.config["TENANTS_DATABASE_URL"])
+    obter_jwt_service(
+        keys_dir=app.config["JWT_KEYS_DIR"],
+        audience=app.config["JWT_AUDIENCE"],
+    )
+    log_safe(security_logger, 'info', "[SUCCESS] Auth multi-tenant inicializado")
+except Exception as e:
+    log_safe(security_logger, 'error', f"[ERROR] Falha ao inicializar auth: {str(e)}")
+    raise
+
+app.register_blueprint(auth_bp, url_prefix=('/api/auth' if env == 'production' else '/auth'))
+
 # ==================== ROTAS COM BLUEPRINT ====================
 
 @api_bp.route("/", methods=["GET"])
@@ -547,32 +566,88 @@ app.register_blueprint(api_bp)
 # ==================== WEBSOCKET EVENTS ====================
 
 @socketio.on("connect")
-def handle_connect():
+def handle_connect(auth=None):
     session_id = request.sid
     ip_address = request.environ.get('REMOTE_ADDR', 'unknown')
     user_agent = request.headers.get('User-Agent', 'unknown')
-    
+    origin = normalizar_origin(request.headers.get('Origin') or request.environ.get('HTTP_ORIGIN'))
+
     if not check_suspicious_activity(session_id, request):
         log_safe(security_logger, 'warning', f"[BLOCKED] Conexao WebSocket negada para IP suspeito: {ip_address}")
         disconnect()
         return
-    
+
+    # Validacao do sdk_jwt (quando presente ou quando obrigatorio).
+    token = None
+    if isinstance(auth, dict):
+        token = auth.get('token')
+
+    auth_claims = None
+    site_id_auth = None
+
+    if token:
+        try:
+            auth_claims = validar_token_socketio(token, scope_esperado='ingest')
+        except AuthError as err:
+            log_safe(security_logger, 'warning',
+                     f"[SECURITY] handshake rejeitado code={err.code} ip={ip_address}")
+            disconnect()
+            return
+
+        # Defesa em profundidade: revalida Origin contra allowlist do site.
+        repo = obter_tenants_repo()
+        if origin is None or not repo.origin_permitido(auth_claims.site_id, origin):
+            log_safe(security_logger, 'warning',
+                     f"[SECURITY] handshake rejeitado code=ORIGIN_NOT_ALLOWED site={auth_claims.site_id} origin={origin}")
+            disconnect()
+            return
+
+        site_id_auth = auth_claims.site_id
+    elif app.config.get('SDK_AUTH_REQUIRED', False):
+        log_safe(security_logger, 'warning',
+                 f"[SECURITY] handshake rejeitado code=TOKEN_MISSING ip={ip_address}")
+        disconnect()
+        return
+
     fingerprint = create_session_fingerprint(request)
     session_token = generate_session_token()
-    
+
     active_sessions[session_id] = {
         'token': session_token, 'fingerprint': fingerprint,
         'ip_address': ip_address, 'user_agent': user_agent,
-        'created_at': time.time(), 'last_activity': time.time(), 'request_count': 0
+        'created_at': time.time(), 'last_activity': time.time(), 'request_count': 0,
+        'site_id': site_id_auth,
+        'app_id': auth_claims.app_id if auth_claims else None,
+        'ambiente': auth_claims.ambiente if auth_claims else None,
+        'scope': auth_claims.scope if auth_claims else None,
+        'jwt_exp': auth_claims.exp if auth_claims else None,
+        'origin': origin,
     }
-    
+
     log_safe(security_logger, 'info',
-             f"evento=conectado session_id={session_id} ip={ip_address}")
-    
+             f"evento=conectado session_id={session_id} ip={ip_address} site={site_id_auth or '-'}")
+
+    # Onda 1 — resync pos-reconnect: se o cliente passar analytics_session_id no
+    # handshake, devolvemos o ultimo id_registro aceito para aquela sessao logica,
+    # permitindo ao SDK descartar itens da fila ja processados.
+    analytics_session_id = None
+    if isinstance(auth, dict):
+        analytics_session_id = auth.get('analytics_session_id')
+    last_id = last_at = None
+    if analytics_session_id:
+        from ingestao.idempotencia import obter_registro_ultimo
+        last_id, last_at = obter_registro_ultimo().obter(analytics_session_id)
+
     emit("connection_response", {
-        "status": "connected", "session_token": session_token,
-        "message": "Conectado com segurança ao servidor de analytics",
-        "timestamp": datetime.now().isoformat(), "security_level": "high"
+        "status": "connected",
+        "session_token": session_token,
+        "site_id": site_id_auth,
+        "authenticated": auth_claims is not None,
+        "timestamp": datetime.now().isoformat(),
+        "server_time": int(time.time() * 1000),
+        "last_received_id_registro": last_id,
+        "last_received_at": last_at,
+        "security_level": "high" if auth_claims else "legacy"
     })
 
 @socketio.on("disconnect")
@@ -616,11 +691,13 @@ def handle_analytics_data(data):
         user_agent = request.headers.get('User-Agent', 'unknown')
         ip_address = request.environ.get('REMOTE_ADDR', 'unknown')
 
+        site_id_ativo = active_sessions[session_id].get('site_id')
         resumo = servico_ingestao.ingerir(
             session_id=session_id,
             data=data,
             user_agent=user_agent,
             ip_address=ip_address,
+            site_id=site_id_ativo,
         )
 
         if resumo.status == 'success':
