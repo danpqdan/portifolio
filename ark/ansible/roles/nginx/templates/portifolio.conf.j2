@@ -5,10 +5,15 @@ upstream portifolio_backend {
     keepalive 32;
 }
 
+upstream portifolio_frontend {
+    server 127.0.0.1:3000;
+    keepalive 16;
+}
+
 server {
     listen 80;
     listen [::]:80;
-    server_name {{ dominio }};
+    server_name {{ dominio }} api.{{ dominio }};
     return 301 https://$host$request_uri;
 }
 
@@ -17,13 +22,41 @@ server {
     listen [::]:443 ssl http2;
     server_name {{ dominio }};
 
-    ssl_certificate     /etc/letsencrypt/live/{{ dominio }}/fullchain.pem;
-    ssl_certificate_key /etc/letsencrypt/live/{{ dominio }}/privkey.pem;
+    ssl_certificate     /etc/ssl/cloudflare-origin/fullchain.pem;
+    ssl_certificate_key /etc/ssl/cloudflare-origin/privkey.pem;
     include             /etc/nginx/snippets/ssl.conf;
 
     client_max_body_size 1m;
     access_log /var/log/nginx/portifolio.access.log;
     error_log  /var/log/nginx/portifolio.error.log warn;
+
+    location / {
+        proxy_pass http://portifolio_frontend;
+        proxy_http_version 1.1;
+        proxy_set_header Host              $host;
+        proxy_set_header X-Real-IP         $remote_addr;
+        proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+
+        proxy_set_header Upgrade    $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_read_timeout 300s;
+        proxy_send_timeout 300s;
+    }
+}
+
+server {
+    listen 443 ssl http2;
+    listen [::]:443 ssl http2;
+    server_name api.{{ dominio }};
+
+    ssl_certificate     /etc/ssl/cloudflare-origin/fullchain.pem;
+    ssl_certificate_key /etc/ssl/cloudflare-origin/privkey.pem;
+    include             /etc/nginx/snippets/ssl.conf;
+
+    client_max_body_size 1m;
+    access_log /var/log/nginx/portifolio-api.access.log;
+    error_log  /var/log/nginx/portifolio-api.error.log warn;
 
     location / {
         limit_req zone=analytics_edge burst=40 nodelay;
