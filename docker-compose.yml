@@ -10,7 +10,7 @@ services:
       DOCKER_INFLUXDB_INIT_USERNAME: admin
       DOCKER_INFLUXDB_INIT_PASSWORD: ${INFLUXDB_INIT_PASSWORD:?defina em .env}
       DOCKER_INFLUXDB_INIT_ORG: zen
-      DOCKER_INFLUXDB_INIT_BUCKET: portifolio_dev
+      DOCKER_INFLUXDB_INIT_BUCKET: portifolio_prod
       DOCKER_INFLUXDB_INIT_ADMIN_TOKEN: ${INFLUXDB_TOKEN:?defina em .env}
     volumes:
       - influxdb_data:/var/lib/influxdb2
