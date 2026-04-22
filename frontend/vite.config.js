@@ -44,6 +44,11 @@ export default defineConfig(({ mode }) => {
       port: 3000,
       strictPort: false,
       host: true,
+      allowedHosts: [
+        'localhost',
+        'dsplayground.com.br',
+        'api.dsplayground.com.br',
+      ],
     },
     test: {
       environment: 'jsdom',
