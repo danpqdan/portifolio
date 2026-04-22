@@ -110,6 +110,53 @@ Configuracao do backend: variaveis de runtime moram em `backend/.env` (renderiza
 
 O backend roda como **UID 10001** (ver Dockerfile) e escreve/le `/app/data/keys/sdk_jwt_{private,public}.pem`. Docker cria volumes novos com `root:root`, entao o backend recebe `PermissionError` na primeira geracao das chaves. A role `analytics-stack` garante o chown correto **antes** do `docker compose up` rodando `docker run --rm -v portifolio_backend_keys:/mnt alpine chown -R 10001:10001 /mnt`. Task idempotente — se o volume for recriado (ex.: `down -v`), proximo `ansible-apply` restaura.
 
+## CI / CD
+
+Tres workflows em `.github/workflows/`:
+
+| Workflow | Trigger | Responsabilidade |
+|---|---|---|
+| `ci.yml` | PR, push em `main` | `docker-compose config`, ansible syntax, frontend lint+test+build, frontend docker build multi-stage, backend lint+test |
+| `prod-regression.yml` | push em paths sensiveis + cron diario 03:17 UTC | smoke via curl: debugger Werkzeug, `/console`, rota sem prefixo `/api`, bundle estatico do frontend servido |
+| `deploy.yml` | `workflow_run` de CI concluido com sucesso em `main` (tambem `workflow_dispatch`) | CD: SSH na VPS, `git reset --hard origin/main`, `docker compose up -d --build --force-recreate --no-deps backend frontend`, health check |
+
+**Limites do CD automatico:** re-builda apenas `backend` e `frontend` (onde o codigo de app muda). InfluxDB/Postgres nao sao tocados. Mudancas em roles Ansible, nginx do host, monitoring ou crowdsec continuam exigindo `make -f ark/Makefile ansible-apply` manual — SSH na VPS e aplicar. Rationale: mudancas de infra em geral precisam de `sudo`/`become`, envolvem o host fora do docker, e raramente sao frequentes o bastante pra justificar o risco de automacao.
+
+### Secrets necessarios no repositorio (Settings → Secrets → Actions)
+
+| Secret | Conteudo |
+|---|---|
+| `DEPLOY_HOST` | IP ou hostname da VPS (ex: `vps-15240803.vpsbr-15240803.vpshostgator.com.br`) |
+| `DEPLOY_PORT` | Porta SSH (atual: `22022`) |
+| `DEPLOY_USER` | Usuario (`deploy`) |
+| `DEPLOY_SSH_KEY` | Chave privada PEM dedicada ao CD (NAO reutilizar a chave do deploy humano) |
+
+### Provisionamento da deploy key
+
+Na VPS, como `deploy`:
+
+```bash
+ssh-keygen -t ed25519 -f ~/.ssh/github_cd -C 'github-actions-cd' -N ''
+cat ~/.ssh/github_cd.pub >> ~/.ssh/authorized_keys
+# Opcional: restringir a chave no authorized_keys
+#   from="GITHUB_IP_RANGE",command="cd /opt/portifolio && ...",no-pty,no-port-forwarding ssh-ed25519 AAAA...
+cat ~/.ssh/github_cd   # copiar a private key pra colar no secret DEPLOY_SSH_KEY
+shred -u ~/.ssh/github_cd
+```
+
+A chave privada vai 1 vez para o secret do GitHub e some do disco; a publica fica no `authorized_keys` do `deploy`. **Nao usar a mesma chave que voce usa no laptop** — rotacao ficaria acoplada.
+
+### Rollback manual
+
+O CD nao tem rollback automatico. Em caso de deploy ruim:
+
+```bash
+ssh -p 22022 deploy@HOST
+cd /opt/portifolio
+git reset --hard <sha-anterior>
+docker compose up -d --build --force-recreate --no-deps backend frontend
+```
+
 ## Segredos
 
 - `INFLUXDB_TOKEN`, `SECRET_KEY`, `ADMIN_API_TOKEN`, credenciais Postgres — no `group_vars/all.yml` criptografado com Ansible Vault.
