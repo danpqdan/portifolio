@@ -49,7 +49,21 @@ jobs:
             echo "::error::Secrets faltando: ${missing[*]}. Criar em Settings → Secrets and variables → Actions (Repository secrets) ou no Environment 'production'."
             exit 1
           fi
-          echo "Secrets OK (host=${DEPLOY_HOST}, port=${DEPLOY_PORT}, user=${DEPLOY_USER}, ssh_key_len=${#DEPLOY_SSH_KEY})"
+          # Reporta o comprimento de cada um (GitHub mascara o valor, mas len
+          # revelaria truncagem/whitespace ou confusao com env variables).
+          echo "Secrets OK — comprimentos: host=${#DEPLOY_HOST}, port=${#DEPLOY_PORT}, user=${#DEPLOY_USER}, ssh_key=${#DEPLOY_SSH_KEY}"
+          # Checa formato da porta (deve ser numerico, sem espacos).
+          case "${DEPLOY_PORT}" in
+            ''|*[!0-9]*)
+              echo "::error::DEPLOY_PORT nao e um inteiro puro (tem whitespace ou nao-digitos). Valor mascarado; cheque se colou com quebra de linha acidental."
+              exit 1 ;;
+          esac
+          # Chave SSH tem que comecar com o header PEM; -N '' gera 'OPENSSH PRIVATE KEY'.
+          case "${DEPLOY_SSH_KEY}" in
+            "-----BEGIN "*" PRIVATE KEY-----"*) : ;;
+            *) echo "::error::DEPLOY_SSH_KEY nao parece ser uma chave PEM (nao comeca com '-----BEGIN ... PRIVATE KEY-----'). Colou o conteudo inteiro do arquivo?"
+               exit 1 ;;
+          esac
 
       - name: Deploy via SSH
         uses: appleboy/ssh-action@v1.2.0
