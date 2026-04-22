@@ -155,13 +155,16 @@ class ServicoIngestao:
         fila_pendente = 0
         if self.influxdb_service:
             try:
-                fila_pendente = self.influxdb_service.fila_pendente()
-                if fila_pendente > BACKPRESSURE_SLOW_ACIMA:
-                    emitir_log(logger, logging.WARNING, 'backpressure',
-                               session_id=session_id, id_registro=id_registro,
-                               fila_pendente=fila_pendente)
+                valor = self.influxdb_service.fila_pendente()
+                # Guarda defensiva: mocks de teste retornam MagicMock; aceita so int.
+                if isinstance(valor, int):
+                    fila_pendente = valor
+                    if fila_pendente > BACKPRESSURE_SLOW_ACIMA:
+                        emitir_log(logger, logging.WARNING, 'backpressure',
+                                   session_id=session_id, id_registro=id_registro,
+                                   fila_pendente=fila_pendente)
             except Exception:
-                pass
+                fila_pendente = 0
         backpressure = _classificar_backpressure(fila_pendente)
 
         # ---------- idempotencia (Onda 1) ----------

@@ -23,6 +23,7 @@ jobs:
           INFLUXDB_TOKEN=ci-dummy
           SECRET_KEY=ci-dummy
           ADMIN_API_TOKEN=ci-dummy
+          POSTGRES_PASSWORD=ci-dummy
           EOF
           mkdir -p backend
           : > backend/.env

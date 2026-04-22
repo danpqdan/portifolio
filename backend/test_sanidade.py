@@ -3,12 +3,19 @@ comportamento com InfluxDB desabilitado e resiliencia a erro de Influx.
 """
 import os
 import sys
+import time
 import unittest
 from unittest.mock import MagicMock
 
 sys.path.append(os.path.dirname(__file__))
 
 import app as app_module
+
+
+def _ts_agora() -> tuple[int, int]:
+    """Timestamps validos na janela de plausibilidade [server_time-24h, +5min]."""
+    agora_ms = int(time.time() * 1000)
+    return agora_ms - 5000, agora_ms
 
 
 class SanidadeHealthAppTest(unittest.TestCase):
@@ -64,14 +71,17 @@ class SanidadeHealthInfluxDBTest(unittest.TestCase):
 class SanidadeIngestaoResilienteTest(unittest.TestCase):
     def test_servico_sem_influxdb_nao_derruba_ingestao(self):
         from ingestao.servico_ingestao import ServicoIngestao
+        from ingestao.idempotencia import resetar_tudo
+        resetar_tudo()
 
+        ti, tf = _ts_agora()
         servico = ServicoIngestao(influxdb_service=None)
         resumo = servico.ingerir(
             session_id='s1',
             data={
-                'id_registro': 'r1',
-                'timestamp_inicial': 1,
-                'timestamp_final': 2,
+                'id_registro': 'sanidade-sem-influx',
+                'timestamp_inicial': ti,
+                'timestamp_final': tf,
                 'paginas': {},
             },
         )
@@ -79,19 +89,22 @@ class SanidadeIngestaoResilienteTest(unittest.TestCase):
 
     def test_servico_com_influxdb_falho_nao_derruba_ingestao(self):
         from ingestao.servico_ingestao import ServicoIngestao
+        from ingestao.idempotencia import resetar_tudo
+        resetar_tudo()
 
         fake = MagicMock()
         fake.write_temporal_metrics_async.side_effect = RuntimeError('influx caiu')
         servico = ServicoIngestao(influxdb_service=fake)
 
+        ti, tf = _ts_agora()
         resumo = servico.ingerir(
             session_id='s1',
             data={
-                'id_registro': 'r1',
-                'timestamp_inicial': 1,
-                'timestamp_final': 2,
+                'id_registro': 'sanidade-com-influx-falho',
+                'timestamp_inicial': ti,
+                'timestamp_final': tf,
                 'paginas': {'/': [{'eventos': [], 'visualizacoes': 1, 'segundos': 3,
-                                    'timestamp_inicial': 1, 'timestamp_final': 2}]},
+                                    'timestamp_inicial': ti, 'timestamp_final': tf}]},
             },
         )
         self.assertEqual(resumo.status, 'success')
