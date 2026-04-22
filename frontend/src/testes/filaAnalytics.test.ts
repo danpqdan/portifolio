@@ -90,4 +90,26 @@ describe('FilaAnalytics', () => {
     expect(a.id).not.toBe(b.id);
     expect(a.timestamp).toBeLessThanOrEqual(b.timestamp);
   });
+
+  it('remove funcoes do payload antes de enfileirar (IndexedDB DataCloneError)', async () => {
+    // HeatmapDados.from_dict anexa metodos (get_total_cliques, etc.).
+    // IndexedDB rejeita funcoes via structured clone; fila precisa sanitizar.
+    const payload = {
+      id_registro: 'x',
+      timestamp_inicial: 1000,
+      timestamp_final: 2000,
+      paginas: {},
+      get_total_cliques: () => 42,
+      get_total_tempo_segundos: function () { return 5; },
+    } as unknown as HeatmapDados;
+
+    const fila = new FilaAnalytics(storage, 10);
+    const item = await fila.enfileirar(payload);
+
+    // payload armazenado nao deve conter nenhuma funcao
+    const funcoes = Object.values(item.payload).filter((v) => typeof v === 'function');
+    expect(funcoes).toHaveLength(0);
+    expect(item.payload.id_registro).toBe('x');
+    expect(item.payload.paginas).toEqual({});
+  });
 });
