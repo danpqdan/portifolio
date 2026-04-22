@@ -59,7 +59,7 @@
 
 - name: Aguardar backend responder health
   uri:
-    url: http://127.0.0.1:5000/health/app
+    url: http://127.0.0.1:5000/api/health/app
     status_code: 200
   retries: 40
   delay: 3
