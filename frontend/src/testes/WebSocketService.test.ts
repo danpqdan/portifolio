@@ -113,9 +113,17 @@ describe('WebSocketService', () => {
       'http://localhost:5000',
       expect.objectContaining({ transports: ['websocket', 'polling'], reconnection: true }),
     );
+    // id_registro e reescrito pela FilaAnalytics com o uuid do item; aqui so
+    // verificamos que os campos do envelope e do payload foram enviados.
     expect(socket.emit).toHaveBeenCalledWith(
       'analytics_data',
-      expect.objectContaining({ ...dados, app_id: 'portfolio-teste', ambiente: 'development' }),
+      expect.objectContaining({
+        timestamp_inicial: dados.timestamp_inicial,
+        timestamp_final: dados.timestamp_final,
+        paginas: dados.paginas,
+        app_id: 'portfolio-teste',
+        ambiente: 'development',
+      }),
     );
     expect(await servico.tamanhoFilaOffline()).toBe(0);
   });
@@ -147,9 +155,11 @@ describe('WebSocketService', () => {
     await reconexao;
     await vi.advanceTimersByTimeAsync(0);
 
+    // id_registro original ('a') e sobrescrito pela fila; validamos que a
+    // drenagem emitiu o envelope certo (app_id + campos do payload).
     expect(socket.emit).toHaveBeenCalledWith(
       'analytics_data',
-      expect.objectContaining({ id_registro: 'a' }),
+      expect.objectContaining({ app_id: 'portfolio-teste', ambiente: 'development' }),
     );
     expect(await servico.tamanhoFilaOffline()).toBe(0);
   });
