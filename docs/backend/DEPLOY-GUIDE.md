@@ -207,7 +207,7 @@ USER app
 EXPOSE 5000
 
 HEALTHCHECK --interval=30s --timeout=5s --retries=3 \
-  CMD curl -fsS http://localhost:5000/health/app || exit 1
+  CMD curl -fsS http://localhost:5000/api/health/app || exit 1
 
 CMD ["gunicorn", "--worker-class", "eventlet", "-w", "1", "-b", "0.0.0.0:5000", \
      "--access-logfile", "-", "--error-logfile", "-", "app:app"]
@@ -217,7 +217,7 @@ Observacoes:
 
 - Com `eventlet`, mantenha `-w 1` por processo e escale horizontalmente por replicas.
 - Container roda como `app` (nao-root).
-- Health check reaproveita `/health/app`.
+- Health check usa `/api/health/app` (blueprint com `url_prefix=/api` quando `FLASK_ENV=production`).
 
 ### Nginx como proxy reverso
 

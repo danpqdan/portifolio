@@ -3,27 +3,35 @@
 ## Visao geral
 
 ```
-          Internet
-             |
-             v
-     +---------------+
-     |     Nginx     |  TLS, rate limit, /admin allowlist, logs acesso
-     +-------+-------+
-             |
-             v
-     +---------------+
-     |    Backend    |  Flask + Socket.IO (Gunicorn + eventlet)
-     |   (container) |  valida -> servico_ingestao -> InfluxDB
-     +-------+-------+
-             |
-         +---+----+
-         |        |
-         v        v
-   +---------+  +------------+       Prometheus  <-- Grafana
-   |InfluxDB |  | PostgreSQL |          ^
-   +---------+  +------------+          |
-   (series    (tokens, clientes,        |
-   temporais) refresh, auditoria)      CrowdSec agent (le logs)
+                            Internet
+                               |
+                               v
+                        +--------------+
+                        | Cloudflare   |  Proxy CDN + Origin Certificate
+                        | (laranja)    |  modo Full (strict)
+                        +------+-------+
+                               |
+                               v
+                        +--------------+
+                        |    Nginx     |  TLS (CF Origin cert), rate limit,
+                        |   (host)     |  /admin allowlist, WS upgrade
+                        +------+-------+
+                    ___________|_______________________________
+                   /           |             |                 \
+                  v            v             v                  v
+             dsplayground. api.dspl...  grafana.dspl...   influx.dspl...
+                  |            |             |                  |
+                  v            v             v                  v
+           +-------------+  +-------+   +---------+        +-----------+
+           |  Frontend   |  |Backend|   | Grafana |        | InfluxDB  |
+           | Vite :3000  |  | :5000 |   |  :3001  |        |  :8086    |
+           +-------------+  +---+---+   +----+----+        +-----+-----+
+                                |            |                   |
+                                v            v                   |
+                          +----------+    Prometheus <-----------+
+                          | InfluxDB | <------+
+                          +----------+        |
+                         (portifolio_prod)   CrowdSec agent (le security.log + /var/log/nginx)
 ```
 
 ## Papeis dos componentes
@@ -58,10 +66,44 @@
 | 22022 | SSH | publica (firewalld + fail2ban) |
 | 80 | Nginx | publica (redireciona para 443) |
 | 443 | Nginx | publica |
-| 5000 | Backend | **loopback** — so Nginx acessa |
-| 8086 | InfluxDB | interna (rede docker) |
-| 9090 | Prometheus | interna (expor via Grafana) |
-| 3000 | Grafana | atras de auth adicional |
+| 5000 | Backend | **loopback** (`127.0.0.1:5000`) — Nginx publica em `api.dsplayground.com.br` |
+| 3000 | Frontend (Vite) | **loopback** (`127.0.0.1:3000`) — Nginx publica no apex `dsplayground.com.br` |
+| 8086 | InfluxDB | **loopback** (`127.0.0.1:8086`) — rede docker + nginx em `influx.dsplayground.com.br` |
+| 3001 | Grafana | loopback (`127.0.0.1:3001`) — atras de nginx em `grafana.dsplayground.com.br` |
+| 9090 | Prometheus | **TODO** ainda `0.0.0.0:9090`, deve virar loopback |
+| 9100 | node-exporter | **TODO** ainda `0.0.0.0:9100`, deve virar loopback |
+
+## TLS — Cloudflare Origin Certificate
+
+Desde 2026-04-21 o origin nao usa mais Let's Encrypt. O cert agora e um **Cloudflare Origin Certificate** wildcard (`*.dsplayground.com.br` + apex), validade 15 anos, assinado pela CA privada do CF. Arquivos:
+
+| Arquivo | Dono | Modo |
+|---|---|---|
+| `/etc/ssl/cloudflare-origin/fullchain.pem` | `root:root` | `0644` |
+| `/etc/ssl/cloudflare-origin/privkey.pem` | `root:root` | `0600` |
+
+O CF opera em modo **Full (strict)** — o cert do origin e validado na borda da CF antes de fechar o TLS com o browser. Como a CA do CF nao esta no trust store publico, `openssl s_client` direto no origin da `Verify return code: 21` (comportamento esperado); `ssl_stapling` tambem e silenciosamente ignorado no nginx (warning benigno).
+
+DNS dos subdominios (`dsplayground.com.br`, `api.*`, `grafana.*`, `influx.*`) precisa ficar **proxiado (laranja)** na Cloudflare. Se algum registro estiver cinza (DNS only), o CF nao intermedeia, o cert nao vale pra ele e o TLS quebra pra esse hostname.
+
+Renovacao: nao ha — cert dura ate 2041. Quando trocar, atualizar os dois arquivos em `/etc/ssl/cloudflare-origin/` e reload do nginx.
+
+## Roteamento Nginx
+
+Dois arquivos de vhost em `/etc/nginx/conf.d/`:
+
+| Arquivo | Hostnames | Upstream |
+|---|---|---|
+| `portifolio.conf` | `dsplayground.com.br` | `127.0.0.1:3000` (frontend Vite) |
+|  | `api.dsplayground.com.br` | `127.0.0.1:5000` (backend Flask) |
+| `portifolio.monitoring.conf` | `grafana.dsplayground.com.br` | `127.0.0.1:3001` |
+|  | `influx.dsplayground.com.br` | `127.0.0.1:8086` |
+
+Socket.IO: o backend monta o blueprint com `url_prefix='/api'`, entao o path real e `/api/socket.io/` — NAO o default `/socket.io/`. O cliente `socket.io-client` tem `path: '/api/socket.io/'` hardcoded em `frontend/src/sdk/WebSocketService.tsx`. Requests WS da forma `wss://api.dsplayground.com.br/api/socket.io/` passam pelo `location /` do vhost da api (upgrade habilitado) e chegam no backend.
+
+Vite dev server aceita so hosts listados em `server.allowedHosts` de `frontend/vite.config.js` (protecao contra DNS rebinding). Lista atual: `localhost`, `dsplayground.com.br`, `api.dsplayground.com.br`.
+
+Configuracao do backend: variaveis de runtime moram em `backend/.env` (renderizado por `ark/ansible/roles/analytics-stack/templates/backend.env.j2`). O `docker-compose.yml` consome via `env_file:`, nao ha `environment:` inline. Nunca reintroduzir `FLASK_ENV` ou bucket no bloco `environment:` do compose — regressao direta do incidente dev-em-prod de 2026-04-21.
 
 ## Segredos
 
