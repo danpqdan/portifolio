@@ -118,40 +118,46 @@ Tres workflows em `.github/workflows/`:
 |---|---|---|
 | `ci.yml` | PR, push em `main` | `docker-compose config`, ansible syntax, frontend lint+test+build, frontend docker build multi-stage, backend lint+test |
 | `prod-regression.yml` | push em paths sensiveis + cron diario 03:17 UTC | smoke via curl: debugger Werkzeug, `/console`, rota sem prefixo `/api`, bundle estatico do frontend servido |
-| `deploy.yml` | `workflow_run` de CI concluido com sucesso em `main` (tambem `workflow_dispatch`) | CD: SSH na VPS, `git reset --hard origin/main`, `docker compose up -d --build --force-recreate --no-deps backend frontend`, health check |
+| `deploy.yml` | `workflow_run` de CI concluido com sucesso em `main` (tambem `workflow_dispatch`) | CD: self-hosted runner na VPS roda `git reset --hard origin/main`, `docker compose up -d --build --force-recreate --no-deps backend frontend`, health check |
 
 **Limites do CD automatico:** re-builda apenas `backend` e `frontend` (onde o codigo de app muda). InfluxDB/Postgres nao sao tocados. Mudancas em roles Ansible, nginx do host, monitoring ou crowdsec continuam exigindo `make -f ark/Makefile ansible-apply` manual — SSH na VPS e aplicar. Rationale: mudancas de infra em geral precisam de `sudo`/`become`, envolvem o host fora do docker, e raramente sao frequentes o bastante pra justificar o risco de automacao.
 
-### Secrets necessarios no repositorio (Settings → Secrets → Actions)
+### Self-hosted runner (porque SSH externo nao passa)
 
-| Secret | Conteudo |
-|---|---|
-| `DEPLOY_HOST` | IP ou hostname da VPS (ex: `vps-15240803.vpsbr-15240803.vpshostgator.com.br`) |
-| `DEPLOY_PORT` | Porta SSH (atual: `22022`) |
-| `DEPLOY_USER` | Usuario (`deploy`) |
-| `DEPLOY_SSH_KEY` | Chave privada PEM dedicada ao CD (NAO reutilizar a chave do deploy humano) |
+O provedor (HostGator) bloqueia ingress em portas non-standard (`22022`) para IPs fora do datacenter, entao um runner `ubuntu-latest` da AWS nunca chega no `sshd`. Solucao: rodar o runner do GitHub Actions dentro da propria VPS, puxando jobs via HTTPS outbound (`443`, que passa).
 
-### Provisionamento da deploy key
+**Localizacao:** `/opt/actions-runner/` — owner `deploy:deploy`.
 
-Na VPS, como `deploy`:
+**Servico:** `actions.runner.danpqdan-portifolio.vps-production.service` (systemd), roda como user `deploy` (membro de `docker` e `analytics`, entao pode rebuildar containers e ler `/opt/portifolio`).
+
+**Label:** `production-vps`. O workflow declara `runs-on: [self-hosted, production-vps]` — sem label, qualquer job `self-hosted` do repo pegaria este runner.
+
+**Risco conhecido:** self-hosted runners em repos publicos sao perigosos (PRs de forks rodam com acesso ao host). Se o repo virar publico no futuro, desinstalar o runner imediatamente ou mudar para modelo com approval manual por PR.
+
+**Operacao:**
 
 ```bash
-ssh-keygen -t ed25519 -f ~/.ssh/github_cd -C 'github-actions-cd' -N ''
-cat ~/.ssh/github_cd.pub >> ~/.ssh/authorized_keys
-# Opcional: restringir a chave no authorized_keys
-#   from="GITHUB_IP_RANGE",command="cd /opt/portifolio && ...",no-pty,no-port-forwarding ssh-ed25519 AAAA...
-cat ~/.ssh/github_cd   # copiar a private key pra colar no secret DEPLOY_SSH_KEY
-shred -u ~/.ssh/github_cd
-```
+# status
+sudo systemctl status actions.runner.danpqdan-portifolio.vps-production
 
-A chave privada vai 1 vez para o secret do GitHub e some do disco; a publica fica no `authorized_keys` do `deploy`. **Nao usar a mesma chave que voce usa no laptop** — rotacao ficaria acoplada.
+# logs ao vivo
+sudo journalctl -u actions.runner.danpqdan-portifolio.vps-production -f
+
+# parar temporariamente (deploys em fila ficam waiting)
+sudo systemctl stop actions.runner.danpqdan-portifolio.vps-production
+
+# re-registrar (ex: token expirou, renomear):
+cd /opt/actions-runner
+sudo ./svc.sh stop && sudo ./svc.sh uninstall
+sudo -u deploy ./config.sh remove --token <NOVO_REMOVAL_TOKEN>
+# depois rodar ./config.sh + ./svc.sh install deploy + ./svc.sh start novamente
+```
 
 ### Rollback manual
 
-O CD nao tem rollback automatico. Em caso de deploy ruim:
+O CD nao tem rollback automatico. Em caso de deploy ruim, logado na VPS como `deploy`:
 
 ```bash
-ssh -p 22022 deploy@HOST
 cd /opt/portifolio
 git reset --hard <sha-anterior>
 docker compose up -d --build --force-recreate --no-deps backend frontend
