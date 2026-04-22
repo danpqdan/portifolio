@@ -1,0 +1,92 @@
+name: Deploy Production
+
+# CD automatico: apos CI verde em main, conecta via SSH na VPS,
+# faz git pull e rebuild dos containers de app. Mudancas de
+# infra (roles Ansible, nginx do host, monitoring) continuam via
+# `make ansible-apply` manual.
+
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  # Serializa deploys — nunca dois correndo ao mesmo tempo; uma fila
+  # ordenada e mais seguro que cancelar meio caminho (evita parar um
+  # rebuild e deixar stack em estado intermediario).
+  group: deploy-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Pull + rebuild + health check
+    runs-on: ubuntu-latest
+    environment: production
+    # Dispara se chamou manualmente ou se o CI que disparou terminou verde.
+    if: >
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success')
+
+    steps:
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          port: ${{ secrets.DEPLOY_PORT }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          # Falha rapido; bash -e cobre os steps, o script final valida health.
+          script_stop: true
+          script: |
+            set -euo pipefail
+            cd /opt/portifolio
+
+            echo "==> git state antes"
+            git rev-parse --short HEAD
+
+            echo "==> fetch + reset para origin/main"
+            git fetch --prune origin main
+            git reset --hard origin/main
+
+            echo "==> git state apos"
+            git rev-parse --short HEAD
+            git log --oneline -1
+
+            echo "==> rebuild + recreate containers de app (backend + frontend)"
+            # Mantem influxdb/postgres rodando — so rebuilda o que pode ter mudado.
+            # --no-deps evita restart inadvertido dos databases.
+            docker compose up -d --build --force-recreate --no-deps backend frontend
+
+            echo "==> aguardando health do backend (timeout ~60s)"
+            ok=0
+            for i in $(seq 1 20); do
+              if curl -sf http://127.0.0.1:5000/api/health/app >/dev/null 2>&1; then
+                ok=1
+                break
+              fi
+              sleep 3
+            done
+
+            if [ "$ok" -ne 1 ]; then
+              echo "::error::Backend nao respondeu saudavel em /api/health/app apos deploy"
+              docker compose logs --tail 100 backend
+              exit 1
+            fi
+
+            echo "==> health do backend: OK"
+
+            echo "==> smoke no frontend (nginx do container)"
+            code=$(curl -sk -o /dev/null -w '%{http_code}' http://127.0.0.1:3000/)
+            echo "HTTP $code"
+            if [ "$code" != "200" ]; then
+              echo "::error::Frontend nao respondeu 200 em 127.0.0.1:3000"
+              docker compose logs --tail 100 frontend
+              exit 1
+            fi
+
+            echo "==> deploy OK"

@@ -14,6 +14,8 @@ on:
       - docker-compose.yml
       - ark/ansible/**
       - backend/app.py
+      - frontend/Dockerfile
+      - frontend/docker-nginx.conf
 
 permissions:
   contents: read
@@ -62,5 +64,41 @@ jobs:
           echo "HTTP $code"
           if [ "$code" = "200" ]; then
             echo "::error::REGRESSAO: /health/app responde sem prefixo /api, indicando FLASK_ENV=development em producao."
+            exit 1
+          fi
+
+  frontend-producao:
+    name: Frontend servido estatico (nao-Vite dev)
+    runs-on: ubuntu-latest
+    env:
+      APEX: https://dsplayground.com.br
+    steps:
+      - name: HTML do apex nao referencia @vite/client (dev server)
+        run: |
+          # O dev server do Vite injeta <script type="module" src="/@vite/client"></script>
+          # no index.html. Em producao o bundle estatico nao contem essa string.
+          # Se aparecer, `npm run dev` voltou pra producao.
+          body=$(curl -sk "${APEX}/")
+          if echo "$body" | grep -q '@vite/client'; then
+            echo "::error::REGRESSAO: dsplayground.com.br esta servindo Vite dev server (@vite/client detectado no HTML)."
+            exit 1
+          fi
+
+      - name: Bundle estatico em /assets/ responde 200
+        run: |
+          # Extrai um path de asset do index.html (ex: /assets/index-abc123.js) e
+          # valida que o nginx do container esta servindo. Se o Dockerfile voltar
+          # a ser dev server, nao existe /assets/ gerado por vite build.
+          body=$(curl -sk "${APEX}/")
+          asset=$(echo "$body" | grep -oE '/assets/[a-zA-Z0-9._-]+\.(js|css)' | head -1)
+          if [ -z "$asset" ]; then
+            echo "::error::Nenhum /assets/*.js|css encontrado no index.html — bundle estatico nao servido."
+            exit 1
+          fi
+          echo "Asset detectado: $asset"
+          code=$(curl -sk -o /dev/null -w '%{http_code}' "${APEX}${asset}")
+          echo "HTTP $code"
+          if [ "$code" != "200" ]; then
+            echo "::error::Asset ${asset} retornou HTTP $code (esperado 200)."
             exit 1
           fi
