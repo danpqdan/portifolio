@@ -178,4 +178,34 @@ describe('WebSocketService', () => {
 
     expect(await modulo.WebSocketService.tamanhoFilaOffline()).toBe(2);
   });
+
+  it('falha de storage no enfileirar: retorna false, emite analytics:enqueue_failed, nao vira unhandled rejection', async () => {
+    const modulo = await import('../sdk');
+
+    const storageQuebrado = new StorageMemoria();
+    storageQuebrado.enfileirar = vi.fn(async () => {
+      throw new DOMException('quota exceeded', 'QuotaExceededError');
+    });
+
+    modulo.WebSocketService.configurar({
+      ...configuracaoComStorageMemoria(),
+      storageFila: storageQuebrado,
+    });
+
+    const eventos: CustomEvent[] = [];
+    const listener = (e: Event) => eventos.push(e as CustomEvent);
+    window.addEventListener('analytics:enqueue_failed', listener);
+
+    try {
+      const envio = modulo.WebSocketService.sendAnalyticsData(criarDadosAnalytics('falha'));
+      await expect(envio).resolves.toBe(false);
+      expect(eventos).toHaveLength(1);
+      expect(eventos[0].detail).toMatchObject({
+        idRegistro: 'falha',
+        reason: expect.stringContaining('QuotaExceededError'),
+      });
+    } finally {
+      window.removeEventListener('analytics:enqueue_failed', listener);
+    }
+  });
 });
