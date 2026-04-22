@@ -9,9 +9,16 @@
       assert:
         that:
           - influxdb_token != "trocar-token-real"
+          - influxdb_init_password != "trocar-em-producao"
           - flask_secret_key != "trocar-em-producao"
           - admin_api_token | length > 0
-        fail_msg: "Variaveis de producao em group_vars/all.yml ainda estao com valores de exemplo."
+          - postgres_password is defined
+          - postgres_password | length >= 16
+          - postgres_password != "trocar-em-producao"
+        fail_msg: >
+          Variaveis de producao em group_vars/all.yml ainda estao com valores
+          de exemplo. Obrigatorios: influxdb_token, influxdb_init_password,
+          flask_secret_key, admin_api_token, postgres_password (>=16 chars).
 
   roles:
     - role: base
