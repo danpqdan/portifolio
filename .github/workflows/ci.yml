@@ -42,8 +42,16 @@ jobs:
       - name: Copiar group_vars de exemplo (o real e vaulted/gitignored)
         working-directory: ark/ansible
         run: cp group_vars/all.example.yml group_vars/all.yml
+      - name: Dummy vault password (CI usa all.example.yml em cleartext)
+        # ansible.cfg aponta vault_password_file para /opt/portifolio/.vault-password,
+        # path que so existe na VPS. No runner do CI, criamos um dummy e
+        # sobrescrevemos via env — syntax-check nao precisa descriptografar nada
+        # porque o all.yml aqui e a versao example em cleartext.
+        run: echo "ci-dummy-not-used-for-decrypt" > /tmp/ansible-vault-pass
       - name: Syntax check do playbook
         working-directory: ark/ansible
+        env:
+          ANSIBLE_VAULT_PASSWORD_FILE: /tmp/ansible-vault-pass
         run: ansible-playbook --syntax-check -i inventory.example.ini playbook.yml
 
   frontend:
