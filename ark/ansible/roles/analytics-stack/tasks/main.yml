@@ -84,6 +84,7 @@
   become_user: "{{ deploy_user }}"
 
 - name: Aguardar backend responder health
+  when: not ansible_check_mode
   uri:
     url: http://127.0.0.1:5000/api/health/app
     status_code: 200
@@ -93,6 +94,7 @@
   until: backend_ok.status == 200
 
 - name: Aplicar retencao do bucket no InfluxDB
+  when: not ansible_check_mode
   command: >
     docker compose exec -T backend python scripts/configurar_retencao.py
     --dias {{ influxdb_retencao_dias | default(90) }}
