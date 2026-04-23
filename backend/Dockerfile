@@ -32,4 +32,15 @@ USER app:analytics
 
 EXPOSE 5000
 
-CMD ["python", "app.py"]
+# Em producao, gunicorn com worker eventlet (monkey_patch automatico) serve
+# Flask + Socket.IO. `-w 1` e intencional: SocketIO exige sticky sessions ou
+# message queue (Redis) para multi-worker; 1 worker eventlet com greenlets
+# leves da concorrencia suficiente para o trafego atual. Para dev local,
+# rodar `python app.py` continua funcionando via socketio.run().
+CMD ["gunicorn", \
+     "--worker-class", "eventlet", \
+     "-w", "1", \
+     "-b", "0.0.0.0:5000", \
+     "--access-logfile", "-", \
+     "--error-logfile", "-", \
+     "app:app"]
