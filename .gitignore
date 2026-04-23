@@ -13,6 +13,8 @@ ark/teste-ambiente-b/.vagrant/
 # Ansible
 ark/ansible/inventory.ini
 ark/ansible/group_vars/all.yml
+# Senha do vault — jamais versionar
+.vault-password
 
 # Monitoring (.env com senha real)
 ark/monitoring/.env
