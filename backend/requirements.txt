@@ -13,6 +13,7 @@ flask-cors==6.0.1
 Flask-Limiter==4.0.0
 Flask-SocketIO==5.5.1
 greenlet==3.2.4
+gunicorn==23.0.0
 h11==0.16.0
 influxdb-client==1.49.0
 itsdangerous==2.2.0

@@ -84,13 +84,18 @@ class SafeStreamHandler(logging.StreamHandler):
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(levelname)s - %(message)s',
-    handlers=[
-        SafeRotatingFileHandler('security.log'),
-        SafeStreamHandler(sys.stdout)
-    ],
+    handlers=[SafeStreamHandler(sys.stdout)],
     force=True
 )
+
+# security.log recebe SO eventos do security_logger — CrowdSec parsa esse arquivo
+# e qualquer ruido de logger root (Flask/Werkzeug/libs) geraria linhas unparsed.
 security_logger = logging.getLogger('security')
+security_logger.setLevel(logging.INFO)
+_security_handler = SafeRotatingFileHandler('security.log')
+_security_handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
+security_logger.addHandler(_security_handler)
+security_logger.propagate = False
 
 # ✅ CORS configurado por ambiente
 cors_origins = app.config.get("CORS_ORIGINS", ["http://localhost:5173"])
