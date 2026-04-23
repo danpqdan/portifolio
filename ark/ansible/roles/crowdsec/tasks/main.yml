@@ -1,8 +1,10 @@
 ---
 # Role crowdsec — Rocky Linux 9.
-# Agente CrowdSec roda em container (cross-platform). O bouncer Nginx
-# vem do repo oficial CrowdSec (packagecloud) — instalado opcionalmente
-# quando habilitar_crowdsec_bouncer=true.
+# Agente CrowdSec roda em container (cross-platform). O bouncer Nginx vem de
+# DOIS repos packagecloud distintos:
+#   - crowdsecurity/crowdsec            → agente/CLI (opcional no host, ja temos via docker)
+#   - crowdsecurity/crowdsec-bouncers-nginx → pacote `crowdsec-nginx-bouncer`
+# O bouncer nao esta no repo principal; por isso o dnf falhava antes.
 
 - name: Subir agente CrowdSec via Docker Compose
   community.docker.docker_compose_v2:
@@ -20,9 +22,16 @@
     creates: /etc/yum.repos.d/crowdsec_crowdsec.repo
   when: habilitar_crowdsec_bouncer | default(true)
 
+- name: Adicionar repo CrowdSec bouncers-nginx (packagecloud)
+  shell: |
+    set -e
+    curl -s https://packagecloud.io/install/repositories/crowdsecurity/crowdsec-bouncers-nginx/script.rpm.sh | bash
+  args:
+    creates: /etc/yum.repos.d/crowdsecurity_crowdsec-bouncers-nginx.repo
+  when: habilitar_crowdsec_bouncer | default(true)
+
 - name: Instalar bouncer Nginx para CrowdSec
   dnf:
     name: crowdsec-nginx-bouncer
     state: present
   when: habilitar_crowdsec_bouncer | default(true)
-  ignore_errors: true  # se o repo nao publicar pra el9, documentar fallback manual
