@@ -11,7 +11,7 @@ cp inventory.example.ini inventory.ini
 # inventory.ini ja vem com IP, porta 22022 e chave ~/.ssh/vpn
 
 cp group_vars/all.example.yml group_vars/all.yml
-# preencha segredos reais em all.yml e criptografe com ansible-vault
+# preencha os valores reais e criptografe com ansible-vault (ver secao abaixo)
 ```
 
 Instale as collections requeridas:
@@ -71,15 +71,49 @@ Para rodar so uma role: `ansible-playbook -i inventory.ini playbook.yml --tags a
 
 ## Segredos
 
-- **Nunca comitar** `inventory.ini` real nem `group_vars/all.yml`.
-- Para producao, use Ansible Vault: `ansible-vault encrypt group_vars/all.yml` e rode com `--ask-vault-pass`.
-- Tokens esperados em `group_vars/all.yml`:
-  - `flask_secret_key`
-  - `admin_api_token`
-  - `influxdb_token`
-  - `influxdb_org`
-  - `influxdb_bucket`
-  - `grafana_admin_password`
+### Ansible Vault (producao)
+
+Em producao, `group_vars/all.yml` fica **criptografado com ansible-vault**. A senha mora em `/opt/portifolio/.vault-password` (fora do git, modo `0600`, dono `deploy`). O `ansible.cfg` desta pasta aponta automaticamente para esse arquivo via `vault_password_file`, entao `make ansible-check`/`make ansible-apply` leem o vault sem prompt.
+
+Operacoes comuns:
+
+```bash
+cd ark/ansible
+
+# ver o arquivo em claro (sem edit)
+ansible-vault view group_vars/all.yml
+
+# editar (abre $EDITOR com cleartext, re-criptografa ao salvar)
+ansible-vault edit group_vars/all.yml
+
+# criptografar um arquivo novo
+ansible-vault encrypt group_vars/all.yml
+
+# descriptografar em claro no disco (evitar — so use em emergencia)
+ansible-vault decrypt group_vars/all.yml
+```
+
+Setup inicial (servidor novo):
+
+```bash
+# 1. gerar senha
+openssl rand -base64 48 | tr -d '\n' > /opt/portifolio/.vault-password
+chmod 0600 /opt/portifolio/.vault-password
+chown deploy:analytics /opt/portifolio/.vault-password
+
+# 2. criar all.yml a partir do example e criptografar
+cp group_vars/all.example.yml group_vars/all.yml
+# preencha os valores reais
+ansible-vault encrypt group_vars/all.yml
+```
+
+**Nunca comitar** `inventory.ini` real, `group_vars/all.yml` em claro nem `.vault-password`. O `.gitignore` ja cobre os tres.
+
+Tokens/senhas esperados em `group_vars/all.yml`:
+- `flask_secret_key`, `admin_api_token`
+- `influxdb_token`, `influxdb_init_password`
+- `postgres_password`
+- `grafana_admin_password`
 
 ## Diferencas vs branch `dev` (Debian/Ubuntu)
 
