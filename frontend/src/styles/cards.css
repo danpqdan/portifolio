@@ -12,13 +12,21 @@
 
 .page-root {
     display: flex;
-    justify-content: center;
+    /* column: o card-carousel e filho direto e ocupa flex: 1 para preencher
+       o espaco disponivel sem overflow — em row ele nao responderia ao height do pai */
+    flex-direction: column;
+    justify-content: flex-start;
     align-items: center;
     width: 100%;
+    /* height: 100% herda do SlideItem (100dvh) — nao redeclara 100dvh aqui para
+       evitar que padding some a viewport em browsers antigos com box-sizing errado */
     height: 100%;
-    padding: var(--spacing-2);
-    padding-bottom: calc(var(--spacing-2) + 72px);
     box-sizing: border-box;
+    /* padding-bottom reserva espaco para o pager (altura ~48px) + safe-area iOS */
+    padding: var(--spacing-2) var(--spacing-2) max(calc(var(--spacing-2) + 56px), calc(56px + env(safe-area-inset-bottom, 0px)));
+    /* overflow: hidden — o scroll interno fica em .card-content ou .projects-scrollable,
+       nunca no page-root; assim o page-root nao cria scroll global */
+    overflow: hidden;
 }
 
 .card-carousel {
@@ -33,10 +41,22 @@
     box-shadow:
         0 1px 2px rgba(15, 23, 42, 0.08),
         0 8px 32px rgba(15, 23, 42, 0.18);
+    /* Fallback para iOS ≤15: overflow: hidden (aceita). Browsers modernos usam clip,
+       que mantém border-radius e clipa horizontalmente sem criar um scroll container
+       — ao contrário de hidden, não bloqueia overflow-y: auto dos filhos. */
     overflow: hidden;
+    overflow: clip;
     display: flex;
     flex-direction: column;
     position: relative;
+    /* flex: 1 + min-height: 0 fazem o card preencher todo o espaco disponivel no
+       page-root (100% - padding) sem jamais ultrapassar o limite do pai.
+       height: 100% e necessario como fallback para browsers que nao resolvem
+       flex: 1 corretamente quando o pai usa height: 100% em vez de altura absoluta —
+       garante que home-card, project-card e about-card tenham sempre a mesma altura. */
+    flex: 1;
+    min-height: 0;
+    height: 100%;
 }
 
 .card-header {
@@ -62,15 +82,12 @@
     font-size: var(--fluid-body);
 }
 
-/* Card variants — alturas pensadas para cada caso, sem sobrar espaco em mobile */
+/* Card variants — sem min/max-height absolutos: a altura vem de flex: 1 no .card-carousel,
+   que preenche o espaco disponivel em .page-root sem ultrapassar o limite do pai */
 
 .home-card,
 .project-card,
 .about-card {
-    min-height: 88vh;
-    min-height: 88dvh;
-    max-height: 96vh;
-    max-height: 96dvh;
     z-index: 40;
 }
 
@@ -83,8 +100,9 @@
 @media (min-width: 768px) {
     .page-root {
         justify-content: flex-start;
-        padding: 0;
-        padding-bottom: 96px;
+        align-items: flex-start;
+        /* padding lateral aumentado em desktop; bottom mantém espaço para o pager */
+        padding: var(--spacing-3) var(--spacing-4) max(calc(var(--spacing-3) + 56px), calc(56px + env(safe-area-inset-bottom, 0px)));
         margin-left: 2%;
     }
 
@@ -617,7 +635,49 @@
 }
 
 /* --------------------------------------------------------------------------
-   6. Projects — grid e cards individuais (project-tile, BEM)
+   6. Projects — layout interno, cabecalho e grid de cards
+   -------------------------------------------------------------------------- */
+
+.projects-layout {
+    height: 100%;
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    /* overflow: hidden fecha o eixo Y no wrapper do scrollable; sem isso o flex
+       container cresce indefinidamente e projects-scrollable nunca recebe scroll. */
+    overflow: hidden;
+}
+
+.projects-scrollable {
+    overflow-y: auto;
+    flex: 1;
+    /* min-height: 0 é crítico em flex: sem ele o filho flex nunca comprime abaixo
+       do seu conteúdo natural, então o container nunca precisa clipar — e scroll
+       nunca ocorre. Esta é a causa raiz mais comum de "overflow-y: auto não scrolla". */
+    min-height: 0;
+    padding-bottom: var(--spacing-3);
+    /* Garante que gestos verticais dentro da lista scrollavel nao sejam
+       interceptados pelo carousel externo em iOS Safari */
+    touch-action: pan-y;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior-y: contain;
+}
+
+.projects-title {
+    margin: 0 0 var(--spacing-2) 0;
+    color: #0b1220;
+}
+
+.projects-lead {
+    color: #475569;
+    text-align: center;
+    margin-bottom: var(--spacing-2);
+    font-size: var(--fluid-small);
+}
+
+/* --------------------------------------------------------------------------
+   Projects — grid e cards individuais (project-tile, BEM)
    -------------------------------------------------------------------------- */
 
 .projects-grid {
@@ -894,14 +954,14 @@
     transform: translateX(-50%);
     display: flex;
     align-items: center;
-    gap: var(--spacing-2);
-    padding: 6px 12px;
+    gap: 2px;
+    padding: 3px 6px;
     background: rgba(15, 23, 42, 0.55);
     backdrop-filter: blur(10px) saturate(140%);
     -webkit-backdrop-filter: blur(10px) saturate(140%);
     border: 1px solid rgba(255, 255, 255, 0.12);
     border-radius: 999px;
-    box-shadow: 0 8px 24px rgba(15, 23, 42, 0.32);
+    box-shadow: 0 4px 12px rgba(15, 23, 42, 0.32);
     z-index: 60;
     pointer-events: auto;
 }
@@ -910,16 +970,17 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: var(--touch-target-min);
-    height: var(--touch-target-min);
-    min-width: var(--touch-target-min);
-    min-height: var(--touch-target-min);
+    /* hit area mantida via padding — visualmente menor, toque seguro */
+    width: 32px;
+    height: 32px;
+    min-width: 32px;
+    min-height: 32px;
     border: none;
     border-radius: 50%;
     background: transparent;
     color: #f8fafc;
     cursor: pointer;
-    font-size: 1.75rem;
+    font-size: 1.1rem;
     line-height: 1;
     padding: 0;
     transition: background 0.2s ease, transform 0.18s ease, opacity 0.2s ease;
@@ -951,21 +1012,30 @@
     padding: 0;
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 7px;
 }
 
 .carousel-pager__dot {
+    /* hit area expandida via ::before — visual não sofre sobreposição */
+    position: relative;
     display: inline-block;
-    width: 10px;
-    height: 10px;
-    min-width: 10px;
-    min-height: 10px;
+    width: 6px;
+    height: 6px;
+    min-width: 6px;
+    min-height: 6px;
     padding: 0;
+    margin: 0;
     border: none;
     border-radius: 50%;
     background: rgba(248, 250, 252, 0.35);
     cursor: pointer;
     transition: background 0.2s ease, transform 0.2s ease, width 0.25s ease;
+}
+
+.carousel-pager__dot::before {
+    content: '';
+    position: absolute;
+    inset: -9px;
 }
 
 .carousel-pager__dot:hover,
@@ -980,55 +1050,83 @@
 
 .carousel-pager__dot--active {
     background: linear-gradient(135deg, #6366f1, #a855f7);
-    width: 28px;
+    width: 16px;
     border-radius: 999px;
-    box-shadow: 0 0 12px rgba(99, 102, 241, 0.6);
+    box-shadow: 0 0 8px rgba(99, 102, 241, 0.6);
 }
 
 @media (min-width: 768px) {
     .carousel-pager {
         bottom: max(env(safe-area-inset-bottom, 0px), 24px);
-        padding: 8px 16px;
-        gap: var(--spacing-3);
+        padding: 4px 10px;
+        gap: 4px;
     }
 
     .carousel-pager__btn {
-        width: 48px;
-        height: 48px;
-        font-size: 2rem;
+        width: 36px;
+        height: 36px;
+        font-size: 1.25rem;
     }
 }
 
 /* --------------------------------------------------------------------------
-   8. Conteiner mobile do About (criado em runtime por handleResize)
+   8. Home — secoes com respiro visual entre blocos
    -------------------------------------------------------------------------- */
 
-#about_avatar_text_mobile {
-    display: flex;
-    flex-direction: row;
-    align-items: center;
-    gap: var(--spacing-2);
-    width: 100%;
-    justify-content: center;
+.home-section {
+    margin-bottom: var(--spacing-4);
+    padding-bottom: var(--spacing-3);
+    border-bottom: 1px solid rgba(15, 23, 42, 0.06);
+}
+
+.home-section:last-child {
+    border-bottom: none;
+    margin-bottom: 0;
+}
+
+.home-section > h3 {
+    color: #0f172a;
     margin-bottom: var(--spacing-2);
-    padding: var(--spacing-2);
-}
-
-#about_avatar_text_mobile .avatar {
-    width: 64px;
-    height: 64px;
-    border-radius: 50%;
-    margin: 0;
-}
-
-#about_avatar_text_mobile .about-text-center {
-    text-align: left;
-    flex: 1;
-    margin: 0;
+    font-size: var(--fluid-h3);
 }
 
 /* --------------------------------------------------------------------------
-   9. Garantia de seguranca para o video de fundo — nunca capturar pointer
+   9. Projects — rodape fixo funcional
+   -------------------------------------------------------------------------- */
+
+.projects-footer-bar {
+    display: flex;
+    justify-content: center;
+    gap: var(--spacing-2);
+    padding: var(--spacing-2) var(--spacing-3) var(--spacing-3);
+    border-top: 1px solid rgba(15, 23, 42, 0.08);
+    background: linear-gradient(180deg, rgba(255,255,255,0) 0%, rgba(255,255,255,0.35) 100%);
+    flex-shrink: 0;
+}
+
+.projects-footer-bar .primary-btn {
+    text-decoration: none;
+}
+
+/* --------------------------------------------------------------------------
+   10. Reducao de movimento — respeitar preferencia do usuario
+   -------------------------------------------------------------------------- */
+
+@media (prefers-reduced-motion: reduce) {
+    /* Transicao do flip card */
+    .project-tile,
+    .project-tile__face {
+        transition: none !important;
+    }
+
+    /* Transicao do carrossel */
+    .carousel-root [style*="transition"] {
+        transition: none !important;
+    }
+}
+
+/* --------------------------------------------------------------------------
+   11. Garantia de seguranca para o video de fundo — nunca capturar pointer
    -------------------------------------------------------------------------- */
 
 .background-video,

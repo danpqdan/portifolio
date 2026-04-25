@@ -100,7 +100,8 @@ export default function BackGround() {
         top: 0,
         left: 0,
         width: '100%',
-        height: '100vh',
+        // 100dvh = dynamic viewport height: considera a barra de URL do iOS Safari
+        height: '100dvh',
         zIndex: 9999,
         display: playingEntrada ? 'flex' : 'none',
         alignItems: 'center',
@@ -122,7 +123,7 @@ export default function BackGround() {
                 loop
                 style={{
                     width: '100%',
-                    height: '100vh',
+                    height: '100dvh',
                     objectFit: 'cover',
                     position: 'fixed',
                     top: 0,
@@ -140,7 +141,7 @@ export default function BackGround() {
                     playsInline
                     style={{
                         width: '100%',
-                        height: '100vh',
+                        height: '100dvh',
                         objectFit: 'cover'
                     }}
                 />
@@ -152,7 +153,7 @@ export default function BackGround() {
                         top: 0,
                         left: 0,
                         width: '100%',
-                        height: '100vh',
+                        height: '100dvh',
                         backgroundColor: 'black',
                         zIndex: 10001,
                         opacity: blackFadeOut ? 0 : 1,

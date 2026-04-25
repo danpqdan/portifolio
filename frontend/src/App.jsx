@@ -42,15 +42,15 @@ export default function App() {
 
   return (
     <div id="app" style={{
-      height: '100dvh', minHeight: '100vh', width: '100vw', overflow: 'hidden', position: 'relative', display: 'flex'
+      height: '100dvh', width: '100vw', overflow: 'hidden', position: 'relative', display: 'flex'
    }}>
       <BackGround />
       {showUi && (
         <div style={{ position: 'relative', zIndex: 20000, width: '100%' }}>
           <SlidesCarousel slides={[
-            { path: '/', element: <Home /> },
-            { path: '/projects', element: <Projects /> },
-            { path: '/about', element: <About /> },
+            { path: '/',         label: 'Início',   element: <Home /> },
+            { path: '/projects', label: 'Projetos', element: <Projects /> },
+            { path: '/about',    label: 'Sobre',    element: <About /> },
           ]} />
         </div>
       )}
