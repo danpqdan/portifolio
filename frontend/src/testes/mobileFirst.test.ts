@@ -56,10 +56,29 @@ describe('estilizacao mobile-first', () => {
       expect(css).toMatch(new RegExp(`${MIN_1024}[\\s\\S]*?\\.projects-grid[\\s\\S]*?minmax\\(min\\(280px,\\s*100%\\),\\s*1fr\\)`));
     });
 
-    it('botao do carrossel respeita touch target minimo e tem foco visivel', () => {
-      expect(css).toMatch(/\.carousel-nav-btn\s*\{[\s\S]*?min-width:\s*var\(--touch-target-min\)/);
-      expect(css).toMatch(/\.carousel-nav-btn\s*\{[\s\S]*?min-height:\s*var\(--touch-target-min\)/);
-      expect(css).toMatch(/\.carousel-nav-btn:focus-visible[\s\S]*?box-shadow:[\s\S]*?rgba\(99,\s*102,\s*241/);
+    it('carousel-pager fica fora do card e tem touch target adequado', () => {
+      expect(css).toMatch(/\.carousel-pager\s*\{[\s\S]*?position:\s*absolute/);
+      expect(css).toMatch(/\.carousel-pager__btn\s*\{[\s\S]*?min-width:\s*var\(--touch-target-min\)/);
+      expect(css).toMatch(/\.carousel-pager__btn\s*\{[\s\S]*?min-height:\s*var\(--touch-target-min\)/);
+      expect(css).toMatch(/\.carousel-pager__btn:focus-visible:not\(:disabled\)[\s\S]*?box-shadow:[\s\S]*?rgba\(99,\s*102,\s*241/);
+    });
+
+    it('carousel-pager dot ativo expande e tem indicador visual diferenciado', () => {
+      expect(css).toMatch(/\.carousel-pager__dot--active\s*\{[\s\S]*?width:\s*28px/);
+      expect(css).toMatch(/\.carousel-pager__dot--active\s*\{[\s\S]*?background:\s*linear-gradient/);
+    });
+
+    it('page-root reserva espaco inferior para a carousel-pager nao cobrir conteudo', () => {
+      expect(css).toMatch(/\.page-root\s*\{[\s\S]*?padding-bottom:[\s\S]*?72px/);
+    });
+
+    it('project-tile substitui project-card-container com estrutura BEM', () => {
+      expect(css).toMatch(/\.project-tile\s*\{[\s\S]*?perspective:\s*1000px/);
+      expect(css).toMatch(/\.project-tile__face--front\s*\{[\s\S]*?background:\s*linear-gradient/);
+      expect(css).toMatch(/\.project-tile__face--back\s*\{[\s\S]*?background:\s*linear-gradient/);
+      expect(css).toMatch(/\.project-tile__chip\s*\{/);
+      expect(css).toMatch(/\.project-tile__action--primary\s*\{/);
+      expect(css).not.toMatch(/\.project-card-container\s*\{/);
     });
 
     it('skill-badge tem microinteracoes (hover lift, focus-visible, active press)', () => {

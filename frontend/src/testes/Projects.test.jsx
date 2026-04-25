@@ -22,32 +22,55 @@ describe('pagina Projects (mobile-first)', () => {
     expect(inline).not.toMatch(/minmax\(400px/i);
   });
 
-  it('cards de projeto sao acessiveis por teclado', () => {
+  it('cards de projeto sao renderizados como project-tile acessiveis por teclado', () => {
     const { container } = render(<Projects />);
-    const cards = container.querySelectorAll('.project-card-container');
-    expect(cards.length).toBeGreaterThan(0);
-    cards.forEach((card) => {
-      expect(card.getAttribute('role')).toBe('button');
-      expect(card.getAttribute('tabIndex')).toBe('0');
-      expect(card.getAttribute('aria-pressed')).toBe('false');
+    const tiles = container.querySelectorAll('.project-tile');
+    expect(tiles.length).toBeGreaterThan(0);
+    tiles.forEach((tile) => {
+      expect(tile.getAttribute('role')).toBe('button');
+      expect(tile.getAttribute('tabIndex')).toBe('0');
+      expect(tile.getAttribute('aria-pressed')).toBe('false');
+      expect(tile.getAttribute('aria-label')).toBeTruthy();
     });
   });
 
   it('cards de projeto alternam aria-pressed ao acionar via Enter', () => {
     const { container } = render(<Projects />);
-    const card = container.querySelector('.project-card-container');
-    if (!card) throw new Error('project-card-container nao encontrado');
-    expect(card.getAttribute('aria-pressed')).toBe('false');
-    fireEvent.keyDown(card, { key: 'Enter' });
-    expect(card.getAttribute('aria-pressed')).toBe('true');
+    const tile = container.querySelector('.project-tile');
+    if (!tile) throw new Error('project-tile nao encontrado');
+    expect(tile.getAttribute('aria-pressed')).toBe('false');
+    fireEvent.keyDown(tile, { key: 'Enter' });
+    expect(tile.getAttribute('aria-pressed')).toBe('true');
   });
 
-  it('cards nao tem mais largura fixa de 300px inline', () => {
+  it('cards expoem estrutura semantica BEM (face front/back, header, chips, actions)', () => {
     const { container } = render(<Projects />);
-    const cards = container.querySelectorAll('.project-card-container');
-    cards.forEach((card) => {
-      const style = card.getAttribute('style') ?? '';
-      expect(style).not.toMatch(/width:\s*300px/i);
+    expect(container.querySelector('.project-tile__face--front')).not.toBeNull();
+    expect(container.querySelector('.project-tile__face--back')).not.toBeNull();
+    expect(container.querySelector('.project-tile__header')).not.toBeNull();
+    expect(container.querySelector('.project-tile__chips')).not.toBeNull();
+    expect(container.querySelector('.project-tile__actions')).not.toBeNull();
+  });
+
+  it('chips de tecnologia nao usam mais styles inline gigantes', () => {
+    const { container } = render(<Projects />);
+    const chips = container.querySelectorAll('.project-tile__chip');
+    expect(chips.length).toBeGreaterThan(0);
+    chips.forEach((chip) => {
+      const style = chip.getAttribute('style') ?? '';
+      expect(style).not.toMatch(/padding:\s*12px\s*16px/i);
+      expect(style).not.toMatch(/background-?color:/i);
+    });
+  });
+
+  it('botoes de acao no verso usam classes em vez de styles inline', () => {
+    const { container } = render(<Projects />);
+    const acoes = container.querySelectorAll('.project-tile__action');
+    expect(acoes.length).toBeGreaterThan(0);
+    acoes.forEach((btn) => {
+      const style = btn.getAttribute('style') ?? '';
+      expect(style).not.toMatch(/background-?color:/i);
+      expect(btn.getAttribute('type')).toBe('button');
     });
   });
 });
