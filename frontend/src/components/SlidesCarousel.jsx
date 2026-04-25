@@ -32,55 +32,33 @@ export default function SlidesCarousel({ slides }) {
         if (!el) return;
 
         const onWheel = (e) => {
-            const now = Date.now();
-            if (now - lastTimeRef.current < 450) return; // throttle
-            const delta = e.deltaY;
-            if (delta === 0) return;
+            // Usar apenas delta horizontal para trocar slides via wheel.
+            // Delta vertical e reservado para scroll interno dos slides — nao prevenir.
+            const deltaH = e.deltaX;
+            const deltaV = e.deltaY;
 
-            e.preventDefault();
-            lastTimeRef.current = now;
-            setIndex(i => {
-                const next = delta > 0 ? Math.min(i + 1, slides.length - 1) : Math.max(i - 1, 0);
-                indexRef.current = next;
-                return next;
-            });
+            // Se o movimento e predominantemente horizontal, trocar slide
+            if (Math.abs(deltaH) > Math.abs(deltaV)) {
+                const now = Date.now();
+                if (now - lastTimeRef.current < 450) return;
+                if (deltaH === 0) return;
+                e.preventDefault();
+                lastTimeRef.current = now;
+                setIndex(i => {
+                    const next = deltaH > 0 ? Math.min(i + 1, slides.length - 1) : Math.max(i - 1, 0);
+                    indexRef.current = next;
+                    return next;
+                });
+            }
+            // Movimento vertical: nao faz nada — o browser/scroll interno cuida
         };
 
         el.addEventListener('wheel', onWheel, { passive: false });
         return () => el.removeEventListener('wheel', onWheel);
     }, [slides.length]);
 
-    // touch swipe (horizontal)
-    useEffect(() => {
-        const el = containerRef.current;
-        if (!el) return;
-        let startX = 0;
-        let startTime = 0;
-
-        const onTouchStart = (e) => { startX = e.touches[0].clientX; startTime = Date.now(); };
-        const onTouchMove = () => { /* noop to allow browser behavior */ };
-        const onTouchEnd = (e) => {
-            const endX = e.changedTouches[0].clientX;
-            const diff = startX - endX;
-            const dt = Date.now() - startTime;
-            if (Math.abs(diff) > 50 && dt < 1000) {
-                if (diff > 0) {
-                    setIndex(i => { const next = Math.min(i + 1, slides.length - 1); indexRef.current = next; return next; });
-                } else {
-                    setIndex(i => { const prev = Math.max(i - 1, 0); indexRef.current = prev; return prev; });
-                }
-            }
-        };
-
-        el.addEventListener('touchstart', onTouchStart, { passive: true });
-        el.addEventListener('touchmove', onTouchMove, { passive: true });
-        el.addEventListener('touchend', onTouchEnd);
-        return () => {
-            el.removeEventListener('touchstart', onTouchStart);
-            el.removeEventListener('touchmove', onTouchMove);
-            el.removeEventListener('touchend', onTouchEnd);
-        };
-    }, [slides.length]);
+    // touch swipe (horizontal only — vertical scroll is left to the browser)
+    // Este bloco e o unico handler de touch do carousel; o segundo bloco abaixo foi removido.
 
     // no routing sync: carousel manages its own state and keeps page at top when switching
     useEffect(() => {
@@ -188,89 +166,63 @@ export default function SlidesCarousel({ slides }) {
         };
     }, [slides.length]);
 
-    // ✅ TOUCH SWIPE para mobile - MELHORADO para prevenir conflitos
+    // Handler de touch: distingue swipe horizontal (troca slide) de scroll vertical (passa para o browser).
+    // IMPORTANTE: todos os listeners sao passive: true — jamais chamamos preventDefault().
+    // A decisao de qual slide ativar e feita inteiramente no touchend, com base em startX/startY
+    // gravados no touchstart. O browser tem liberdade total para processar o scroll nativo
+    // em paralelo, sem esperar o handler JS — isso e o que desbloqueia o scroll no iOS Safari.
     useEffect(() => {
         const el = containerRef.current;
         if (!el) return;
-        
+
         let startX = 0;
+        let startY = 0;
         let startTime = 0;
-        let isScrolling = false;
 
         const onTouchStart = (e) => {
             startX = e.touches[0].clientX;
+            startY = e.touches[0].clientY;
             startTime = Date.now();
-            isScrolling = false;
         };
 
-        const onTouchMove = (e) => {
-            if (!startX) return;
-            
-            const currentX = e.touches[0].clientX;
-            const currentY = e.touches[0].clientY;
-            const diffX = Math.abs(startX - currentX);
-            const diffY = Math.abs(e.touches[0].clientY - (e.touches[0].clientY - currentY));
-            
-            // Determinar direção do movimento
-            if (!isScrolling) {
-                if (diffY > diffX) {
-                    // Movimento vertical - permitir scroll
-                    isScrolling = true;
-                } else if (diffX > 10) {
-                    // Movimento horizontal - prevenir scroll e ativar swipe
-                    e.preventDefault();
-                }
-            }
+        // touchmove apenas observa — nao chama preventDefault, nao bloqueia scroll nativo.
+        // passive: true e obrigatorio aqui para que o iOS Safari nao suspenda o scroll
+        // enquanto aguarda o retorno do handler JS.
+        const onTouchMove = (_e) => {
+            // noop — so existe para que o browser saiba que nao ha preventDefault aqui.
+            // A logica de swipe e decidida no touchend.
         };
 
         const onTouchEnd = (e) => {
-            if (!startX || isScrolling) {
-                startX = 0;
-                return;
-            }
-            
             const endX = e.changedTouches[0].clientX;
-            const diff = startX - endX;
+            const endY = e.changedTouches[0].clientY;
+            const diffX = startX - endX;
+            const diffY = Math.abs(startY - endY);
             const dt = Date.now() - startTime;
-            
-            // Reset
-            startX = 0;
-            
-            // Se movimento > 50px e tempo < 1s, considerar como swipe
-            if (Math.abs(diff) > 50 && dt < 1000) {
-                if (diff > 0) {
-                    // Swipe para esquerda = próximo slide
-                    setIndex(i => {
-                        const next = Math.min(i + 1, slides.length - 1);
-                        indexRef.current = next;
-                        return next;
-                    });
+
+            // So considera swipe horizontal se:
+            // - deslocamento horizontal > 50px
+            // - deslocamento vertical < deslocamento horizontal (gesto predominantemente lateral)
+            // - duracao < 800ms
+            if (Math.abs(diffX) > 50 && Math.abs(diffX) > diffY && dt < 800) {
+                if (diffX > 0) {
+                    setIndex(i => { const next = Math.min(i + 1, slides.length - 1); indexRef.current = next; return next; });
                 } else {
-                    // Swipe para direita = slide anterior
-                    setIndex(i => {
-                        const prev = Math.max(i - 1, 0);
-                        indexRef.current = prev;
-                        return prev;
-                    });
+                    setIndex(i => { const prev = Math.max(i - 1, 0); indexRef.current = prev; return prev; });
                 }
             }
         };
 
-        const onTouchCancel = () => {
-            startX = 0;
-            isScrolling = false;
-        };
-
         el.addEventListener('touchstart', onTouchStart, { passive: true });
-        el.addEventListener('touchmove', onTouchMove, { passive: false });
+        el.addEventListener('touchmove', onTouchMove, { passive: true });
         el.addEventListener('touchend', onTouchEnd, { passive: true });
-        el.addEventListener('touchcancel', onTouchCancel, { passive: true });
+        el.addEventListener('touchcancel', onTouchEnd, { passive: true });
 
         return () => {
             el.removeEventListener('touchstart', onTouchStart);
             el.removeEventListener('touchmove', onTouchMove);
             el.removeEventListener('touchend', onTouchEnd);
-            el.removeEventListener('touchcancel', onTouchCancel);
+            el.removeEventListener('touchcancel', onTouchEnd);
         };
     }, [slides.length]);
 
@@ -511,8 +463,11 @@ export default function SlidesCarousel({ slides }) {
     }, [slides.length]);
 
     return (
-        <div ref={containerRef} className="carousel-root" style={{ position: 'relative', width: '100%', height: '100dvh', minHeight: '100vh', overflow: 'hidden', touchAction: 'pan-y' }}>
-            <div ref={wrapperRef} style={{ display: 'flex', flexDirection: 'row', width: `${slides.length * 100}vw`, height: '100dvh', minHeight: '100vh', willChange: 'transform' }}>
+        // overflow: hidden confina o carrossel a exatamente 100dvh — impede scroll do documento.
+        // O scroll vertical fica em .page-root (overflow-y: auto) dentro de cada SlideItem.
+        // touchAction: pan-y sinaliza ao browser que gestos verticais devem ser tratados como scroll nativo.
+        <div ref={containerRef} className="carousel-root" style={{ position: 'relative', width: '100%', height: '100dvh', overflow: 'hidden', touchAction: 'pan-y' }}>
+            <div ref={wrapperRef} style={{ display: 'flex', flexDirection: 'row', width: `${slides.length * 100}vw`, height: '100%', willChange: 'transform', alignItems: 'flex-start' }}>
                 {slides.map((s, i) => (
                     <SlideItem key={s.path} slide={s} idx={i} total={slides.length}
                         onNodeReady={handleNodeReady}
@@ -537,7 +492,7 @@ export default function SlidesCarousel({ slides }) {
                                 type="button"
                                 role="tab"
                                 aria-selected={i === index}
-                                aria-label={`Ir para slide ${i + 1}`}
+                                aria-label={`Ir para ${s.label ?? s.path ?? `slide ${i + 1}`}`}
                                 className={`carousel-pager__dot${i === index ? ' carousel-pager__dot--active' : ''}`}
                                 onClick={() => goTo(i)}
                             />
@@ -588,8 +543,10 @@ function SlideItem({ slide, idx, onNodeReady }) {
     }, [idx, onNodeReady]);
 
     return (
-        <div ref={rootRef} style={{ width: '100vw', height: '100dvh', minHeight: '100vh', overflow: 'hidden', flexShrink: 0 }}>
-            <div style={{ width: '100%', height: '100%', overflow: 'hidden' }}>{slide.element}</div>
+        // height: 100dvh + overflow: hidden — cada slide ocupa exatamente a viewport e nao vaza.
+        // O scroll vertical fica em .page-root (overflow-y: auto), nunca no documento.
+        <div ref={rootRef} style={{ width: '100vw', height: '100dvh', overflow: 'hidden', flexShrink: 0 }}>
+            <div style={{ width: '100%', height: '100%' }}>{slide.element}</div>
         </div>
     );
 }

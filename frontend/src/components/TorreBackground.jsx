@@ -38,7 +38,8 @@ export default function TorreBackground({ onEnded }) {
   const getVideoStyle = () => {
     const baseStyle = {
       width: '100%',
-      height: '100vh',
+      // 100dvh = dynamic viewport height; considera a barra de URL retratil do iOS Safari
+      height: '100dvh',
       objectFit: 'cover',
       display: 'block'
     };
@@ -61,7 +62,7 @@ export default function TorreBackground({ onEnded }) {
       top: 0,
       left: 0,
       width: '100%',
-      height: '100vh',
+      height: '100dvh',
       zIndex: 20000,
       pointerEvents: 'none',
       overflow: 'hidden' // ✅ EVITA SCROLL HORIZONTAL
