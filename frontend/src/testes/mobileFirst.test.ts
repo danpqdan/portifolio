@@ -56,20 +56,25 @@ describe('estilizacao mobile-first', () => {
       expect(css).toMatch(new RegExp(`${MIN_1024}[\\s\\S]*?\\.projects-grid[\\s\\S]*?minmax\\(min\\(280px,\\s*100%\\),\\s*1fr\\)`));
     });
 
-    it('carousel-pager fica fora do card e tem touch target adequado', () => {
+    it('carousel-pager fica fora do card e tem botoes compactos com toque seguro', () => {
       expect(css).toMatch(/\.carousel-pager\s*\{[\s\S]*?position:\s*absolute/);
-      expect(css).toMatch(/\.carousel-pager__btn\s*\{[\s\S]*?min-width:\s*var\(--touch-target-min\)/);
-      expect(css).toMatch(/\.carousel-pager__btn\s*\{[\s\S]*?min-height:\s*var\(--touch-target-min\)/);
+      expect(css).toMatch(/\.carousel-pager__btn\s*\{[\s\S]*?min-width:\s*32px/);
+      expect(css).toMatch(/\.carousel-pager__btn\s*\{[\s\S]*?min-height:\s*32px/);
       expect(css).toMatch(/\.carousel-pager__btn:focus-visible:not\(:disabled\)[\s\S]*?box-shadow:[\s\S]*?rgba\(99,\s*102,\s*241/);
     });
 
     it('carousel-pager dot ativo expande e tem indicador visual diferenciado', () => {
-      expect(css).toMatch(/\.carousel-pager__dot--active\s*\{[\s\S]*?width:\s*28px/);
+      expect(css).toMatch(/\.carousel-pager__dot--active\s*\{[\s\S]*?width:\s*16px/);
       expect(css).toMatch(/\.carousel-pager__dot--active\s*\{[\s\S]*?background:\s*linear-gradient/);
     });
 
-    it('page-root reserva espaco inferior para a carousel-pager nao cobrir conteudo', () => {
-      expect(css).toMatch(/\.page-root\s*\{[\s\S]*?padding-bottom:[\s\S]*?72px/);
+    it('carousel-pager dot tem hit area expandida via ::before sem afetar layout', () => {
+      expect(css).toMatch(/\.carousel-pager__dot::before\s*\{[\s\S]*?position:\s*absolute[\s\S]*?inset:\s*-9px/);
+    });
+
+    it('page-root reserva espaco inferior para a carousel-pager e respeita safe-area iOS', () => {
+      expect(css).toMatch(/\.page-root\s*\{[\s\S]*?padding:[\s\S]*?56px/);
+      expect(css).toMatch(/\.page-root\s*\{[\s\S]*?safe-area-inset-bottom/);
     });
 
     it('project-tile substitui project-card-container com estrutura BEM', () => {
