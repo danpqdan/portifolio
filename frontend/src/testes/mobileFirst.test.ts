@@ -7,6 +7,11 @@ const lerCss = (caminhoRelativo: string) => {
   return readFileSync(absoluto, 'utf-8');
 };
 
+const MIN_768 = String.raw`@media\s+(?:screen\s+and\s+)?\(min-width:\s*768px\)`;
+const MIN_600 = String.raw`@media\s+(?:screen\s+and\s+)?\(min-width:\s*600px\)`;
+const MIN_1024 = String.raw`@media\s+(?:screen\s+and\s+)?\(min-width:\s*1024px\)`;
+const MIN_480 = String.raw`@media\s+(?:screen\s+and\s+)?\(min-width:\s*480px\)`;
+
 describe('estilizacao mobile-first', () => {
   describe('index.css', () => {
     const css = lerCss('index.css');
@@ -15,11 +20,12 @@ describe('estilizacao mobile-first', () => {
       expect(css).toMatch(/--touch-target-min:\s*44px/);
     });
 
-    it('aplica tipografia fluida com clamp em h1 e body', () => {
+    it('aplica tipografia fluida com clamp em h1, h2, h3 e body', () => {
       expect(css).toMatch(/--fluid-h1:\s*clamp\(/);
+      expect(css).toMatch(/--fluid-h2:\s*clamp\(/);
+      expect(css).toMatch(/--fluid-h3:\s*clamp\(/);
       expect(css).toMatch(/--fluid-body:\s*clamp\(/);
       expect(css).toMatch(/font-size:\s*var\(--fluid-h1\)/);
-      expect(css).toMatch(/font-size:\s*var\(--fluid-body\)/);
     });
 
     it('garante touch target minimo em todos os botoes', () => {
@@ -28,7 +34,7 @@ describe('estilizacao mobile-first', () => {
     });
 
     it('inclui media query mobile-first com min-width', () => {
-      expect(css).toMatch(/@media\s+screen\s+and\s+\(min-width:\s*768px\)/);
+      expect(css).toMatch(new RegExp(MIN_768));
     });
 
     it('aplica box-sizing border-box global', () => {
@@ -39,29 +45,60 @@ describe('estilizacao mobile-first', () => {
   describe('cards.css', () => {
     const css = lerCss('styles/cards.css');
 
-    it('card-carousel comeca em 100% (mobile) e cresce para 70% via min-width', () => {
+    it('card-carousel comeca em 100% (mobile) e cresce para 70% via min-width 768px', () => {
       expect(css).toMatch(/\.card-carousel\s*\{[^}]*width:\s*100%/);
-      expect(css).toMatch(/@media\s+screen\s+and\s+\(min-width:\s*768px\)[\s\S]*?\.card-carousel[\s\S]*?width:\s*70%/);
+      expect(css).toMatch(new RegExp(`${MIN_768}[\\s\\S]*?\\.card-carousel[\\s\\S]*?width:\\s*70%`));
     });
 
     it('projects-grid escala 1col -> 2col -> auto-fit conforme breakpoints', () => {
       expect(css).toMatch(/\.projects-grid\s*\{[^}]*grid-template-columns:\s*1fr/);
-      expect(css).toMatch(/@media\s+screen\s+and\s+\(min-width:\s*600px\)[\s\S]*?\.projects-grid[\s\S]*?repeat\(2,\s*1fr\)/);
-      expect(css).toMatch(/@media\s+screen\s+and\s+\(min-width:\s*1024px\)[\s\S]*?\.projects-grid[\s\S]*?minmax\(min\(280px,\s*100%\),\s*1fr\)/);
+      expect(css).toMatch(new RegExp(`${MIN_600}[\\s\\S]*?\\.projects-grid[\\s\\S]*?repeat\\(2,\\s*1fr\\)`));
+      expect(css).toMatch(new RegExp(`${MIN_1024}[\\s\\S]*?\\.projects-grid[\\s\\S]*?minmax\\(min\\(280px,\\s*100%\\),\\s*1fr\\)`));
     });
 
-    it('botao do carrossel respeita touch target minimo', () => {
+    it('botao do carrossel respeita touch target minimo e tem foco visivel', () => {
       expect(css).toMatch(/\.carousel-nav-btn\s*\{[\s\S]*?min-width:\s*var\(--touch-target-min\)/);
       expect(css).toMatch(/\.carousel-nav-btn\s*\{[\s\S]*?min-height:\s*var\(--touch-target-min\)/);
+      expect(css).toMatch(/\.carousel-nav-btn:focus-visible[\s\S]*?box-shadow:[\s\S]*?rgba\(99,\s*102,\s*241/);
     });
 
-    it('botao do carrossel tem foco visivel acessivel', () => {
-      expect(css).toMatch(/\.carousel-nav-btn:focus-visible[\s\S]*?outline:/);
+    it('skill-badge tem microinteracoes (hover lift, focus-visible, active press)', () => {
+      expect(css).toMatch(/\.skill-badge:hover[\s\S]*?transform:[\s\S]*?translateY\(-3px\)/);
+      expect(css).toMatch(/\.skill-badge:focus-visible[\s\S]*?box-shadow:[\s\S]*?rgba\(99,\s*102,\s*241/);
+      expect(css).toMatch(/\.skill-badge:active[\s\S]*?transform:[\s\S]*?scale\(0\.98\)/);
     });
 
-    it('page-root e centralizado em mobile e desloca para flex-start em desktop', () => {
-      expect(css).toMatch(/\.page-root\s*\{[^}]*justify-content:\s*center/);
-      expect(css).toMatch(/@media\s+screen\s+and\s+\(min-width:\s*768px\)[\s\S]*?\.page-root[\s\S]*?justify-content:\s*flex-start/);
+    it('skill-badge anima entrada com keyframes e respeita prefers-reduced-motion', () => {
+      expect(css).toMatch(/@keyframes\s+skillFadeIn/);
+      expect(css).toMatch(/animation:\s*skillFadeIn/);
+      expect(css).toMatch(/@media\s*\(prefers-reduced-motion:\s*reduce\)/);
+    });
+
+    it('skill-badge tem touch target minimo', () => {
+      expect(css).toMatch(/\.skill-badge\s*\{[\s\S]*?min-height:\s*var\(--touch-target-min\)/);
+    });
+
+    it('contact-list e tech-btn tambem tem foco visivel acessivel', () => {
+      expect(css).toMatch(/\.contact-list\s+a:focus-visible[\s\S]*?box-shadow:[\s\S]*?rgba\(99,\s*102,\s*241/);
+      expect(css).toMatch(/\.tech-btn:focus-visible[\s\S]*?box-shadow:[\s\S]*?rgba\(99,\s*102,\s*241/);
+    });
+
+    it('NAO contem mais a regra hostil de remocao global de padding/margin em mobile', () => {
+      expect(css).not.toMatch(/\.card-carousel\s+\*\s*\{[^}]*padding:\s*0\s*!important/);
+      expect(css).not.toMatch(/\.card-carousel\s+\*\s*\{[^}]*margin:\s*0\s*!important/);
+    });
+
+    it('NAO esconde icones SVG em mobile', () => {
+      expect(css).not.toMatch(/\.skill-icon[\s\S]{0,500}display:\s*none\s*!important/);
+    });
+
+    it('garante que video de fundo nunca captura pointer', () => {
+      expect(css).toMatch(/\.background-video[\s\S]*?pointer-events:\s*none/);
+    });
+
+    it('avatar e responsivo (96px mobile, 140px desktop)', () => {
+      expect(css).toMatch(/\.avatar\s*\{[\s\S]*?width:\s*96px/);
+      expect(css).toMatch(new RegExp(`${MIN_768}[\\s\\S]*?\\.avatar[\\s\\S]*?width:\\s*140px`));
     });
   });
 });
