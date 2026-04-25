@@ -1,10 +1,38 @@
 # Dashboard do Cliente — Design Doc
 
-> Status: **proposta** (ainda nao implementado).
-> Autor: Daniel Santos + Claude (sessao 2026-04-24).
+> Status: **MVP implementado em `dev` (backend + nginx + grafana)** — validacao
+> em teste-ambiente-a/b e frontend `/cliente/login` ainda pendentes.
+> Autor: Daniel Santos + Claude (sessao 2026-04-24, impl 2026-04-25).
 > Escopo: como expor metricas do SDK para clientes do `dsplayground` sem
 > que eles precisem aprender Grafana, sem expor dados entre tenants, e
 > sem reutilizar credencial publica como credencial de leitura.
+
+## Estado de implementacao (2026-04-25)
+
+**Implementado na branch `dev`:**
+
+| Peca | Local | Status |
+|------|-------|--------|
+| Schema Postgres + SQLite | `backend/auth/schema_dashboard{_postgres,}.sql` | ✅ |
+| Repo (CRUD + indexes) | `backend/auth/clientes_users_repo.py` | ✅ SQLite + Postgres |
+| Service (sessao + magic-link + rate-limit) | `backend/auth/sessao_service.py` | ✅ |
+| Email sender (stdout + Resend) | `backend/auth/email_sender.py` | ✅ |
+| Flask blueprint `/api/cliente/auth` | `backend/auth/cliente_routes.py` | ✅ |
+| Registro no app.py | `backend/app.py` | ✅ |
+| Nginx `/cliente/metricas` + `auth_request` | `ark/ansible/roles/nginx/templates/portifolio.conf.j2` + espelho | ✅ |
+| Grafana `auth.proxy` + subpath | `ark/monitoring/docker-compose.monitoring.yml` | ✅ |
+| Testes (45 passando) | `backend/test_dashboard_auth.py` | ✅ |
+
+**Pendente:**
+
+- Frontend `/cliente/login` — pagina de login + formulario magic-link (React).
+- Dashboards provisionados (Web Vitals, Engajamento, Saidas, Event Explorer) em `ark/monitoring/grafana/dashboards/`.
+- Datasource InfluxDB provisionado com `cliente_id` variavel.
+- `RESEND_API_KEY` em `backend/.env` via Ansible Vault (so necessario em prod; dev cai pro stdout sender).
+- Validacao end-to-end em `ark/teste-ambiente-a` (nginx) e `teste-ambiente-b` (stack completa).
+- CLI admin para criar `clientes_users` (extensao de `backend/scripts/tenant_admin.py`).
+
+**Nota de schema:** `REFERENCES clientes(id)` no desenho inicial virou `REFERENCES sites(id)` na implementacao (alinhado com a tabela multi-tenant existente, `sites`, que ja e o conceito de "cliente"). Campo em `clientes_users` e `site_id`.
 
 ---
 
