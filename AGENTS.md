@@ -76,6 +76,21 @@ Use variáveis, funções, classes de domínio e nomes de arquivos novos em port
 
 Siga Extreme Programming com TDD: antes de criar funcionalidade, rotina, campo, objeto ou comportamento novo, escreva ou atualize testes unitários. Para backend, mantenha o padrão `test_*.py`. Para frontend, use Vitest + React Testing Library com testes em `frontend/src/testes/`. Nenhuma abstração de analytics deve avançar sem testes cobrindo modelos geradores, funções de serviço, endpoints, contrato de entrada, transformação e envio.
 
+## Provisionamento e Testes de Infra
+
+**Toda implementação que toca infra (roles Ansible, nginx, Grafana, Postgres schema, novos serviços do backend que exigem configuração no host) deve ser testada e executada via provisionamento em `ark/teste-ambiente-a` antes de ir para produção.**
+
+Fluxo obrigatório:
+
+1. Ajustar roles em `ark/ansible/roles/` e/ou templates em `ark/nginx/`, `ark/monitoring/`.
+2. Rodar `ark/teste-ambiente-a` (ver `ark/teste-ambiente-a/README.md`):
+   - `docker compose -f docker-compose.teste-a.yml up -d`
+   - `ansible-playbook ... playbook-teste.yml --skip-tags firewall,tls`
+   - Re-rodar para validar **idempotência** (`changed=0` na 2ª execução).
+3. Só então mergear para `main` (que dispara o CD automático na VPS).
+
+Migrações de schema Postgres e configurações de Grafana devem ter task Ansible idempotente (`creates:`, `CREATE IF NOT EXISTS`, `state: present`) — nunca aplicar manualmente direto no host.
+
 ## Documentação
 
 Todo novo `.md` técnico deve ficar em `docs/`, exceto `README.md` e `AGENTS.md` na raiz. Atualize `README.md` quando comandos, instalação, variáveis de ambiente ou fluxo principal mudarem. Registre problemas e decisões pendentes em arquivos claros dentro de `continue/`. Antes de implementar o SDK público de analytics, atualize `docs/levantamento-sdk-analytics.md` com o estado atual e o contrato proposto.

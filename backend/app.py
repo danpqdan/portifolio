@@ -278,6 +278,24 @@ except Exception as e:
 
 app.register_blueprint(auth_bp, url_prefix=('/api/auth' if env == 'production' else '/auth'))
 
+# ==================== AUTH DO DASHBOARD DO CLIENTE ====================
+# Blueprint `/api/cliente/auth` com login humano (cookie HttpOnly) para
+# acessar o dashboard de metricas em /cliente/metricas/*.
+# Referencia: ark/docs/dashboard-cliente.md
+from auth.clientes_users_repo import obter_repo as obter_clientes_users_repo  # noqa: E402
+from auth.sessao_service import SessaoService  # noqa: E402
+from auth import cliente_routes as _cliente_routes_mod  # noqa: E402
+
+try:
+    _clientes_users_repo = obter_clientes_users_repo(app.config["TENANTS_DATABASE_URL"])
+    _sessao_service = SessaoService(_clientes_users_repo)
+    _cliente_routes_mod.configurar(_sessao_service)
+    app.register_blueprint(_cliente_routes_mod.cliente_auth_bp)
+    log_safe(security_logger, 'info', "[SUCCESS] Auth do dashboard inicializado")
+except Exception as e:
+    log_safe(security_logger, 'error', f"[ERROR] Falha ao inicializar auth do dashboard: {str(e)}")
+    raise
+
 # ==================== ROTAS COM BLUEPRINT ====================
 
 @api_bp.route("/", methods=["GET"])
