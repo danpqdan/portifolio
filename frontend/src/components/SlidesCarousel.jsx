@@ -188,7 +188,7 @@ export default function SlidesCarousel({ slides }) {
         // touchmove apenas observa — nao chama preventDefault, nao bloqueia scroll nativo.
         // passive: true e obrigatorio aqui para que o iOS Safari nao suspenda o scroll
         // enquanto aguarda o retorno do handler JS.
-        const onTouchMove = (_e) => {
+        const onTouchMove = () => {
             // noop — so existe para que o browser saiba que nao ha preventDefault aqui.
             // A logica de swipe e decidida no touchend.
         };
