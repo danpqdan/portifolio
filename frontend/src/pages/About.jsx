@@ -156,7 +156,7 @@ export default function About() {
   }, []);
 
   return (
-    <div className="page-root" style={{ display: 'flex', justifyContent: 'flex-start', alignItems: 'center', height: '100%', width: '100%', marginLeft: '2%' }}>
+    <div className="page-root">
       <div id="about_card" ref={rootRef} className="card-carousel about-card">
         <div id="about_left" className="about-left">
           <img id="about_avatar" src={perfil} alt="perfil" className="avatar" />

@@ -42,7 +42,7 @@ export default function App() {
 
   return (
     <div id="app" style={{
-      height: '100vh', width: '100vw', overflow: 'hidden', position: 'relative', display: 'flex'
+      height: '100dvh', minHeight: '100vh', width: '100vw', overflow: 'hidden', position: 'relative', display: 'flex'
    }}>
       <BackGround />
       {showUi && (

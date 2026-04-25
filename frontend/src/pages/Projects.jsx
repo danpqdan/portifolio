@@ -28,14 +28,15 @@ function ProjectCard({ project }) {
   return (
     <div
       className="project-card-container"
+      role="button"
+      tabIndex={0}
+      aria-pressed={flipped}
       onClick={() => setFlipped(state => !state)}
-      style={{
-        position: 'relative',
-        width: '300px',
-        height: '200px',
-        margin: '10px',
-        cursor: 'pointer',
-        perspective: '600px'
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          setFlipped(state => !state);
+        }
       }}
     >
       {/* Frente do card */}
@@ -263,7 +264,7 @@ export default function Projects() {
   ];
 
   return (
-    <div style={{ display: 'flex', justifyContent: 'flex-start', alignItems: 'center', height: '100%', width: '100%', marginLeft: '2%' }}>
+    <div className="page-root">
       <div id="projects_card" className="card-carousel project-card">
         <div style={{
           height: '100%',
@@ -278,20 +279,11 @@ export default function Projects() {
             paddingBottom: '20px'
           }}>
             <h1 id="projects_title" style={{ margin: '0 0 10px 0', color: '#0b1220' }}>Projetos</h1>
-            <p id="projects_description" style={{ color: '#0b1220', textAlign: 'center', fontSize: '14px' }}>
+            <p id="projects_description" style={{ color: '#0b1220', textAlign: 'center' }}>
               Clique nos cards para ver mais detalhes de cada projeto.
             </p>
 
-            <div
-              id="projects_list"
-              style={{
-                display: 'grid',
-                gridTemplateColumns: 'repeat(auto-fit, minmax(400px, 1fr))',
-                gap: '50px 0px',
-                width: '100%',
-                height: 'fit-content'
-              }}
-            >
+            <div id="projects_list" className="projects-grid">
               {projects.map((project, index) => (
                 <ProjectCard
                   key={index}
