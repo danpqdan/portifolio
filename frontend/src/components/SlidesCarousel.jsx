@@ -4,6 +4,7 @@ import { createPortal } from 'react-dom';
 import ClasseAbout from '../classe/ClasseAbout';
 import ClasseHome from '../classe/ClasseHome';
 import ClasseProjects from '../classe/ClasseProjects';
+import '../styles/cards.css';
 
 // Horizontal carousel using translateX; slides have no visible scroll (overflow: hidden)
 export default function SlidesCarousel({ slides }) {
@@ -501,8 +502,8 @@ export default function SlidesCarousel({ slides }) {
     }, []);
 
     return (
-        <div ref={containerRef} style={{ position: 'relative', width: '100%', height: '100vh', overflow: 'hidden', touchAction: 'pan-y' }}>
-            <div ref={wrapperRef} style={{ display: 'flex', flexDirection: 'row', width: `${slides.length * 100}vw`, height: '100vh', willChange: 'transform' }}>
+        <div ref={containerRef} style={{ position: 'relative', width: '100%', height: '100dvh', minHeight: '100vh', overflow: 'hidden', touchAction: 'pan-y' }}>
+            <div ref={wrapperRef} style={{ display: 'flex', flexDirection: 'row', width: `${slides.length * 100}vw`, height: '100dvh', minHeight: '100vh', willChange: 'transform' }}>
                 {slides.map((s, i) => (
                     <SlideItem key={s.path} slide={s} idx={i} total={slides.length}
                         goPrev={() => { setIndex(cur => { const prev = Math.max(cur - 1, 0); indexRef.current = prev; return prev; }); }}
@@ -553,49 +554,21 @@ function SlideItem({ slide, idx, goPrev, goNext, onNodeReady }) {
     // button UI to be portaled into the card
     const controls = (
         <>
-            <button id='prev-button' aria-label="previous" onClick={goPrev}
-                style={{
-                    position: "absolute",
-                    left: "0px",
-                    top: "50% ",
-                    transform: "translateY(-50%)",
-                    zIndex: 9999,
-                    background: "transparent",
-                    color: "rgb(255, 255, 255)",
-                    border: "none",
-                    borderRadius: "6px",
-                    padding: "8px",
-                    cursor: "pointer",
-                    textAlign: "center",
-                    display: "flex",
-                    fontSize: "xxx-large"
-                }}>
+            <button id='prev-button' aria-label="Slide anterior"
+                className="carousel-nav-btn carousel-nav-btn--prev"
+                onClick={goPrev}>
                 ‹
             </button>
-            <button id='next-button' aria-label="next" onClick={goNext}
-                style={{
-                    position: "absolute",
-                    right: "0px",
-                    top: "50% ",
-                    transform: "translateY(-50%)",
-                    zIndex: 9999,
-                    background: "transparent",
-                    color: "rgb(255, 255, 255)",
-                    border: "none",
-                    borderRadius: "6px",
-                    padding: "8px",
-                    cursor: "pointer",
-                    textAlign: "center",
-                    display: "flex",
-                    fontSize: "xxx-large"
-                }}>
+            <button id='next-button' aria-label="Proximo slide"
+                className="carousel-nav-btn carousel-nav-btn--next"
+                onClick={goNext}>
                 ›
             </button>
         </>
     );
 
     return (
-        <div ref={rootRef} style={{ width: '100vw', height: '100vh', overflow: 'hidden', flexShrink: 0 }}>
+        <div ref={rootRef} style={{ width: '100vw', height: '100dvh', minHeight: '100vh', overflow: 'hidden', flexShrink: 0 }}>
             <div style={{ width: '100%', height: '100%', overflow: 'hidden' }}>{slide.element}</div>
             {target && createPortal(controls, target)}
         </div>
