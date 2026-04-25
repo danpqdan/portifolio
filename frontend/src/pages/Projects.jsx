@@ -21,161 +21,81 @@ function ProjectCard({ project }) {
 
   const { transform, opacity } = useSpring({
     opacity: flipped ? 1 : 0,
-    transform: `perspective(600px) rotateX(${flipped ? 180 : 0}deg)`,
+    transform: `perspective(800px) rotateX(${flipped ? 180 : 0}deg)`,
     config: { mass: 5, tension: 500, friction: 80 },
   });
 
+  const toggle = () => setFlipped(state => !state);
+
   return (
     <div
-      className="project-card-container"
+      className="project-tile"
       role="button"
       tabIndex={0}
       aria-pressed={flipped}
-      onClick={() => setFlipped(state => !state)}
+      aria-label={`${project.title} — clique para ver detalhes`}
+      onClick={toggle}
       onKeyDown={(e) => {
         if (e.key === 'Enter' || e.key === ' ') {
           e.preventDefault();
-          setFlipped(state => !state);
+          toggle();
         }
       }}
     >
-      {/* Frente do card */}
       <a.div
-        className="project-card-front"
-        style={{
-          opacity: opacity.to(o => 1 - o),
-          transform,
-          position: 'absolute',
-          width: '100%',
-          height: '100%',
-          backgroundColor: 'rgba(255, 255, 255, 0.9)',
-          borderRadius: '12px',
-          padding: '20px',
-          boxShadow: '0 4px 15px rgba(0, 0, 0, 0.1)',
-          display: 'flex',
-          flexDirection: 'column',
-          justifyContent: 'space-between',
-          backfaceVisibility: 'hidden'
-        }}
+        className="project-tile__face project-tile__face--front"
+        style={{ opacity: opacity.to(o => 1 - o), transform }}
       >
-        <div>
-          <h3 style={{ margin: '0 0 10px 0', color: '#0b1220', fontSize: '18px' }}>
-            {project.title}
-          </h3>
-          <p className="project-card-description" style={{ margin: '0', color: '#334155', fontSize: '14px', lineHeight: '1.4' }}>
-            {project.description}
-          </p>
-        </div>
-
-        <div className='container-btn-front' style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginTop: '10px' }}>
+        <header className="project-tile__header">
+          <h3 className="project-tile__title">{project.title}</h3>
+          <p className="project-tile__description">{project.description}</p>
+        </header>
+        <footer className="project-tile__chips">
           {project.technologies.map((tech, idx) => (
-            <span
-              className='tech-span'
-              key={idx}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '4px',
-                backgroundColor: '#e2e8f0',
-                color: '#475569',
-                padding: '12px 16px',
-                borderRadius: '6px',
-                fontSize: '12px',
-              }}
-            >
-              {tech.icon}
-              {tech.name}
+            <span className="project-tile__chip" key={idx}>
+              <span className="project-tile__chip-icon" aria-hidden="true">{tech.icon}</span>
+              <span className="project-tile__chip-label">{tech.name}</span>
             </span>
           ))}
-        </div>
+        </footer>
+        <span className="project-tile__hint" aria-hidden="true">toque para detalhes</span>
       </a.div>
 
-      {/* Verso do card */}
       <a.div
-        className="project-card-back"
-        style={{
-          opacity,
-          transform: transform.to(t => `${t} rotateX(180deg)`),
-          position: 'absolute',
-          width: '100%',
-          height: '100%',
-          backgroundColor: 'rgba(30, 41, 59, 0.95)',
-          borderRadius: '12px',
-          padding: '20px',
-          boxShadow: '0 4px 15px rgba(0, 0, 0, 0.2)',
-          display: 'flex',
-          flexDirection: 'column',
-          justifyContent: 'space-between',
-          backfaceVisibility: 'hidden',
-          color: 'white'
-        }}
+        className="project-tile__face project-tile__face--back"
+        style={{ opacity, transform: transform.to(t => `${t} rotateX(180deg)`) }}
       >
-        <div>
-          <h3 style={{ margin: '0 0 10px 0', color: '#f1f5f9', fontSize: '18px' }}>
-            {project.title}
-          </h3>
-          <p style={{ margin: '0 0 15px 0', color: '#cbd5e1', fontSize: '14px', lineHeight: '1.4' }}>
-            {project.details}
-          </p>
-
+        <div className="project-tile__back-body">
+          <h3 className="project-tile__title project-tile__title--invert">{project.title}</h3>
+          <p className="project-tile__details">{project.details}</p>
           {project.features && (
-            <ul style={{ margin: '0', padding: '0 0 0 15px', color: '#e2e8f0', fontSize: '12px', listStyleType: 'none', lineHeight: '1.4' }}>
+            <ul className="project-tile__features">
               {project.features.map((feature, idx) => (
-                <li key={idx} style={{ marginBottom: '5px' }}>{feature}</li>
+                <li key={idx}>{feature}</li>
               ))}
             </ul>
           )}
         </div>
-
-        <div className='container-btn-projects' style={{ display: 'flex' }}>
+        <footer className="project-tile__actions">
           {project.githubUrl && (
             <button
-              onClick={(e) => {
-                e.stopPropagation();
-                window.open(project.githubUrl, '_blank');
-              }}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '5px',
-                backgroundColor: '#4f46e5',
-                color: 'white',
-                border: 'none',
-                borderRadius: '6px',
-                padding: '8px 12px',
-                fontSize: '12px',
-                cursor: 'pointer',
-                transition: 'background-color 0.2s'
-              }}
+              type="button"
+              className="project-tile__action project-tile__action--primary"
+              onClick={(e) => { e.stopPropagation(); window.open(project.githubUrl, '_blank', 'noopener'); }}
             >
-              <FaGithub /> GitHub
+              <FaGithub aria-hidden="true" /> GitHub
             </button>
           )}
-
           {project.demoUrl && (
             <button
-              onClick={(e) => {
-                e.stopPropagation();
-                window.open(project.demoUrl, '_blank');
-              }}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '5px',
-                backgroundColor: '#10b981',
-                color: 'white',
-                border: 'none',
-                borderRadius: '6px',
-                padding: '8px 12px',
-                fontSize: '12px',
-                cursor: 'pointer',
-                transition: 'background-color 0.2s'
-              }}
+              type="button"
+              className="project-tile__action project-tile__action--success"
+              onClick={(e) => { e.stopPropagation(); window.open(project.demoUrl, '_blank', 'noopener'); }}
             >
-              <FaExternalLinkAlt /> Demo
+              <FaExternalLinkAlt aria-hidden="true" /> Demo
             </button>
           )}
-        </div>
+        </footer>
       </a.div>
     </div>
   );

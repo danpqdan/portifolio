@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState, useCallback, useLayoutEffect } from 'react';
 
-import { createPortal } from 'react-dom';
 import ClasseAbout from '../classe/ClasseAbout';
 import ClasseHome from '../classe/ClasseHome';
 import ClasseProjects from '../classe/ClasseProjects';
@@ -501,17 +500,60 @@ export default function SlidesCarousel({ slides }) {
         };
     }, []);
 
+    const goPrev = useCallback(() => {
+        setIndex(cur => { const prev = Math.max(cur - 1, 0); indexRef.current = prev; return prev; });
+    }, []);
+    const goNext = useCallback(() => {
+        setIndex(cur => { const next = Math.min(cur + 1, slides.length - 1); indexRef.current = next; return next; });
+    }, [slides.length]);
+    const goTo = useCallback((target) => {
+        setIndex(() => { const next = Math.max(0, Math.min(target, slides.length - 1)); indexRef.current = next; return next; });
+    }, [slides.length]);
+
     return (
-        <div ref={containerRef} style={{ position: 'relative', width: '100%', height: '100dvh', minHeight: '100vh', overflow: 'hidden', touchAction: 'pan-y' }}>
+        <div ref={containerRef} className="carousel-root" style={{ position: 'relative', width: '100%', height: '100dvh', minHeight: '100vh', overflow: 'hidden', touchAction: 'pan-y' }}>
             <div ref={wrapperRef} style={{ display: 'flex', flexDirection: 'row', width: `${slides.length * 100}vw`, height: '100dvh', minHeight: '100vh', willChange: 'transform' }}>
                 {slides.map((s, i) => (
                     <SlideItem key={s.path} slide={s} idx={i} total={slides.length}
-                        goPrev={() => { setIndex(cur => { const prev = Math.max(cur - 1, 0); indexRef.current = prev; return prev; }); }}
-                        goNext={() => { setIndex(cur => { const next = Math.min(cur + 1, slides.length - 1); indexRef.current = next; return next; }); }}
                         onNodeReady={handleNodeReady}
                     />
                 ))}
             </div>
+
+            <nav className="carousel-pager" aria-label="Navegacao entre slides">
+                <button
+                    type="button"
+                    className="carousel-pager__btn carousel-pager__btn--prev"
+                    aria-label="Slide anterior"
+                    onClick={goPrev}
+                    disabled={index === 0}
+                >
+                    ‹
+                </button>
+                <ol className="carousel-pager__dots" role="tablist">
+                    {slides.map((s, i) => (
+                        <li key={s.path} role="presentation">
+                            <button
+                                type="button"
+                                role="tab"
+                                aria-selected={i === index}
+                                aria-label={`Ir para slide ${i + 1}`}
+                                className={`carousel-pager__dot${i === index ? ' carousel-pager__dot--active' : ''}`}
+                                onClick={() => goTo(i)}
+                            />
+                        </li>
+                    ))}
+                </ol>
+                <button
+                    type="button"
+                    className="carousel-pager__btn carousel-pager__btn--next"
+                    aria-label="Proximo slide"
+                    onClick={goNext}
+                    disabled={index === slides.length - 1}
+                >
+                    ›
+                </button>
+            </nav>
         </div>
     );
 }
@@ -526,23 +568,17 @@ function normalizarPageId(slide, index) {
     return semQuery.startsWith('/') ? semQuery : `/${semQuery}`;
 }
 
-function SlideItem({ slide, idx, goPrev, goNext, onNodeReady }) {
+function SlideItem({ slide, idx, onNodeReady }) {
     const rootRef = useRef(null);
-    const [target, setTarget] = useState(null);
 
     useLayoutEffect(() => {
         const root = rootRef.current;
         if (!root) return;
         const node = root.querySelector('.card-carousel');
         if (node) {
-            // ensure positioning so absolute buttons are relative to the card
             if (!node.style.position || node.style.position === 'static') node.style.position = 'relative';
-            setTarget(node);
             if (onNodeReady) onNodeReady(idx, node);
         }
-        return () => {
-            // nothing to cleanup synchronously here
-        };
     }, [idx, onNodeReady]);
 
     useEffect(() => {
@@ -551,26 +587,9 @@ function SlideItem({ slide, idx, goPrev, goNext, onNodeReady }) {
         };
     }, [idx, onNodeReady]);
 
-    // button UI to be portaled into the card
-    const controls = (
-        <>
-            <button id='prev-button' aria-label="Slide anterior"
-                className="carousel-nav-btn carousel-nav-btn--prev"
-                onClick={goPrev}>
-                ‹
-            </button>
-            <button id='next-button' aria-label="Proximo slide"
-                className="carousel-nav-btn carousel-nav-btn--next"
-                onClick={goNext}>
-                ›
-            </button>
-        </>
-    );
-
     return (
         <div ref={rootRef} style={{ width: '100vw', height: '100dvh', minHeight: '100vh', overflow: 'hidden', flexShrink: 0 }}>
             <div style={{ width: '100%', height: '100%', overflow: 'hidden' }}>{slide.element}</div>
-            {target && createPortal(controls, target)}
         </div>
     );
 }
