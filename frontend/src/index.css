@@ -59,6 +59,18 @@
   --font-size-5xl: 3rem;
   --font-size-6xl: 4rem;
 
+  --touch-target-min: 44px;
+  --fluid-h1: clamp(1.375rem, 1.05rem + 1.6vw, 2.25rem);
+  --fluid-h2: clamp(1.125rem, 0.95rem + 1.1vw, 1.75rem);
+  --fluid-h3: clamp(1rem, 0.9rem + 0.6vw, 1.25rem);
+  --fluid-body: clamp(0.875rem, 0.82rem + 0.25vw, 1rem);
+  --fluid-small: clamp(0.75rem, 0.7rem + 0.2vw, 0.875rem);
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
 }
 
 body {
@@ -69,10 +81,9 @@ body {
   background-color: var(--color-background);
   color: var(--color-text);
   line-height: var(--line-height-normal);
-  font-size: var(--font-size-md);
+  font-size: var(--fluid-body);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  box-sizing: border-box;
 }
 
 a {
@@ -80,34 +91,53 @@ a {
   text-decoration: none;
 }
 
+button,
+[role="button"] {
+  min-height: var(--touch-target-min);
+  min-width: var(--touch-target-min);
+}
+
 p {
-  margin: 0 0 0 0;
+  margin: 0 0 0.75em 0;
   padding: 0;
-  font-size: 14px;
-  text-align: justify;
+  font-size: var(--fluid-small);
+  text-align: left;
+  line-height: var(--line-height-normal);
 }
 
 h1 {
-  margin: 0 0 0 0;
+  margin: 0 0 0.5em 0;
   padding: 0;
-  font-size: 28px;
+  font-size: var(--fluid-h1);
+  line-height: var(--line-height-tight);
+}
+
+h2 {
+  margin: 0 0 0.5em 0;
+  padding: 0;
+  font-size: var(--fluid-h2);
+  line-height: var(--line-height-tight);
 }
 
 h3,
 h4,
 h5,
 h6 {
-  margin: 0 0 0 0;
+  margin: 0 0 0.5em 0;
   padding: 0;
-  font-size: 20px;
+  font-size: var(--fluid-h3);
+  line-height: var(--line-height-tight);
+}
+
+@media screen and (min-width: 768px) {
+  p {
+    text-align: justify;
+  }
 }
 
 @media screen and (max-width: 720px) {
 
   h1 {
-    margin: 0 0 0.5em 0;
-    padding: 0;
-    font-size: 22px;
     text-align: center;
   }
 
@@ -115,16 +145,6 @@ h6 {
   h4,
   h5,
   h6 {
-    margin: 0 0 0.5em 0;
-    padding: 0;
-    font-size: 16px;
     text-align: center;
-  }
-
-  p {
-    margin: 0 0 1em 0;
-    padding: 0;
-    font-size: 12px;
-    text-align: justify;
   }
 }

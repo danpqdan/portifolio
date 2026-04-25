@@ -1,25 +1,43 @@
-/* Standard card layout for slides */
+/* ==========================================================================
+   MOBILE-FIRST BASE — regras default valem para >=320px;
+   media queries com min-width refinam para tablet/desktop.
+   ========================================================================== */
+
 .page-root {
     display: flex;
-    justify-content: flex-start;
+    justify-content: center;
     align-items: center;
     height: 100%;
     width: 100%;
-    margin-left: 2%;
+    padding: 0 var(--spacing-2);
+    margin-left: 0;
 }
 
 .card-carousel {
-    width: 70%;
+    width: 100%;
+    max-width: 720px;
     background-color: rgba(192, 189, 189, 0.61);
     padding: 0;
     color: #0b1220;
-    box-sizing: border-box;
-    border-radius: 12px;
+    border-radius: var(--border-radius-md);
     box-shadow: 0 8px 30px rgba(2, 6, 23, 0.08);
     overflow: hidden;
     display: flex;
     flex-direction: column;
     position: relative;
+}
+
+@media screen and (min-width: 768px) {
+    .page-root {
+        justify-content: flex-start;
+        margin-left: 2%;
+        padding: 0;
+    }
+
+    .card-carousel {
+        width: 70%;
+        max-width: none;
+    }
 }
 
 .card-header {
@@ -741,5 +759,91 @@
 
     .about-meta {
         text-align: center;
+    }
+}
+
+/* ==========================================================================
+   Mobile-first: grid de projetos, cards e nav do carrossel.
+   Regras com classes utilitarias usadas no JSX para evitar styles inline.
+   ========================================================================== */
+
+.projects-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: var(--spacing-3);
+    width: 100%;
+}
+
+.project-card-container {
+    width: 100%;
+    max-width: 360px;
+    height: 200px;
+    margin: 0 auto;
+    cursor: pointer;
+    perspective: 600px;
+    position: relative;
+}
+
+@media screen and (min-width: 600px) {
+    .projects-grid {
+        grid-template-columns: repeat(2, 1fr);
+        gap: var(--spacing-4);
+    }
+
+    .project-card-container {
+        max-width: none;
+    }
+}
+
+@media screen and (min-width: 1024px) {
+    .projects-grid {
+        grid-template-columns: repeat(auto-fit, minmax(min(280px, 100%), 1fr));
+        gap: var(--spacing-5) var(--spacing-3);
+    }
+}
+
+.carousel-nav-btn {
+    position: absolute;
+    top: 50%;
+    transform: translateY(-50%);
+    z-index: 9999;
+    background: rgba(15, 23, 42, 0.35);
+    color: #fff;
+    border: none;
+    border-radius: 50%;
+    width: var(--touch-target-min);
+    height: var(--touch-target-min);
+    min-width: var(--touch-target-min);
+    min-height: var(--touch-target-min);
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.75rem;
+    line-height: 1;
+    padding: 0;
+    transition: background 0.2s ease;
+}
+
+.carousel-nav-btn:hover,
+.carousel-nav-btn:focus-visible {
+    background: rgba(15, 23, 42, 0.65);
+    outline: 2px solid #fff;
+    outline-offset: 2px;
+}
+
+.carousel-nav-btn--prev {
+    left: var(--spacing-2);
+}
+
+.carousel-nav-btn--next {
+    right: var(--spacing-2);
+}
+
+@media screen and (min-width: 768px) {
+    .carousel-nav-btn {
+        width: 56px;
+        height: 56px;
+        font-size: 2.25rem;
     }
 }

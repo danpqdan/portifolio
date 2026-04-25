@@ -43,7 +43,7 @@ export default function Home() {
 
   // Função para testar envio de dados
   return (
-    <div style={{ display: 'flex', justifyContent: 'flex-start', alignItems: 'center', height: '100%', width: '100%', marginLeft: '2%' }}>
+    <div className="page-root">
       <div className="card-carousel home-card">
         {/* header */}
         <div className="card-header home-header">
