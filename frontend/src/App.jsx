@@ -1,9 +1,12 @@
 import { useEffect, useState } from 'react';
+import { Route, Routes } from 'react-router-dom';
 import BackGround from "./BackGround";
 import SlidesCarousel from './components/SlidesCarousel';
 import Home from './pages/Home';
 import Projects from './pages/Projects';
 import About from './pages/About';
+import ClienteLogin from './pages/ClienteLogin';
+import ClienteMetricas from './pages/ClienteMetricas';
 import { iniciarAnalytics } from './sdk';
 import { WEBSOCKET_URL, DEBUG_ENABLED, NODE_ENV } from './config.js';
 
@@ -18,7 +21,7 @@ iniciarAnalytics({
   intervaloEnvioMs: 5000,
 });
 
-export default function App() {
+function Portfolio() {
   const [showUi, setShowUi] = useState(false);
 
   useEffect(() => {
@@ -55,5 +58,15 @@ export default function App() {
         </div>
       )}
     </div>
+  );
+}
+
+export default function App() {
+  return (
+    <Routes>
+      <Route path="/cliente/login" element={<ClienteLogin />} />
+      <Route path="/cliente/metricas/*" element={<ClienteMetricas />} />
+      <Route path="*" element={<Portfolio />} />
+    </Routes>
   );
 }
