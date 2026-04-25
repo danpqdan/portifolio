@@ -46,3 +46,4 @@ backend/.env.*
 backend/data/keys/
 backend/data/tenants.db
 backend/data/tenants.db-*
+.claude
