@@ -36,10 +36,10 @@ describe('pagina Projects (mobile-first)', () => {
   it('cards de projeto alternam aria-pressed ao acionar via Enter', () => {
     const { container } = render(<Projects />);
     const card = container.querySelector('.project-card-container');
-    expect(card).not.toBeNull();
-    expect(card?.getAttribute('aria-pressed')).toBe('false');
-    fireEvent.keyDown(card!, { key: 'Enter' });
-    expect(card?.getAttribute('aria-pressed')).toBe('true');
+    if (!card) throw new Error('project-card-container nao encontrado');
+    expect(card.getAttribute('aria-pressed')).toBe('false');
+    fireEvent.keyDown(card, { key: 'Enter' });
+    expect(card.getAttribute('aria-pressed')).toBe('true');
   });
 
   it('cards nao tem mais largura fixa de 300px inline', () => {
