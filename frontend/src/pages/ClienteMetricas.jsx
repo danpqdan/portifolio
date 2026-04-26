@@ -3,12 +3,14 @@ import { useNavigate } from 'react-router-dom';
 import '../styles/cliente.css';
 
 const API_BASE = import.meta.env.VITE_API_URL || '';
+const GRAFANA_URL = import.meta.env.VITE_GRAFANA_URL || 'http://localhost:3001';
+const REDIRECT_DELAY_MS = 1200;
 
 /**
  * Em producao: o nginx do host intercepta /cliente/metricas/* via auth_request
- * e faz proxy direto pro Grafana. Este componente so e renderizado em dev local
- * (sem nginx) — valida sessao via /api/cliente/auth/me e mostra um placeholder
- * com link pro Grafana local.
+ * e faz proxy direto pro Grafana — este componente nem e renderizado.
+ * Em dev local (sem nginx): valida sessao e auto-redireciona pro Grafana
+ * standalone, simulando a experiencia de produzao.
  */
 export default function ClienteMetricas() {
   const navigate = useNavigate();
@@ -29,7 +31,7 @@ export default function ClienteMetricas() {
         }
         if (r.ok) {
           setUser(await r.json());
-          setEstado('autenticado');
+          setEstado('redirecionando');
           return;
         }
         setEstado('erro');
@@ -39,6 +41,23 @@ export default function ClienteMetricas() {
     })();
     return () => { cancelado = true; };
   }, [navigate]);
+
+  // Redireciona pro Grafana apos validar sessao (com pequeno delay
+  // pra dar tempo do user ler "Sessao ativa para ..." e cancelar se quiser).
+  useEffect(() => {
+    if (estado !== 'redirecionando') return;
+    const t = setTimeout(() => {
+      window.location.href = GRAFANA_URL;
+    }, REDIRECT_DELAY_MS);
+    return () => clearTimeout(t);
+  }, [estado]);
+
+  async function sair() {
+    await fetch(`${API_BASE}/api/cliente/auth/logout`, {
+      method: 'POST', credentials: 'include',
+    });
+    navigate('/cliente/login', { replace: true });
+  }
 
   if (estado === 'verificando') {
     return (
@@ -58,28 +77,26 @@ export default function ClienteMetricas() {
     );
   }
 
+  // estado === 'redirecionando'
   return (
     <div className="cliente-metricas-loading">
-      <p>Sessao ativa para <strong>{user?.email}</strong> ({user?.papel}).</p>
-      <p style={{ opacity: 0.7, fontSize: '0.875rem', maxWidth: 480 }}>
-        Em producao, o nginx redirecionaria voce direto pro Grafana embedado neste path.
-        Em dev local, abra o Grafana em outra aba para inspecionar.
+      <div className="cliente-metricas-spinner" aria-hidden="true" />
+      <p>
+        Bem-vindo, <strong>{user?.email}</strong>.
       </p>
-      <a href="http://localhost:3001" target="_blank" rel="noreferrer noopener"
-         style={{ color: '#a855f7' }}>
-        Abrir Grafana em nova aba →
-      </a>
+      <p style={{ opacity: 0.7, fontSize: '0.875rem' }}>
+        Abrindo seu dashboard…
+      </p>
+      <p style={{ opacity: 0.5, fontSize: '0.75rem', maxWidth: 480 }}>
+        Se nao for redirecionado em alguns segundos,{' '}
+        <a href={GRAFANA_URL} style={{ color: '#a855f7' }}>clique aqui</a>.
+      </p>
       <button
-        onClick={async () => {
-          await fetch(`${API_BASE}/api/cliente/auth/logout`, {
-            method: 'POST', credentials: 'include',
-          });
-          navigate('/cliente/login', { replace: true });
-        }}
+        onClick={sair}
         style={{
-          marginTop: 24, padding: '10px 20px', background: 'transparent',
-          border: '1px solid rgba(248,250,252,0.2)', color: 'rgba(248,250,252,0.7)',
-          borderRadius: 8, cursor: 'pointer', font: 'inherit',
+          marginTop: 32, padding: '8px 16px', background: 'transparent',
+          border: '1px solid rgba(248,250,252,0.15)', color: 'rgba(248,250,252,0.55)',
+          borderRadius: 8, cursor: 'pointer', font: 'inherit', fontSize: '0.8125rem',
         }}
       >
         Sair

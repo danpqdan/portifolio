@@ -13,7 +13,7 @@ function renderLogin(initialPath = '/cliente/login') {
 
 describe('ClienteLogin', () => {
   beforeEach(() => {
-    global.fetch = vi.fn();
+    globalThis.fetch = vi.fn();
   });
 
   it('renderiza as duas tabs com magic-link como default', () => {
@@ -38,7 +38,7 @@ describe('ClienteLogin', () => {
   });
 
   it('mostra mensagem de sucesso ao enviar magic-link', async () => {
-    global.fetch.mockResolvedValueOnce({
+    globalThis.fetch.mockResolvedValueOnce({
       ok: true, status: 200, json: async () => ({ ok: true }),
     });
     renderLogin();
@@ -49,14 +49,14 @@ describe('ClienteLogin', () => {
     await waitFor(() => {
       expect(screen.getByRole('status')).toHaveTextContent(/verifique sua caixa/i);
     });
-    expect(global.fetch).toHaveBeenCalledWith(
+    expect(globalThis.fetch).toHaveBeenCalledWith(
       expect.stringContaining('/api/cliente/auth/magic-link/solicitar'),
       expect.objectContaining({ credentials: 'include', method: 'POST' }),
     );
   });
 
   it('mostra erro 429 ao estourar rate-limit', async () => {
-    global.fetch.mockResolvedValueOnce({ ok: false, status: 429, json: async () => ({}) });
+    globalThis.fetch.mockResolvedValueOnce({ ok: false, status: 429, json: async () => ({}) });
     renderLogin();
     fireEvent.change(screen.getByLabelText(/e-mail/i), {
       target: { value: 'dan@acme.test' },
@@ -68,7 +68,7 @@ describe('ClienteLogin', () => {
   });
 
   it('mostra erro 401 ao login com senha incorreta', async () => {
-    global.fetch.mockResolvedValueOnce({
+    globalThis.fetch.mockResolvedValueOnce({
       ok: false, status: 401, json: async () => ({ code: 'CREDENCIAIS_INVALIDAS' }),
     });
     renderLogin();

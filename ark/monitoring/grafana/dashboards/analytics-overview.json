@@ -12,7 +12,7 @@
       }
     ]
   },
-  "description": "Overview do backend portifolio analytics — ingestao, cliques e permanencia por pagina. Fonte: InfluxDB (measurement page_analytics).",
+  "description": "Overview do backend portifolio analytics — ingestao, cliques, permanencia e engajamento por pagina. Fonte: InfluxDB measurement page_analytics. Web vitals e custom_events com nome separado nao estao no schema atual — ver ark/docs/dashboard-cliente.md.",
   "editable": true,
   "fiscalYearStartMonth": 0,
   "graphTooltip": 0,
@@ -20,19 +20,51 @@
   "links": [],
   "panels": [
     {
-      "title": "Eventos ingeridos (ultimas 24h, por tipo)",
+      "title": "Eventos ingeridos (ultimas 24h)",
       "type": "stat",
       "gridPos": { "h": 6, "w": 24, "x": 0, "y": 0 },
       "datasource": { "type": "influxdb", "uid": "InfluxDB" },
       "targets": [
         {
-          "query": "from(bucket: \"portifolio_dev\")\n  |> range(start: -24h)\n  |> filter(fn: (r) => r._measurement == \"page_analytics\")\n  |> filter(fn: (r) => r._field == \"cliques\" or r._field == \"visualizacoes\" or r._field == \"scrolls\")\n  |> group(columns: [\"_field\"])\n  |> sum()",
-          "refId": "A"
+          "refId": "A",
+          "query": "from(bucket: \"portifolio_dev\")\n  |> range(start: -24h)\n  |> filter(fn: (r) => r._measurement == \"page_analytics\" and r._field == \"visualizacoes\")\n  |> sum()\n  |> group()\n  |> sum()\n  |> rename(columns: {_value: \"Visualizacoes\"})"
+        },
+        {
+          "refId": "B",
+          "query": "from(bucket: \"portifolio_dev\")\n  |> range(start: -24h)\n  |> filter(fn: (r) => r._measurement == \"page_analytics\" and r._field == \"cliques\")\n  |> sum()\n  |> group()\n  |> sum()\n  |> rename(columns: {_value: \"Cliques\"})"
+        },
+        {
+          "refId": "C",
+          "query": "from(bucket: \"portifolio_dev\")\n  |> range(start: -24h)\n  |> filter(fn: (r) => r._measurement == \"page_analytics\" and r._field == \"scrolls\")\n  |> sum()\n  |> group()\n  |> sum()\n  |> rename(columns: {_value: \"Scrolls\"})"
+        },
+        {
+          "refId": "D",
+          "query": "from(bucket: \"portifolio_dev\")\n  |> range(start: -24h)\n  |> filter(fn: (r) => r._measurement == \"page_analytics\" and r._field == \"hovers\")\n  |> sum()\n  |> group()\n  |> sum()\n  |> rename(columns: {_value: \"Hovers\"})"
+        },
+        {
+          "refId": "E",
+          "query": "from(bucket: \"portifolio_dev\")\n  |> range(start: -24h)\n  |> filter(fn: (r) => r._measurement == \"page_analytics\" and r._field == \"mouse_moves\")\n  |> sum()\n  |> group()\n  |> sum()\n  |> rename(columns: {_value: \"Mouse moves\"})"
         }
       ],
       "options": {
         "reduceOptions": { "values": false, "calcs": ["lastNotNull"], "fields": "" },
-        "textMode": "value_and_name"
+        "textMode": "value_and_name",
+        "colorMode": "background",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "blue", "value": null }
+            ]
+          },
+          "unit": "short"
+        }
       }
     },
     {
@@ -48,28 +80,52 @@
       ]
     },
     {
-      "title": "LCP p75 por pagina (24h)",
+      "title": "Permanencia media por pagina (24h, segundos)",
       "type": "timeseries",
       "gridPos": { "h": 8, "w": 12, "x": 12, "y": 6 },
       "datasource": { "type": "influxdb", "uid": "InfluxDB" },
       "targets": [
         {
-          "query": "from(bucket: \"portifolio_dev\")\n  |> range(start: -24h)\n  |> filter(fn: (r) => r._measurement == \"web_vitals\" and r.nome == \"LCP\" and r._field == \"valor\")\n  |> aggregateWindow(every: 5m, fn: (tables=<-, column) => tables |> quantile(q: 0.75, method: \"estimate_tdigest\", column: column), createEmpty: false)\n  |> group(columns: [\"page_type\"])",
+          "query": "from(bucket: \"portifolio_dev\")\n  |> range(start: -24h)\n  |> filter(fn: (r) => r._measurement == \"page_analytics\" and r._field == \"permanencia_segundos\")\n  |> aggregateWindow(every: 5m, fn: mean, createEmpty: false)\n  |> group(columns: [\"page_type\"])",
           "refId": "A"
         }
       ]
     },
     {
-      "title": "Custom events — ocorrencias por nome (24h)",
+      "title": "Engajamento por pagina (24h) — soma por tipo",
       "type": "bargauge",
-      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 14 },
+      "gridPos": { "h": 10, "w": 24, "x": 0, "y": 14 },
       "datasource": { "type": "influxdb", "uid": "InfluxDB" },
       "targets": [
         {
-          "query": "from(bucket: \"portifolio_dev\")\n  |> range(start: -24h)\n  |> filter(fn: (r) => r._measurement == \"custom_events\" and r._field == \"ocorrencias\")\n  |> group(columns: [\"nome\"])\n  |> sum()",
+          "query": "from(bucket: \"portifolio_dev\")\n  |> range(start: -24h)\n  |> filter(fn: (r) => r._measurement == \"page_analytics\")\n  |> filter(fn: (r) => r._field == \"cliques\" or r._field == \"hovers\" or r._field == \"mouse_moves\" or r._field == \"toques\" or r._field == \"exposicoes\" or r._field == \"custom_events\")\n  |> group(columns: [\"_field\", \"page_type\"])\n  |> sum()",
           "refId": "A"
         }
-      ]
+      ],
+      "options": {
+        "displayMode": "gradient",
+        "orientation": "horizontal",
+        "showUnfilled": true,
+        "valueMode": "color",
+        "reduceOptions": {
+          "values": false,
+          "calcs": ["lastNotNull"],
+          "fields": ""
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "displayName": "${__field.labels._field} · ${__field.labels.page_type}",
+          "color": { "mode": "continuous-GrYlRd" },
+          "unit": "short",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null }
+            ]
+          }
+        }
+      }
     }
   ],
   "refresh": "30s",
