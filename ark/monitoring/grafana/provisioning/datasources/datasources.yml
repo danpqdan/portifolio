@@ -20,8 +20,8 @@ datasources:
     editable: false
     jsonData:
       version: Flux
-      organization: zen
-      defaultBucket: portifolio_dev
+      organization: $INFLUXDB_ORG
+      defaultBucket: $INFLUXDB_BUCKET
       tlsSkipVerify: true
     secureJsonData:
-      token: ${INFLUXDB_TOKEN:-dev-local-influxdb-token}
+      token: $INFLUXDB_TOKEN

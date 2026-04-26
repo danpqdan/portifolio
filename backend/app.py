@@ -116,11 +116,16 @@ socketio_config = {
     'ping_interval': 25
 }
 
-if env == 'production':
-    socketio_config.update({
-        'path': '/api/socket.io',  # Caminho customizado para produção
-        'async_mode': 'eventlet'   # Melhor para produção
-    })
+# Path padronizado em todos os ambientes — frontend SDK usa '/api/socket.io/'
+# como path canonico (ver frontend/src/sdk/WebSocketService.tsx). Em prod o
+# nginx faz proxy /api/socket.io/ -> backend; em dev o frontend bate direto.
+socketio_config['path'] = '/api/socket.io'
+
+# async_mode 'eventlet' habilita upgrade WebSocket. O Dockerfile de
+# producao roda 'gunicorn --worker-class eventlet', entao o Socket.IO
+# precisa do mesmo loop async em todos os ambientes — sem isso o
+# handshake retorna `upgrades:[]` e o cliente cicla em polling.
+socketio_config['async_mode'] = 'eventlet'
 
 socketio = SocketIO(app, **socketio_config)
 
@@ -159,8 +164,17 @@ session_metrics = defaultdict(lambda: {
     'ip_address': None, 'user_agent': None,
     'security_score': 100, 'warnings': []
 })
-suspicious_ips = set()
+suspicious_ips: dict[str, float] = {}   # ip -> ban_expira_em (timestamp)
 rate_limit_violations = defaultdict(list)
+# Threshold do anti-abuse. SDK de analytics em batch envia ~12 frames/min/sessao
+# (1 batch a cada 5s + page_view + scroll + cliques + ping/pong). Em prod cada
+# IP e um end-user; em dev local TODO trafego vem do mesmo IP da bridge Docker.
+SUSPICIOUS_REQS_PER_MIN = int(os.environ.get('ANTIABUSE_REQS_PER_MIN', '600'))
+SUSPICIOUS_BAN_TTL = int(os.environ.get('ANTIABUSE_BAN_TTL_SECONDS', '300'))
+# IPs internos (loopback, docker bridges, redes privadas) nao sao banidos —
+# evita auto-DoS do dev local. Em prod o trafego chega via X-Forwarded-For
+# do nginx, que e IP publico real.
+ANTIABUSE_SKIP_PRIVATE = os.environ.get('ANTIABUSE_SKIP_PRIVATE', 'true').lower() == 'true'
 
 def generate_session_token():
     return secrets.token_urlsafe(32)
@@ -185,16 +199,43 @@ def validate_session_integrity(session_id: str, request) -> bool:
         return False
     return True
 
+def _ip_eh_privado(ip: str) -> bool:
+    """Loopback, docker bridges e redes privadas — nao sao banidos."""
+    if not ip or ip == 'unknown':
+        return True
+    try:
+        from ipaddress import ip_address as parse_ip
+        addr = parse_ip(ip)
+        return addr.is_private or addr.is_loopback or addr.is_link_local
+    except (ValueError, ImportError):
+        return False
+
+
 def check_suspicious_activity(session_id: str, request) -> bool:
     ip_address = request.environ.get('REMOTE_ADDR', '')
     current_time = time.time()
-    if ip_address in suspicious_ips:
-        log_safe(security_logger, 'warning', f"[BLOCKED] IP suspeito tentando acesso: {ip_address}")
-        return False
-    recent_requests = [t for t in rate_limit_violations[ip_address] if current_time - t < 60]
-    if len(recent_requests) > 30:
-        log_safe(security_logger, 'warning', f"[WARNING] Rate limit excedido para IP: {ip_address}")
-        suspicious_ips.add(ip_address)
+
+    # Pula bloqueio para IPs internos (dev local, traffic via docker bridge).
+    if ANTIABUSE_SKIP_PRIVATE and _ip_eh_privado(ip_address):
+        return True
+
+    # Ban com TTL: se expirou, remove e segue normal.
+    ban_expira = suspicious_ips.get(ip_address)
+    if ban_expira is not None:
+        if ban_expira > current_time:
+            log_safe(security_logger, 'warning', f"[BLOCKED] IP suspeito tentando acesso: {ip_address}")
+            return False
+        del suspicious_ips[ip_address]
+
+    # Janela movel de 60s.
+    rate_limit_violations[ip_address] = [
+        t for t in rate_limit_violations[ip_address] if current_time - t < 60
+    ]
+    if len(rate_limit_violations[ip_address]) > SUSPICIOUS_REQS_PER_MIN:
+        log_safe(security_logger, 'warning',
+                 f"[WARNING] Rate limit excedido para IP: {ip_address} "
+                 f"({len(rate_limit_violations[ip_address])} req/min, ban {SUSPICIOUS_BAN_TTL}s)")
+        suspicious_ips[ip_address] = current_time + SUSPICIOUS_BAN_TTL
         return False
     rate_limit_violations[ip_address].append(current_time)
     return True
