@@ -80,16 +80,30 @@
       ]
     },
     {
-      "title": "Permanencia media por pagina (24h, segundos)",
+      "title": "Tempo total na pagina (24h, soma de segundos por janela 5min)",
       "type": "timeseries",
       "gridPos": { "h": 8, "w": 12, "x": 12, "y": 6 },
       "datasource": { "type": "influxdb", "uid": "InfluxDB" },
+      "description": "Soma de permanencia_segundos por janela de 5min e por page_type. permanencia_segundos no SDK e a duracao do batch (~5s), entao soma representa o tempo total agregado de todas as sessoes ativas naquela janela.",
       "targets": [
         {
-          "query": "from(bucket: \"portifolio_dev\")\n  |> range(start: -24h)\n  |> filter(fn: (r) => r._measurement == \"page_analytics\" and r._field == \"permanencia_segundos\")\n  |> aggregateWindow(every: 5m, fn: mean, createEmpty: false)\n  |> group(columns: [\"page_type\"])",
+          "query": "from(bucket: \"portifolio_dev\")\n  |> range(start: -24h)\n  |> filter(fn: (r) => r._measurement == \"page_analytics\" and r._field == \"permanencia_segundos\")\n  |> group(columns: [\"page_type\"])\n  |> aggregateWindow(every: 5m, fn: sum, createEmpty: false)",
           "refId": "A"
         }
-      ]
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "displayName": "${__field.labels.page_type}",
+          "unit": "s",
+          "color": { "mode": "palette-classic" },
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "smooth",
+            "fillOpacity": 18,
+            "showPoints": "never"
+          }
+        }
+      }
     },
     {
       "title": "Engajamento por pagina (24h) — soma por tipo",
