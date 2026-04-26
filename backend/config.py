@@ -67,6 +67,11 @@ class Config:
     # Durante a migracao (SDK ainda sem suporte a token) deixar False.
     SDK_AUTH_REQUIRED = obter_bool("SDK_AUTH_REQUIRED", "false")
 
+    # Limite de batches por sessao Socket.IO. SDK envia 1 a cada 5s
+    # (intervaloEnvioMs default), entao 720/h. Padrao 10000 cobre sessoes
+    # de ~14h sem precisar reconectar. 0 ou negativo desabilita o limite.
+    SESSION_REQUEST_LIMIT = int(os.environ.get("SESSION_REQUEST_LIMIT", "10000"))
+
 
 class DevelopmentConfig(Config):
     """Configuracao local de desenvolvimento."""

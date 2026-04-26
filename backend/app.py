@@ -741,8 +741,15 @@ def handle_analytics_data(data):
         active_sessions[session_id]['last_activity'] = time.time()
         active_sessions[session_id]['request_count'] += 1
 
-        if active_sessions[session_id]['request_count'] > 100:
-            log_safe(security_logger, 'warning', f"[WARNING] Rate limit de sessao excedido: {session_id}")
+        # Limite total de batches por sessao. SDK envia 1 batch a cada
+        # `intervaloEnvioMs` (default 5s = 12/min). Em 1h normal de navegacao
+        # sao ~720 batches; em sessoes muito longas (varias horas), bumpar
+        # pra mais via ENV. Valor zerado/negativo desabilita o limite.
+        teto = int(app.config.get('SESSION_REQUEST_LIMIT', 10000))
+        if teto > 0 and active_sessions[session_id]['request_count'] > teto:
+            log_safe(security_logger, 'warning',
+                     f"[WARNING] Rate limit de sessao excedido: {session_id} "
+                     f"({active_sessions[session_id]['request_count']} > {teto})")
             emit("analytics_error", {"status": "error", "code": "RATE_LIMIT", "message": "Rate limit excedido"})
             return
 
