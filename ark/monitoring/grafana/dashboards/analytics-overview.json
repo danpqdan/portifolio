@@ -68,16 +68,31 @@
       }
     },
     {
-      "title": "Cliques por pagina (ultima hora)",
+      "title": "Cliques por pagina (1h, soma por janela 5min)",
       "type": "timeseries",
       "gridPos": { "h": 8, "w": 12, "x": 0, "y": 6 },
       "datasource": { "type": "influxdb", "uid": "InfluxDB" },
+      "description": "Soma de cliques por page_type em janelas de 5min. Group antes de aggregateWindow consolida sessoes diferentes na mesma serie.",
       "targets": [
         {
-          "query": "from(bucket: \"portifolio_dev\")\n  |> range(start: -1h)\n  |> filter(fn: (r) => r._measurement == \"page_analytics\" and r._field == \"cliques\")\n  |> aggregateWindow(every: 1m, fn: sum, createEmpty: false)\n  |> group(columns: [\"page_type\"])",
+          "query": "from(bucket: \"portifolio_dev\")\n  |> range(start: -1h)\n  |> filter(fn: (r) => r._measurement == \"page_analytics\" and r._field == \"cliques\")\n  |> group(columns: [\"page_type\"])\n  |> aggregateWindow(every: 5m, fn: sum, createEmpty: false)",
           "refId": "A"
         }
-      ]
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "displayName": "${__field.labels.page_type}",
+          "unit": "short",
+          "color": { "mode": "palette-classic" },
+          "custom": {
+            "drawStyle": "bars",
+            "lineInterpolation": "linear",
+            "fillOpacity": 70,
+            "showPoints": "never",
+            "stacking": { "mode": "normal", "group": "A" }
+          }
+        }
+      }
     },
     {
       "title": "Tempo total na pagina (24h, soma de segundos por janela 5min)",
