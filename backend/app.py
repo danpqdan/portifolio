@@ -726,6 +726,35 @@ def handle_disconnect():
     if session_id in temporal_stats_cache["active_sessions"]:
         del temporal_stats_cache["active_sessions"][session_id]
 
+
+# Background reaper de sessoes zombies. Roda a cada 30s, remove sessoes
+# sem atividade ha > SESSION_IDLE_TIMEOUT segundos. handle_disconnect ja
+# limpa quando o evento dispara, mas em casos de network drop/queda
+# abrupta o evento nem sempre chega — sem isso o dict acumula zombies
+# (cleanup_temporal_cache so roda dentro de handle_analytics_data, que
+# nao dispara em sessoes inativas).
+SESSION_IDLE_TIMEOUT = int(os.environ.get('SESSION_IDLE_TIMEOUT', '180'))   # 3 min
+SESSION_REAPER_INTERVAL = int(os.environ.get('SESSION_REAPER_INTERVAL', '30'))
+
+
+def _reaper_de_sessoes():
+    while True:
+        socketio.sleep(SESSION_REAPER_INTERVAL)
+        agora = time.time()
+        zombies = [
+            sid for sid, data in list(active_sessions.items())
+            if agora - data.get('last_activity', data.get('created_at', agora)) > SESSION_IDLE_TIMEOUT
+        ]
+        if zombies:
+            for sid in zombies:
+                active_sessions.pop(sid, None)
+                temporal_stats_cache["active_sessions"].pop(sid, None)
+            log_safe(security_logger, 'info',
+                     f"[REAPER] removidas {len(zombies)} sessoes zombies (idle > {SESSION_IDLE_TIMEOUT}s)")
+
+
+socketio.start_background_task(_reaper_de_sessoes)
+
 @socketio.on("analytics_data")
 @security_middleware
 def handle_analytics_data(data):
