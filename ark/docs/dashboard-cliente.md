@@ -33,21 +33,28 @@
 | `ip_address` e `metric_id` viraram fields (anti-cardinalidade) | `backend/influxdb_service.py` | ✅ sprint 1 |
 | Testes (45 + 7 endpoint + 13 bucket-per-cliente) | `backend/test_*.py` | ✅ |
 
-**Proposto — sprint 2 (proximas frentes):**
+**Hardening Grafana Viewer (sprint 1 extra, 2026-04-27):** `GF_USERS_VIEWERS_CAN_EDIT=false`, `GF_EXPLORE_ENABLED=false`, `GF_SNAPSHOTS_EXTERNAL_ENABLED=false` em `ark/monitoring/docker-compose.monitoring.yml`. Validado: `curl -H 'X-WEBAUTH-USER:<id>' /api/dashboards/home` retorna `canEdit:false canSave:false canAdmin:false`.
 
-- 4 tiers de plano (free/pequeno/medio/grande) com **enforcement** de quotas + cardinalidade max no ingest (hoje so a tabela existe).
-- Backup pre-wipe via cron sidecar (`analytics-archiver`, local primeiro, S3 depois).
-- Org-per-cliente fim-a-fim no Grafana com hardening contra "Save as", Explore desabilitado, Viewer puro.
-- 4 dashboards out-of-the-box provisionados na org do cliente (Web Vitals, Engajamento, Funil, Event Explorer).
-- Email alert quando cardinalidade chega a 80% e 95% do limite do plano.
+**Proposto — sprint 2:**
 
-**Pendente — proximas sprints:**
+- **Quota enforcement**: backend rejeita evento com `analytics_error code=QUOTA_EXCEDIDA` quando `consumo_diario.eventos > quotas.eventos_por_dia`. Hoje so incrementa, nao rejeita.
+- **Cardinalidade enforcement**: contador `(bucket, tag) -> set(values)` em memoria + Postgres; rejeita ponto + log `[SECURITY] cardinalidade_excedida` quando passa do limite do plano.
+- Email diario com counts agregados de rejeicoes (1x/dia, nao 1x/evento).
+- Email alert pro cliente em 80% e 95% da cardinalidade do plano.
+- Tags derivadas server-side: `device_type` (do User-Agent), `pais` (GeoIP do IP), `referrer_dominio` (do header Referer).
+- **Org-per-cliente fim-a-fim no Grafana**: o `provisionar_cliente.py` ja cria a org, mas usuarios do `auth.proxy` continuam caindo na "Main Org". Falta logica no `/gate` (ou script de membership) que adiciona o user a org certa idempotente via Grafana API.
+- 4 dashboards out-of-the-box provisionados na org do cliente: Web Vitals, Engajamento, Funil, Event Explorer.
+- Container `analytics-archiver`: cron diario que exporta `[now-retencao-1d, now-retencao]` em line protocol comprimido pra `/var/backups/analytics/<slug>/YYYY-MM-DD.lp.gz`.
+- Endpoint `GET /api/cliente/exportar?inicio=...&fim=...` com signed URL (nginx X-Accel-Redirect).
+- Validacao end-to-end em `ark/teste-ambiente-a` (Docker) e `teste-ambiente-b` (Vagrant).
 
-- Dashboards prontos por intencao (Web Vitals, Engajamento, Funil, Event Explorer).
-- Org-per-cliente no Grafana com hardening contra "Save as", Explore desabilitado, Viewer puro.
-- Validacao end-to-end em `ark/teste-ambiente-a` e `teste-ambiente-b`.
+**Pendente — proximas sprints (v2/v3):**
+
 - 2FA TOTP, white-label CSS, integracoes server-to-server REST.
 - `RESEND_API_KEY` em prod via Ansible Vault (dev cai pro stdout sender).
+- Migracao de backup local para S3 (Backblaze/Wasabi/R2) quando volume passar de ~50 GB ou primeiro cliente pago entrar.
+- Custom dashboards salvos pelo cliente (camada 3 da §2).
+- Em escala >500 clientes, migrar `auth.proxy` -> `auth.jwt` com claims customizados.
 
 **Nota de schema:** `REFERENCES clientes(id)` no desenho inicial virou `REFERENCES sites(id)` na implementacao (alinhado com a tabela multi-tenant existente, `sites`, que ja e o conceito de "cliente"). Campo em `clientes_users` e `site_id`.
 

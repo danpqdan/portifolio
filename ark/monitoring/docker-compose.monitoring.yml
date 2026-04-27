@@ -45,6 +45,16 @@ services:
       GF_AUTH_PROXY_HEADERS: "Role:X-WEBAUTH-PAPEL"
       GF_AUTH_PROXY_WHITELIST: "127.0.0.1, ::1, 172.16.0.0/12, 10.0.0.0/8"
       GF_USERS_AUTO_ASSIGN_ORG_ROLE: Viewer
+      # ------ Hardening Viewer (impede edicao de query/painel ate na sessao) ------
+      # Default do Grafana e permitir Viewer editar painel em-memoria. Sem isso,
+      # cliente abre dashboard provisionado, troca a query (ou usa Explore) e ve
+      # bucket/measurement de outro tenant. Tres travas:
+      #   1) Viewer NUNCA edita painel, nem na sessao;
+      #   2) Aba Explore desligada (queries arbitrarias proibidas);
+      #   3) Snapshots externos desligados (evita exfiltrar dado por URL publica).
+      GF_USERS_VIEWERS_CAN_EDIT: "false"
+      GF_EXPLORE_ENABLED: "false"
+      GF_SNAPSHOTS_EXTERNAL_ENABLED: "false"
       # Admin ainda consegue acessar login form em /cliente/metricas/login
       # quando o header nao esta presente (fluxo administrativo).
       GF_AUTH_DISABLE_LOGIN_FORM: "false"
