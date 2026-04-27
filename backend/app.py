@@ -3,6 +3,7 @@ from flask_cors import CORS
 from flask_socketio import SocketIO, emit, disconnect
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
+import hmac
 import os
 import secrets
 import hashlib
@@ -574,7 +575,7 @@ def _verificar_token_admin():
     if not header.startswith('Bearer '):
         return False, "Header Authorization: Bearer <token> ausente"
     token = header[len('Bearer '):].strip()
-    if token != token_esperado:
+    if not hmac.compare_digest(token, token_esperado):
         return False, "Token invalido"
     return True, None
 
@@ -593,6 +594,7 @@ def admin_sessao_consultar(session_id):
     """LGPD — acesso: retorna todos os pontos de uma sessao."""
     ok, motivo = _verificar_token_admin()
     if not ok:
+        _registrar_audit('consultar', session_id, f'auth_falhou:{motivo}')
         return jsonify({"status": "error", "code": "UNAUTHORIZED", "message": motivo}), 401
 
     if not influxdb_service:
@@ -613,6 +615,7 @@ def admin_sessao_apagar(session_id):
     """LGPD — exclusao: apaga todos os pontos de uma sessao em todos os measurements."""
     ok, motivo = _verificar_token_admin()
     if not ok:
+        _registrar_audit('apagar', session_id, f'auth_falhou:{motivo}')
         return jsonify({"status": "error", "code": "UNAUTHORIZED", "message": motivo}), 401
 
     if not influxdb_service:
