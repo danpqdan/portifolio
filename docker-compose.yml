@@ -20,6 +20,7 @@ services:
       interval: 10s
       timeout: 5s
       retries: 10
+    restart: unless-stopped
 
   postgres:
     image: postgres:16-alpine
@@ -36,6 +37,7 @@ services:
       interval: 5s
       timeout: 3s
       retries: 10
+    restart: unless-stopped
 
   backend:
     build:
@@ -58,6 +60,7 @@ services:
       # Volume dedicado para chaves RSA do sdk_jwt. Fora do bind de codigo para
       # que nunca cai no git, e para persistir entre rebuilds da imagem.
       - backend_keys:/app/data/keys
+    restart: unless-stopped
 
   frontend:
     build:
