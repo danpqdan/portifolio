@@ -30,11 +30,12 @@ A partir da abertura comercial, o backend depende de um **PostgreSQL** para tudo
 
 ### Tipos de token
 
-A plataforma opera com tres tipos distintos, com finalidades diferentes:
+A plataforma opera com quatro tipos distintos, com finalidades diferentes:
 
 - **`publishable`** — identificador publico embarcado no SDK do navegador. Sem expiracao; ligado a um `site_id` e a `dominios_permitidos`. Scope fixo `ingest`. Pode ser revogado (`revogado_em`). Nunca permite consulta de dados.
 - **`sdk_jwt`** — JWT assinado (RS256, com `kid`) e TTL de 5 min, stateless (nao persistido em `tokens_api`). Emitido por `POST /auth/sdk-token` mediante `publishable` valida e `Origin` na allowlist. E o que viaja no handshake do Socket.IO.
-- **`access`** / **`refresh`** — fluxo de consulta REST (dashboard do cliente, integracoes server-to-server). Access curto (15 min), refresh opaco com rotacao. **Nao e usado pelo SDK do navegador.**
+- **`access`** / **`refresh`** — fluxo de consulta REST programatico (integracoes server-to-server, CI/CD). Access curto (15 min), refresh opaco com rotacao. **Nao e usado pelo SDK do navegador nem pelo dashboard humano.**
+- **`cliente_session`** (implementado em `dev` 2026-04-25) — cookie de sessao humana do dashboard self-service. Plaintext base64url 256-bit gerado por `secrets.token_urlsafe(32)`, hash sha256 persistido em `clientes_users_sessoes` (server nunca guarda o plaintext). HttpOnly, Secure, SameSite=Strict, TTL 7 dias. Emitido por `POST /api/cliente/auth/login` (senha) ou `GET /api/cliente/auth/magic-link/verificar`. Validado pelo nginx via `auth_request` -> `/api/cliente/auth/gate` em toda request a `/cliente/metricas/*` -> Grafana. **Separado dos tokens de ingestao** — token publico do SDK NAO da acesso de leitura, principio "ingest key vs read key" (NR/Datadog/Segment). Detalhes em `ark/docs/dashboard-cliente.md`.
 
 ### Autenticacao na API de consulta REST
 
@@ -151,4 +152,5 @@ Todo o provisionamento novo (Postgres, pooler, Grafana multi-tenant, CrowdSec co
 
 - `docs/plano-backend.md` — Frente E lista os itens tecnicos (validar app_id, token handshake, rate limit por app, isolamento).
 - `ark/docs/servidor-producao.md` — arquitetura resumida, ja inclui caixa de PostgreSQL para o modo comercial.
+- `ark/docs/dashboard-cliente.md` — desenho e estado de implementacao do dashboard self-service (auth humano + Grafana embedded via auth.proxy).
 - `ark/ansible/` — roles a serem adicionadas quando o modelo for escolhido.
