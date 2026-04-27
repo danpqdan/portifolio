@@ -154,7 +154,7 @@ def _rotate_grafana_read_token(client: InfluxDBClient, *, org_id: str, bucket_id
         Permission(action="read", resource=PermissionResource(
             type="buckets", id=bucket_id, org_id=org_id)),
     ]
-    nova = auths_api.create_authorization(Authorization(
+    nova = auths_api.create_authorization(authorization=Authorization(
         org_id=org_id, permissions=permissions, description=descricao,
     ))
     return nova
