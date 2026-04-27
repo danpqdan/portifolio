@@ -80,6 +80,8 @@ class SanidadeIngestaoResilienteTest(unittest.TestCase):
             session_id='s1',
             data={
                 'id_registro': 'sanidade-sem-influx',
+                'app_id': 'teste',
+                'ambiente': 'production',
                 'timestamp_inicial': ti,
                 'timestamp_final': tf,
                 'paginas': {},
@@ -101,6 +103,8 @@ class SanidadeIngestaoResilienteTest(unittest.TestCase):
             session_id='s1',
             data={
                 'id_registro': 'sanidade-com-influx-falho',
+                'app_id': 'teste',
+                'ambiente': 'production',
                 'timestamp_inicial': ti,
                 'timestamp_final': tf,
                 'paginas': {'/': [{'eventos': [], 'visualizacoes': 1, 'segundos': 3,

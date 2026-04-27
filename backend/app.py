@@ -298,6 +298,8 @@ except Exception as e:
 
 # Servico de ingestao — handler Socket.IO apenas delega para este servico.
 from ingestao import ServicoIngestao  # noqa: E402
+from auth.sites_cache import SitesCache  # noqa: E402
+# sites_cache_servico e instanciado apos o tenants_repo singleton estar pronto.
 servico_ingestao = ServicoIngestao(influxdb_service=influxdb_service)
 
 # ==================== AUTENTICACAO MULTI-TENANT ====================
@@ -307,11 +309,13 @@ from auth.routes import auth_bp  # noqa: E402
 from auth.tenants_repo import obter_repo as obter_tenants_repo  # noqa: E402
 
 try:
-    obter_tenants_repo(app.config["TENANTS_DATABASE_URL"])
+    _tenants_repo_singleton = obter_tenants_repo(app.config["TENANTS_DATABASE_URL"])
     obter_jwt_service(
         keys_dir=app.config["JWT_KEYS_DIR"],
         audience=app.config["JWT_AUDIENCE"],
     )
+    # Wire bucket-routing: site_id -> bucket_name resolvido do tenants_repo.
+    servico_ingestao.sites_cache = SitesCache(_tenants_repo_singleton)
     log_safe(security_logger, 'info', "[SUCCESS] Auth multi-tenant inicializado")
 except Exception as e:
     log_safe(security_logger, 'error', f"[ERROR] Falha ao inicializar auth: {str(e)}")
