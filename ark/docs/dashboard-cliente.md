@@ -7,7 +7,7 @@
 > que eles precisem aprender Grafana, sem expor dados entre tenants, e
 > sem reutilizar credencial publica como credencial de leitura.
 
-## Estado de implementacao (2026-04-25)
+## Estado de implementacao (2026-04-26)
 
 **Implementado na branch `dev`:**
 
@@ -21,16 +21,28 @@
 | Registro no app.py | `backend/app.py` | ✅ |
 | Nginx `/cliente/metricas` + `auth_request` | `ark/ansible/roles/nginx/templates/portifolio.conf.j2` + espelho | ✅ |
 | Grafana `auth.proxy` + subpath | `ark/monitoring/docker-compose.monitoring.yml` | ✅ |
-| Testes (45 passando) | `backend/test_dashboard_auth.py` | ✅ |
+| Frontend `/cliente/login` (mobile-first) | `frontend/src/pages/ClienteLogin.jsx` + `ClienteMetricas.jsx` | ✅ |
+| CLI admin de users | `backend/scripts/dashboard_user_admin.py` | ✅ |
+| Dashboard analytics-overview corrigido (4 paineis) | `ark/monitoring/grafana/dashboards/analytics-overview.json` | ✅ |
+| Anti-abuse com TTL + skip de IPs privados | `backend/app.py` | ✅ |
+| Reaper de sessoes Socket.IO zombies | `backend/app.py` | ✅ |
+| Testes (45 + 7 endpoint) | `backend/test_dashboard_auth.py` + `frontend/src/testes/ClienteLogin.test.jsx` | ✅ |
 
-**Pendente:**
+**Proposto — sprint 1 pendente (sec. 18-22 deste doc):**
 
-- Frontend `/cliente/login` — pagina de login + formulario magic-link (React).
-- Dashboards provisionados (Web Vitals, Engajamento, Saidas, Event Explorer) em `ark/monitoring/grafana/dashboards/`.
-- Datasource InfluxDB provisionado com `cliente_id` variavel.
-- `RESEND_API_KEY` em `backend/.env` via Ansible Vault (so necessario em prod; dev cai pro stdout sender).
-- Validacao end-to-end em `ark/teste-ambiente-a` (nginx) e `teste-ambiente-b` (stack completa).
-- CLI admin para criar `clientes_users` (extensao de `backend/scripts/tenant_admin.py`).
+- Bucket-per-cliente no InfluxDB com retencao por plano.
+- 4 tiers de plano (free/pequeno/medio/grande) com quotas + cardinalidade max.
+- Tags whitelist obrigatoria + backend rejeita pontos com tag fora do contrato.
+- Backup pre-wipe via cron sidecar (local primeiro, S3 depois).
+- Provisionamento automatico: `criar_site` -> bucket Influx + token + org Grafana + datasource + dashboards.
+
+**Pendente — proximas sprints:**
+
+- Dashboards prontos por intencao (Web Vitals, Engajamento, Funil, Event Explorer).
+- Org-per-cliente no Grafana com hardening contra "Save as", Explore desabilitado, Viewer puro.
+- Validacao end-to-end em `ark/teste-ambiente-a` e `teste-ambiente-b`.
+- 2FA TOTP, white-label CSS, integracoes server-to-server REST.
+- `RESEND_API_KEY` em prod via Ansible Vault (dev cai pro stdout sender).
 
 **Nota de schema:** `REFERENCES clientes(id)` no desenho inicial virou `REFERENCES sites(id)` na implementacao (alinhado com a tabela multi-tenant existente, `sites`, que ja e o conceito de "cliente"). Campo em `clientes_users` e `site_id`.
 
@@ -319,3 +331,204 @@ filtro server-side antes de bater no Influx.
 - nginx `auth_request`:
   http://nginx.org/en/docs/http/ngx_http_auth_request_module.html
 - OWASP session management cheat sheet (cookie flags, lifetime).
+
+---
+
+## 18. Planos e tiers (PostHog-style)
+
+Decidido em 2026-04-26 apos benchmark com PostHog, Mixpanel, Amplitude, Plausible, Datadog RUM. Escolha: cobranca por **eventos/mes** + **retencao** + **cardinalidade**, com free generoso em volume mas curto em retencao. Coluna "backup" descrita em sec. 21.
+
+| Plano | Eventos/mes | Retencao | Sessoes/dia | Cardinalidade max | Sites por user | Backup |
+|---|---|---|---|---|---|---|
+| **free** | 10k | 7 dias | 50 | 1k tag values | 1 | ❌ trial puro |
+| **pequeno** | 100k | 30 dias | 500 | 5k tag values | 3 | semanal, retencao 1m |
+| **medio** | 1M | 90 dias | 5k | 50k tag values | 10 | diario, retencao 6m |
+| **grande** | 10M | 365 dias | ilimitado | 500k tag values | ilimitado | diario + arquivo 12m |
+
+**Enforce server-side**: backend valida cada evento contra a quota do plano (`sites.plano` -> `quotas.eventos_por_dia`). Se passou: `analytics_error code=QUOTA_EXCEDIDA` + email diario com counts agregados de rejeicoes (1x/dia, nao 1x/evento).
+
+**Trial**: `free` cobre exatamente o ciclo "instalei o SDK -> deixo rodar 1 dia -> analiso o dashboard". Apos os 7d, dado some — ate o cliente fazer upgrade.
+
+**Upgrade**: Usuario cria `clientes_users` no plano free, dados ficam ligados ao mesmo `site_id`. Quando faz upgrade, o `sites.plano` muda; bucket existente ganha nova retencao (Influx aceita `update bucket --retention=...` em runtime, mas dados ja-expirados nao voltam).
+
+**Cardinalidade alta = morte do InfluxDB OSS**: cliente que mete `user_id` como tag detona o bucket. Por isso a sec. 19 define whitelist + rejeicao server-side.
+
+## 19. Bucket-per-cliente
+
+Decisao: 1 bucket InfluxDB por `site_id`, nome `cliente_<slug>`. Trade-offs documentados:
+
+| Opcao | Pro | Contra |
+|---|---|---|
+| **Bucket-per-cliente (escolhido)** | Hard isolation, easy revoke (drop bucket), retention per plan | Overhead operacional cresce linear, tokens proliferam |
+| Single bucket + tag site_id | Operacao simples | Filtro depende de disciplina, vaza com bug |
+| Bucket-per-plano + tag | Hibrido | Mistura free + pago no mesmo bucket complica |
+
+**Esquema do bucket:**
+
+| Measurement | Fields | Tags whitelist | Tags proibidas |
+|---|---|---|---|
+| `page_analytics` | cliques, hovers, mouse_moves, toques, scrolls, exposicoes, custom_events, permanencia_segundos, visualizacoes, user_agent | `app_id`, `ambiente`, `page_type`, `device_type`, `pais`, `referrer_dominio` | `user_id`, `session_id`*, `email`, `request_id`, `url_completa` |
+| `web_vitals` | valor (numerico), user_agent | `app_id`, `ambiente`, `page_type`, `nome` (LCP/CLS/INP), `rating`, `device_type` | mesmas |
+| `custom_events` | ocorrencias (count), <props_primitivas como fields> | `app_id`, `ambiente`, `page_type`, `nome` (do evento) | mesmas |
+
+\* `session_id` e tag em `page_analytics` hoje porque a query de "sessoes ativas" precisa dele. Em produto comercial, considerar mover pra field — sessoes geram cardinalidade ilimitada.
+
+**Routing do ingest:**
+
+```python
+# backend/ingestao/servico_ingestao.py (proposta)
+bucket = sites_cache.get_bucket_name(site_id)  # cache-aside Postgres
+if bucket is None:
+    bucket = LEGACY_BUCKET  # fallback compat — registra warning
+influxdb_service.write_to(bucket=bucket, point=...)
+```
+
+`sites_cache` e um dict em memoria (`{site_id: bucket_name}`) populado on-demand. TTL 5min ou invalidacao via signal de aplicacao quando `criar_site` rodar.
+
+## 20. Tag enforcement
+
+Backend rejeita pontos no momento do ingest (NAO no momento da query — query lenta vs ingest rapido). Regras:
+
+**Tags obrigatorias** (rejeita ponto se faltar):
+- `app_id` (vem do payload, ja validado contra `sites.app_id`)
+- `ambiente` (vem do payload)
+- `page_type` (vem do payload — eventos sem pagina sao invalidos por design)
+
+**Tags whitelist** (so essas sao aceitas como tag; resto vira field):
+- `device_type` (derivado do `user_agent` server-side)
+- `pais` (derivado do IP via GeoIP, opcional — ainda sem implementacao)
+- `referrer_dominio` (derivado do `Referer` header — so o dominio, nao path)
+- `nome` (so em `custom_events` e `web_vitals`)
+- `rating` (so em `web_vitals`: good/needs-improvement/poor)
+
+**Cardinalidade limit por bucket** (configuravel por plano):
+- Backend mantem contador `(bucket, tag) -> set(values)` em memoria + Postgres
+- Se `len(set) > limite_plano`: rejeita evento + log `[SECURITY] cardinalidade_excedida bucket=X tag=Y`
+- Email alert pro cliente em 80% e 95% da cardinalidade
+
+**Eventos rejeitados** continuam contabilizados pra quota (se nao, abriria buraco — atacante manda 1B eventos invalidos sem custo).
+
+## 21. Backup pre-wipe
+
+InfluxDB OSS nao exporta automaticamente dados que vao expirar. Sidecar dedicado.
+
+**Container `analytics-archiver`** (novo, no compose):
+
+```yaml
+analytics-archiver:
+  image: portifolio-archiver
+  build: ./backend/archiver
+  environment:
+    INFLUXDB_URL: http://influxdb:8086
+    INFLUXDB_TOKEN: ${INFLUXDB_ADMIN_TOKEN}
+    BACKUP_PATH: /var/backups/analytics
+  volumes:
+    - analytics_backups:/var/backups/analytics
+  # cron interno: 03:00 UTC diario
+```
+
+**Algoritmo:**
+
+```
+para cada site com plano != free:
+  retencao = sites.retention_days  (7/30/90/365)
+  janela_inicio = now() - retencao - 1 dia
+  janela_fim    = now() - retencao
+  exportar dados em [janela_inicio, janela_fim] do bucket cliente_<slug>
+  formato: line protocol comprimido (.lp.gz)
+  destino: /var/backups/analytics/<site_slug>/YYYY-MM-DD.lp.gz
+  retencao do backup: 1m/6m/12m conforme tier
+```
+
+**Endpoint pro cliente baixar:**
+
+```
+GET /api/cliente/exportar?inicio=YYYY-MM-DD&fim=YYYY-MM-DD
+  -> 302 + signed URL local (filesystem -> nginx X-Accel-Redirect)
+```
+
+**Quando migrar pra S3** (tradeoff documentado):
+- Local na VPS hoje: gratuito, simples, mas se VPS morre os backups vao junto.
+- S3-compatible (Backblaze B2 ~US$5/TB, Wasabi, Cloudflare R2): durabilidade 11-9s, custo baixo. Migrar quando o volume de backup local passar de ~50 GB ou quando primeiro cliente pago entrar.
+
+**Free tier nao tem backup** — quando dado expira em 7d, sumiu mesmo. Documentar **explicitamente** no signup.
+
+## 22. Recovery procedure (runbook)
+
+**Cenarios e procedimentos:**
+
+### A. VPS comprometida — restaurar do backup completo
+
+```bash
+# Pre-requisitos: backup atualizado dos 3 volumes Docker (postgres_data,
+# influxdb_data, grafana_data) + clone fresco do repo na nova VPS.
+
+# 1. Restaurar volumes
+docker volume create portifolio_postgres_data
+docker run --rm -v portifolio_postgres_data:/dst -v /backup:/src alpine \
+  sh -c 'cd /dst && tar xzf /src/postgres_data.tar.gz'
+# repetir para influxdb_data, grafana_data
+
+# 2. Subir stack
+cd /opt/portifolio && docker compose up -d
+make -f ark/Makefile monitoring-up
+
+# 3. Validar: cada bucket Influx tem dados, Grafana tem datasources
+# com tokens validos, sites tem bucket_name preenchido em Postgres.
+```
+
+### B. `grafana_data` perdido isoladamente
+
+Cenario onde so o volume do Grafana corrompeu. Tokens InfluxDB que estavam la **nao estao em mais nenhum lugar** (decisao da sec. 14: nao persistir em Postgres por simplicidade).
+
+```bash
+# 1. Pra cada site provisionado, revogar tokens antigos do Influx:
+#    (lista todos os tokens com "InfluxDB" no description e revoga)
+docker exec portifolio-influxdb influx auth list \
+  --json | jq -r '.[] | select(.description | contains("cliente_")) | .id' \
+  | xargs -I{} docker exec portifolio-influxdb influx auth delete --id {}
+
+# 2. Re-provisionar tudo (script idempotente):
+backend/scripts/provisionar_cliente.py --recovery --all
+# pra cada site:
+#   - cria novo read-token escopado ao bucket existente
+#   - recria org no Grafana
+#   - recria datasource com novo token
+#   - importa dashboards templates
+```
+
+### C. `postgres_data` perdido
+
+Os tokens do Grafana continuam validos (datasources tem token plaintext em secureJsonData encriptado). Mas perdeu `clientes_users`, `sites`, etc.
+
+```bash
+# 1. Restaurar do pg_dump diario (ver setup de backup do Postgres)
+# 2. Conferir consistencia: cada bucket no Influx deve ter site
+#    correspondente em Postgres com bucket_name == nome do bucket.
+# 3. Magic-links pendentes podem ter sido perdidos — clientes precisam
+#    solicitar novos via /cliente/login.
+```
+
+### D. `influxdb_data` perdido
+
+**Catastrofe maxima**: dados de todos os clientes vao embora.
+
+```bash
+# 1. Restaurar do snapshot mais recente (estrategia depende do setup
+#    de backup do Influx — pg_dump-style: influx backup ... ).
+# 2. Tokens vinculados a buckets que sumiram precisam ser revogados.
+#    Recomendacao: revogar todos e recriar via provisionar_cliente.py.
+# 3. Notificar clientes do gap de dados (timestamps faltantes).
+```
+
+### E. Token de cliente comprometido (ex: vazamento)
+
+```bash
+# 1. Revogar token no Influx
+docker exec portifolio-influxdb influx auth delete --id <token_id>
+# 2. Gerar novo + atualizar datasource Grafana via API
+backend/scripts/provisionar_cliente.py --rotate-token --site <slug>
+# 3. Auditoria: pesquisar `evento=` em security.log buscando uso suspeito.
+```
+
+**Importante**: testar os 5 cenarios em ambiente B (Vagrant) antes de virar a chave comercial. Documentar tempos medios em SLO interno.
