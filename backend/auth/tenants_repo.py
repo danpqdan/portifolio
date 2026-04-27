@@ -36,6 +36,7 @@ class Site:
     ambiente: str
     plano: str
     status: str
+    bucket_name: Optional[str] = None
 
 
 @dataclass(frozen=True)
@@ -63,11 +64,14 @@ class TenantsRepo(Protocol):
 
     # sites
     def criar_site(self, slug: str, nome: str, ambiente: str,
-                   dominios: Iterable[str], plano: str = "free") -> Site: ...
+                   dominios: Iterable[str], plano: str = "free",
+                   bucket_name: Optional[str] = None) -> Site: ...
     def obter_site(self, site_id: str) -> Optional[Site]: ...
     def obter_site_por_slug(self, slug: str) -> Optional[Site]: ...
+    def obter_site_por_bucket(self, bucket_name: str) -> Optional[Site]: ...
     def listar_sites(self) -> list[Site]: ...
     def atualizar_status_site(self, site_id: str, status: str) -> None: ...
+    def definir_bucket_name(self, site_id: str, bucket_name: str) -> None: ...
 
     # dominios
     def listar_dominios(self, site_id: str) -> list[str]: ...
@@ -117,6 +121,22 @@ class SqliteTenantsRepo:
         schema = SCHEMA_SQLITE_PATH.read_text(encoding="utf-8")
         with self._connect() as conn:
             conn.executescript(schema)
+            self._migrar_schema(conn)
+
+    @staticmethod
+    def _migrar_schema(conn: sqlite3.Connection) -> None:
+        """Migra DBs criados antes do bucket-per-cliente.
+
+        SQLite nao suporta `ALTER TABLE ... ADD COLUMN IF NOT EXISTS`, entao
+        verificamos via `PRAGMA table_info` e adicionamos quando faltar.
+        """
+        cols = {r["name"] for r in conn.execute("PRAGMA table_info(sites)")}
+        if "bucket_name" not in cols:
+            conn.execute("ALTER TABLE sites ADD COLUMN bucket_name TEXT")
+            conn.execute(
+                "CREATE UNIQUE INDEX IF NOT EXISTS idx_sites_bucket_name "
+                "ON sites(bucket_name) WHERE bucket_name IS NOT NULL"
+            )
 
     def _connect(self) -> sqlite3.Connection:
         conn = sqlite3.connect(self._db_path, isolation_level=None, timeout=10.0)
@@ -126,12 +146,13 @@ class SqliteTenantsRepo:
         return conn
 
     # sites
-    def criar_site(self, slug, nome, ambiente, dominios, plano="free"):
+    def criar_site(self, slug, nome, ambiente, dominios, plano="free", bucket_name=None):
         site_id = str(uuid.uuid4())
         with self._lock, self._connect() as conn:
             conn.execute(
-                "INSERT INTO sites (id, slug, nome, ambiente, plano) VALUES (?, ?, ?, ?, ?)",
-                (site_id, slug, nome, ambiente, plano),
+                "INSERT INTO sites (id, slug, nome, ambiente, plano, bucket_name) "
+                "VALUES (?, ?, ?, ?, ?, ?)",
+                (site_id, slug, nome, ambiente, plano, bucket_name),
             )
             for dom in dominios:
                 conn.execute(
@@ -139,7 +160,8 @@ class SqliteTenantsRepo:
                     (site_id, dom.rstrip("/")),
                 )
             conn.execute("INSERT INTO quotas (site_id) VALUES (?)", (site_id,))
-        return Site(id=site_id, slug=slug, nome=nome, ambiente=ambiente, plano=plano, status="ativo")
+        return Site(id=site_id, slug=slug, nome=nome, ambiente=ambiente, plano=plano,
+                    status="ativo", bucket_name=bucket_name)
 
     def obter_site(self, site_id):
         with self._connect() as conn:
@@ -149,6 +171,13 @@ class SqliteTenantsRepo:
     def obter_site_por_slug(self, slug):
         with self._connect() as conn:
             row = conn.execute("SELECT * FROM sites WHERE slug = ?", (slug,)).fetchone()
+        return _row_to_site(row) if row else None
+
+    def obter_site_por_bucket(self, bucket_name):
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT * FROM sites WHERE bucket_name = ?", (bucket_name,)
+            ).fetchone()
         return _row_to_site(row) if row else None
 
     def listar_sites(self):
@@ -163,6 +192,13 @@ class SqliteTenantsRepo:
             conn.execute(
                 "UPDATE sites SET status = ?, atualizado_em = datetime('now') WHERE id = ?",
                 (status, site_id),
+            )
+
+    def definir_bucket_name(self, site_id, bucket_name):
+        with self._lock, self._connect() as conn:
+            conn.execute(
+                "UPDATE sites SET bucket_name = ?, atualizado_em = datetime('now') WHERE id = ?",
+                (bucket_name, site_id),
             )
 
     # dominios
@@ -314,8 +350,11 @@ class SqliteTenantsRepo:
 
 
 def _row_to_site(row: sqlite3.Row) -> Site:
+    keys = row.keys()
+    bucket = row["bucket_name"] if "bucket_name" in keys else None
     return Site(id=row["id"], slug=row["slug"], nome=row["nome"],
-                ambiente=row["ambiente"], plano=row["plano"], status=row["status"])
+                ambiente=row["ambiente"], plano=row["plano"], status=row["status"],
+                bucket_name=bucket)
 
 
 def _row_to_key(row: sqlite3.Row) -> PublishableKey:
@@ -357,12 +396,13 @@ class PostgresTenantsRepo:
             yield conn
 
     # sites
-    def criar_site(self, slug, nome, ambiente, dominios, plano="free"):
+    def criar_site(self, slug, nome, ambiente, dominios, plano="free", bucket_name=None):
         site_id = str(uuid.uuid4())
         with self._conn() as conn, conn.cursor() as cur:
             cur.execute(
-                "INSERT INTO sites (id, slug, nome, ambiente, plano) VALUES (%s, %s, %s, %s, %s)",
-                (site_id, slug, nome, ambiente, plano),
+                "INSERT INTO sites (id, slug, nome, ambiente, plano, bucket_name) "
+                "VALUES (%s, %s, %s, %s, %s, %s)",
+                (site_id, slug, nome, ambiente, plano, bucket_name),
             )
             for dom in dominios:
                 cur.execute(
@@ -370,7 +410,8 @@ class PostgresTenantsRepo:
                     (site_id, dom.rstrip("/")),
                 )
             cur.execute("INSERT INTO quotas (site_id) VALUES (%s)", (site_id,))
-        return Site(id=site_id, slug=slug, nome=nome, ambiente=ambiente, plano=plano, status="ativo")
+        return Site(id=site_id, slug=slug, nome=nome, ambiente=ambiente, plano=plano,
+                    status="ativo", bucket_name=bucket_name)
 
     def obter_site(self, site_id):
         with self._conn() as conn, conn.cursor() as cur:
@@ -381,6 +422,12 @@ class PostgresTenantsRepo:
     def obter_site_por_slug(self, slug):
         with self._conn() as conn, conn.cursor() as cur:
             cur.execute("SELECT * FROM sites WHERE slug = %s", (slug,))
+            row = cur.fetchone()
+        return _dict_to_site(row) if row else None
+
+    def obter_site_por_bucket(self, bucket_name):
+        with self._conn() as conn, conn.cursor() as cur:
+            cur.execute("SELECT * FROM sites WHERE bucket_name = %s", (bucket_name,))
             row = cur.fetchone()
         return _dict_to_site(row) if row else None
 
@@ -396,6 +443,13 @@ class PostgresTenantsRepo:
             cur.execute(
                 "UPDATE sites SET status = %s, atualizado_em = NOW() WHERE id = %s",
                 (status, site_id),
+            )
+
+    def definir_bucket_name(self, site_id, bucket_name):
+        with self._conn() as conn, conn.cursor() as cur:
+            cur.execute(
+                "UPDATE sites SET bucket_name = %s, atualizado_em = NOW() WHERE id = %s",
+                (bucket_name, site_id),
             )
 
     # dominios
@@ -558,6 +612,7 @@ def _dict_to_site(row: dict) -> Site:
         ambiente=row["ambiente"],
         plano=row["plano"],
         status=row["status"],
+        bucket_name=row.get("bucket_name"),
     )
 
 

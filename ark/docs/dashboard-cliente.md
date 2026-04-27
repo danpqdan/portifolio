@@ -7,7 +7,7 @@
 > que eles precisem aprender Grafana, sem expor dados entre tenants, e
 > sem reutilizar credencial publica como credencial de leitura.
 
-## Estado de implementacao (2026-04-26)
+## Estado de implementacao (2026-04-27)
 
 **Implementado na branch `dev`:**
 
@@ -26,15 +26,20 @@
 | Dashboard analytics-overview corrigido (4 paineis) | `ark/monitoring/grafana/dashboards/analytics-overview.json` | ✅ |
 | Anti-abuse com TTL + skip de IPs privados | `backend/app.py` | ✅ |
 | Reaper de sessoes Socket.IO zombies | `backend/app.py` | ✅ |
-| Testes (45 + 7 endpoint) | `backend/test_dashboard_auth.py` + `frontend/src/testes/ClienteLogin.test.jsx` | ✅ |
+| Schema `sites.bucket_name` + migracao idempotente | `backend/auth/schema*.sql` + `tenants_repo.py` | ✅ sprint 1 |
+| CLI `provisionar_cliente.py` (Postgres + Influx + Grafana) | `backend/scripts/provisionar_cliente.py` | ✅ sprint 1 |
+| `SitesCache` (TTL 5min) + roteamento de ingest por bucket | `backend/auth/sites_cache.py` + `ingestao/servico_ingestao.py` | ✅ sprint 1 |
+| Validador exige `app_id` e `ambiente` no envelope | `backend/ingestao/validador.py` | ✅ sprint 1 |
+| `ip_address` e `metric_id` viraram fields (anti-cardinalidade) | `backend/influxdb_service.py` | ✅ sprint 1 |
+| Testes (45 + 7 endpoint + 13 bucket-per-cliente) | `backend/test_*.py` | ✅ |
 
-**Proposto — sprint 1 pendente (sec. 18-22 deste doc):**
+**Proposto — sprint 2 (proximas frentes):**
 
-- Bucket-per-cliente no InfluxDB com retencao por plano.
-- 4 tiers de plano (free/pequeno/medio/grande) com quotas + cardinalidade max.
-- Tags whitelist obrigatoria + backend rejeita pontos com tag fora do contrato.
-- Backup pre-wipe via cron sidecar (local primeiro, S3 depois).
-- Provisionamento automatico: `criar_site` -> bucket Influx + token + org Grafana + datasource + dashboards.
+- 4 tiers de plano (free/pequeno/medio/grande) com **enforcement** de quotas + cardinalidade max no ingest (hoje so a tabela existe).
+- Backup pre-wipe via cron sidecar (`analytics-archiver`, local primeiro, S3 depois).
+- Org-per-cliente fim-a-fim no Grafana com hardening contra "Save as", Explore desabilitado, Viewer puro.
+- 4 dashboards out-of-the-box provisionados na org do cliente (Web Vitals, Engajamento, Funil, Event Explorer).
+- Email alert quando cardinalidade chega a 80% e 95% do limite do plano.
 
 **Pendente — proximas sprints:**
 
@@ -373,17 +378,18 @@ Decisao: 1 bucket InfluxDB por `site_id`, nome `cliente_<slug>`. Trade-offs docu
 
 \* `session_id` e tag em `page_analytics` hoje porque a query de "sessoes ativas" precisa dele. Em produto comercial, considerar mover pra field — sessoes geram cardinalidade ilimitada.
 
-**Routing do ingest:**
+**Routing do ingest (implementado em sprint 1):**
 
 ```python
-# backend/ingestao/servico_ingestao.py (proposta)
-bucket = sites_cache.get_bucket_name(site_id)  # cache-aside Postgres
+# backend/auth/sites_cache.py + backend/ingestao/servico_ingestao.py
+bucket = sites_cache.obter_bucket(site_id)  # TTL 5min, cache-aside Postgres
 if bucket is None:
-    bucket = LEGACY_BUCKET  # fallback compat — registra warning
-influxdb_service.write_to(bucket=bucket, point=...)
+    # site sem bucket cadastrado -> log evento=site_sem_bucket + cai no bucket default
+    pass
+influxdb_service.write_temporal_metrics_async(metric, bucket=bucket)
 ```
 
-`sites_cache` e um dict em memoria (`{site_id: bucket_name}`) populado on-demand. TTL 5min ou invalidacao via signal de aplicacao quando `criar_site` rodar.
+O `SitesCache` recebe o `TenantsRepo` e expoe `obter_bucket(site_id)` + `invalidar(site_id)`. Apos provisionar um cliente novo, chamar `invalidar` libera a entrada antes do TTL expirar (relevante para hot-deploys).
 
 ## 20. Tag enforcement
 
