@@ -128,10 +128,15 @@ class ServicoIngestao:
     """Encapsula validacao + transformacao + persistencia.
 
     O handler Socket.IO so precisa chamar `ingerir(...)` e devolver o ack.
+
+    Quando `sites_cache` e fornecido, o servico resolve `site_id -> bucket_name`
+    e roteia a escrita para o bucket dedicado do cliente. Sites sem `bucket_name`
+    cadastrado caem no bucket default do `influxdb_service` (compat legado).
     """
 
-    def __init__(self, influxdb_service=None):
+    def __init__(self, influxdb_service=None, sites_cache=None):
         self.influxdb_service = influxdb_service
+        self.sites_cache = sites_cache
         self._cache = obter_cache_idempotencia()
         self._ultimos = obter_registro_ultimo()
         self._sequenciador = obter_sequenciador()
@@ -219,7 +224,9 @@ class ServicoIngestao:
                    session_id=session_id, id_registro=heatmap_dados.id_registro,
                    app_id=app_id, site_id=site_id)
 
-        self._persistir_com_resiliencia(session_id, data, user_agent, ip_address, app_id=app_id)
+        bucket_destino = self._resolver_bucket(site_id, session_id, id_registro)
+        self._persistir_com_resiliencia(session_id, data, user_agent, ip_address,
+                                        app_id=app_id, bucket=bucket_destino)
 
         resumo = ResumoIngestao(
             status='success',
@@ -252,6 +259,26 @@ class ServicoIngestao:
 
         return resumo
 
+    def _resolver_bucket(self, site_id: Optional[str], session_id: str,
+                         id_registro: Optional[str]) -> Optional[str]:
+        """Retorna bucket_name dedicado do site ou None (=> bucket default).
+
+        Loga warning quando ha site_id mas o site nao tem bucket configurado.
+        """
+        if not self.sites_cache or not site_id:
+            return None
+        try:
+            bucket = self.sites_cache.obter_bucket(site_id)
+        except Exception as erro:
+            emitir_log(logger, logging.ERROR, 'sites_cache_erro',
+                       session_id=session_id, id_registro=id_registro,
+                       site_id=site_id, motivo=str(erro))
+            return None
+        if not bucket:
+            emitir_log(logger, logging.WARNING, 'site_sem_bucket',
+                       session_id=session_id, id_registro=id_registro, site_id=site_id)
+        return bucket
+
     def _persistir_com_resiliencia(
         self,
         session_id: str,
@@ -259,16 +286,23 @@ class ServicoIngestao:
         user_agent: Optional[str],
         ip_address: Optional[str],
         app_id: Optional[str] = None,
+        bucket: Optional[str] = None,
     ) -> None:
         """Persistencia em InfluxDB nao deve derrubar a ingestao.
 
         Erros de InfluxDB sao logados e engolidos. O payload ja foi aceito e validado;
         a ausencia de persistencia e tratada como degradacao, nao como falha do cliente.
+        Quando `bucket` e fornecido, escreve no bucket dedicado do cliente; caso contrario
+        usa o bucket default do `influxdb_service`.
         """
         if not self.influxdb_service:
             return
 
         id_registro = data.get('id_registro')
+
+        # Compat: o capturador de testes pode nao aceitar kwarg `bucket`.
+        # So passamos quando ha override explicito; assim mocks antigos seguem funcionando.
+        kw = {"bucket": bucket} if bucket else {}
 
         try:
             metricas = create_temporal_metric_from_heatmap(
@@ -278,10 +312,10 @@ class ServicoIngestao:
                 ip_address=ip_address,
             )
             for metrica in metricas:
-                self.influxdb_service.write_temporal_metrics_async(metrica)
+                self.influxdb_service.write_temporal_metrics_async(metrica, **kw)
                 emitir_log(logger, logging.INFO, 'persistido_temporal',
                            session_id=session_id, id_registro=id_registro, app_id=app_id,
-                           page_type=metrica.page_type)
+                           page_type=metrica.page_type, bucket=bucket)
 
             vitals = create_web_vitals_from_heatmap(
                 session_id=session_id,
@@ -290,10 +324,10 @@ class ServicoIngestao:
                 ip_address=ip_address,
             )
             for vital in vitals:
-                self.influxdb_service.write_web_vital_async(vital)
+                self.influxdb_service.write_web_vital_async(vital, **kw)
                 emitir_log(logger, logging.INFO, 'persistido_webvital',
                            session_id=session_id, id_registro=id_registro, app_id=app_id,
-                           nome=vital.nome, valor=vital.valor)
+                           nome=vital.nome, valor=vital.valor, bucket=bucket)
 
             customizados = create_custom_events_from_heatmap(
                 session_id=session_id,
@@ -302,10 +336,10 @@ class ServicoIngestao:
                 ip_address=ip_address,
             )
             for custom in customizados:
-                self.influxdb_service.write_custom_event_async(custom)
+                self.influxdb_service.write_custom_event_async(custom, **kw)
                 emitir_log(logger, logging.INFO, 'persistido_customevent',
                            session_id=session_id, id_registro=id_registro, app_id=app_id,
-                           nome=custom.nome)
+                           nome=custom.nome, bucket=bucket)
         except Exception as erro:
             emitir_log(logger, logging.ERROR, 'erro_persistencia',
                        session_id=session_id, id_registro=id_registro, app_id=app_id,
