@@ -12,7 +12,7 @@
     "test:watch": "vitest"
   },
   "dependencies": {
-    "@dsplayground/analytics-sdk": "git+https://github.com/danpqdan/dsplayground-analytics-sdk.git#a4f166a1d174a57ee23b4b69cd468e8c913ae37e",
+    "@dsplayground/analytics-sdk": "git+https://github.com/danpqdan/dsplayground-analytics-sdk.git#c9a7ef5",
     "@react-spring/web": "^10.0.3",
     "react": "^19.2.5",
     "react-dom": "^19.2.5",
