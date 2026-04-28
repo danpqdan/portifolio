@@ -130,6 +130,33 @@ class GrafanaClient:
             raise RuntimeError(f"grafana GET datasource failed: {out}")
         return out
 
+    # ---------- dashboards ----------
+
+    def import_dashboard(self, *, org_id: int, dashboard: dict,
+                         folder_uid: Optional[str] = None,
+                         message: str = "provisioned by portifolio") -> dict:
+        """Importa/atualiza dashboard idempotente via /api/dashboards/db.
+
+        Comportamento:
+          - Se o JSON tem `uid` setado e ja existe, faz overwrite (versao++).
+          - Se nao tem `uid`, Grafana gera um novo (criacao).
+          - O JSON deve ter `id: null` para evitar conflito entre orgs.
+
+        Retorna `{"id": ..., "uid": ..., "url": ..., "version": ...}`.
+        """
+        body = {
+            "dashboard": dashboard,
+            "overwrite": True,
+            "message": message,
+        }
+        if folder_uid is not None:
+            body["folderUid"] = folder_uid
+        out = self._req("POST", "/api/dashboards/db",
+                        body=body, org_id=org_id, expect_status=(200,))
+        if "__http_error__" in out:
+            raise RuntimeError(f"grafana POST /api/dashboards/db failed: {out}")
+        return out
+
     def upsert_influx_datasource(self, *, org_id: int, name: str, influx_url: str,
                                   influx_org: str, bucket: str, token: str) -> dict:
         body = {
