@@ -134,7 +134,7 @@
       "targets": [
         {
           "refId": "A",
-          "query": "from(bucket: \"__BUCKET__\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"web_vitals\" and r._field == \"valor\" and r.nome == \"LCP\")\n  |> filter(fn: (r) => r.device_type != \"bot\")\n  |> group(columns: [\"device_type\"])\n  |> aggregateWindow(every: v.windowPeriod, fn: (column, tables=<-) => tables |> quantile(q: 0.75, column: column))"
+          "query": "from(bucket: \"__BUCKET__\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"web_vitals\" and r._field == \"valor\" and r.nome == \"LCP\")\n  |> filter(fn: (r) => r.device_type != \"bot\")\n  |> group(columns: [\"device_type\"])\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)"
         }
       ],
       "fieldConfig": {
@@ -146,7 +146,9 @@
             "drawStyle": "line",
             "lineInterpolation": "smooth",
             "fillOpacity": 12,
-            "showPoints": "never"
+            "showPoints": "always",
+            "pointSize": 6,
+            "spanNulls": true
           },
           "thresholds": {
             "mode": "absolute",
@@ -160,14 +162,14 @@
       }
     },
     {
-      "title": "INP timeline p75 por device_type",
+      "title": "INP timeline media por device_type",
       "type": "timeseries",
       "gridPos": { "h": 9, "w": 12, "x": 12, "y": 6 },
       "datasource": { "type": "influxdb", "uid": "__DATASOURCE_UID__" },
       "targets": [
         {
           "refId": "A",
-          "query": "from(bucket: \"__BUCKET__\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"web_vitals\" and r._field == \"valor\" and r.nome == \"INP\")\n  |> filter(fn: (r) => r.device_type != \"bot\")\n  |> group(columns: [\"device_type\"])\n  |> aggregateWindow(every: v.windowPeriod, fn: (column, tables=<-) => tables |> quantile(q: 0.75, column: column))"
+          "query": "from(bucket: \"__BUCKET__\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"web_vitals\" and r._field == \"valor\" and r.nome == \"INP\")\n  |> filter(fn: (r) => r.device_type != \"bot\")\n  |> group(columns: [\"device_type\"])\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)"
         }
       ],
       "fieldConfig": {
@@ -179,7 +181,9 @@
             "drawStyle": "line",
             "lineInterpolation": "smooth",
             "fillOpacity": 12,
-            "showPoints": "never"
+            "showPoints": "always",
+            "pointSize": 6,
+            "spanNulls": true
           }
         }
       }
@@ -208,13 +212,32 @@
       "fieldConfig": {
         "defaults": {
           "displayName": "${__field.labels.rating}",
-          "color": { "mode": "thresholds" },
-          "mappings": [
-            { "type": "value", "options": { "good": { "color": "green", "text": "Bom" } } },
-            { "type": "value", "options": { "needs-improvement": { "color": "yellow", "text": "Precisa melhorar" } } },
-            { "type": "value", "options": { "poor": { "color": "red", "text": "Ruim" } } }
-          ]
-        }
+          "color": { "mode": "palette-classic" },
+          "unit": "short"
+        },
+        "overrides": [
+          {
+            "matcher": { "id": "byName", "options": "good" },
+            "properties": [
+              { "id": "color", "value": { "mode": "fixed", "fixedColor": "green" } },
+              { "id": "displayName", "value": "Bom" }
+            ]
+          },
+          {
+            "matcher": { "id": "byName", "options": "needs-improvement" },
+            "properties": [
+              { "id": "color", "value": { "mode": "fixed", "fixedColor": "yellow" } },
+              { "id": "displayName", "value": "Precisa melhorar" }
+            ]
+          },
+          {
+            "matcher": { "id": "byName", "options": "poor" },
+            "properties": [
+              { "id": "color", "value": { "mode": "fixed", "fixedColor": "red" } },
+              { "id": "displayName", "value": "Ruim" }
+            ]
+          }
+        ]
       }
     },
     {
@@ -240,6 +263,8 @@
           "displayName": "${__field.labels.page_type}",
           "color": { "mode": "thresholds" },
           "unit": "ms",
+          "min": 0,
+          "max": 5000,
           "thresholds": {
             "mode": "absolute",
             "steps": [
