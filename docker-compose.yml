@@ -60,6 +60,11 @@ services:
       # Volume dedicado para chaves RSA do sdk_jwt. Fora do bind de codigo para
       # que nunca cai no git, e para persistir entre rebuilds da imagem.
       - backend_keys:/app/data/keys
+      # Templates de dashboard provisionados por scripts/provisionar_cliente.py.
+      # Read-only — o container nao escreve la, so le e POSTa para Grafana API.
+      - ./ark/monitoring/dashboards:/app/dashboards:ro
+    environment:
+      DASHBOARDS_TEMPLATE_DIR: /app/dashboards
     restart: unless-stopped
 
   frontend:

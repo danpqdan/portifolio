@@ -7,6 +7,8 @@
   5. token Influx escopado ao bucket (read)   — recria sempre (Grafana plaintext)
   6. organization no Grafana                  — cria se nao existir
   7. datasource Influx no Grafana             — cria/atualiza com novo token
+  8. dashboards out-of-the-box                — importa de ark/monitoring/dashboards/
+                                                substituindo __BUCKET__ pelo bucket do cliente
 
 Uso (dentro de docker-compose ou com os envs equivalentes):
 
@@ -72,6 +74,17 @@ class ProvisionResult:
     influx_token_id: str
     influx_token_value: str
     publishable_key: Optional[str]
+    dashboards: list[dict]
+
+
+# Diretorio de templates de dashboard. Quando rodando no container backend,
+# ark/ nao esta no bind-mount (so backend/ esta), entao o compose monta
+# ./ark/monitoring/dashboards:/app/dashboards:ro e seta DASHBOARDS_TEMPLATE_DIR.
+# Fora do container (host), cai no path relativo ao repo.
+DASHBOARDS_DIR = Path(os.environ.get(
+    "DASHBOARDS_TEMPLATE_DIR",
+    str(BACKEND_DIR.parent / "ark" / "monitoring" / "dashboards"),
+))
 
 
 # ----------------------------- Postgres -----------------------------
@@ -172,6 +185,50 @@ def _influx_org(client: InfluxDBClient, org_name: str):
 # wrappers locais que convertem RuntimeError do client em SystemExit.
 
 
+# ----------------------------- Dashboards -----------------------------
+
+def _carregar_template(arquivo: Path, bucket_name: str) -> dict:
+    """Le JSON do disco e substitui __BUCKET__. Falha cedo se template invalido."""
+    raw = arquivo.read_text(encoding="utf-8")
+    raw = raw.replace("__BUCKET__", bucket_name)
+    try:
+        dashboard = json.loads(raw)
+    except json.JSONDecodeError as exc:
+        raise SystemExit(f"erro: template '{arquivo.name}' tem JSON invalido: {exc}")
+    # Reset de id evita conflito quando o mesmo UID existe em outra org.
+    dashboard["id"] = None
+    return dashboard
+
+
+def _provisionar_dashboards(gf: GrafanaClient, *, org_id: int, slug: str,
+                            bucket_name: str) -> list[dict]:
+    """Importa todos os JSONs de dashboards/ na org do cliente.
+
+    Idempotente: cada JSON tem `uid` fixo; overwrite=True faz versao++.
+    """
+    if not DASHBOARDS_DIR.exists():
+        print(f"warn: pasta {DASHBOARDS_DIR} nao existe, pulando dashboards", file=sys.stderr)
+        return []
+
+    importados = []
+    for template in sorted(DASHBOARDS_DIR.glob("*.json")):
+        dashboard = _carregar_template(template, bucket_name)
+        try:
+            resp = gf.import_dashboard(
+                org_id=org_id, dashboard=dashboard,
+                message=f"provisionado para {slug} via provisionar_cliente.py",
+            )
+        except RuntimeError as erro:
+            raise SystemExit(f"erro ao importar {template.name}: {erro}")
+        importados.append({
+            "arquivo": template.name,
+            "uid": resp.get("uid"),
+            "url": resp.get("url"),
+            "version": resp.get("version"),
+        })
+    return importados
+
+
 # ----------------------------- main flow -----------------------------
 
 def provisionar(args: argparse.Namespace) -> ProvisionResult:
@@ -221,6 +278,13 @@ def provisionar(args: argparse.Namespace) -> ProvisionResult:
     except RuntimeError as erro:
         raise SystemExit(f"erro Grafana: {erro}")
 
+    # Importa dashboards out-of-the-box. Skip via flag pra debug.
+    dashboards = []
+    if not args.skip_dashboards:
+        dashboards = _provisionar_dashboards(
+            gf, org_id=gf_org_id, slug=args.slug, bucket_name=bucket_name,
+        )
+
     return ProvisionResult(
         site_id=site.id, slug=args.slug, plano=args.plano,
         bucket_name=bucket_name, bucket_id=bucket.id, retention_dias=retencao,
@@ -228,6 +292,7 @@ def provisionar(args: argparse.Namespace) -> ProvisionResult:
         grafana_ds_uid=ds.get("uid", ""), grafana_ds_name=ds_name,
         influx_token_id=token.id, influx_token_value=token.token,
         publishable_key=publishable,
+        dashboards=dashboards,
     )
 
 
@@ -243,6 +308,7 @@ def imprimir(result: ProvisionResult, *, json_out: bool):
             "grafana_ds_name": result.grafana_ds_name,
             "influx_token_id": result.influx_token_id,
             "publishable_key": result.publishable_key,
+            "dashboards": result.dashboards,
         }, indent=2))
         return
     print("== Provisionamento concluido ==")
@@ -255,6 +321,10 @@ def imprimir(result: ProvisionResult, *, json_out: bool):
     print(f"  grafana_org    : {result.grafana_org_name} (id={result.grafana_org_id})")
     print(f"  grafana_ds     : {result.grafana_ds_name} (uid={result.grafana_ds_uid})")
     print(f"  influx_token   : id={result.influx_token_id} (token nao reexibido)")
+    if result.dashboards:
+        print(f"  dashboards     :")
+        for d in result.dashboards:
+            print(f"    - {d['arquivo']}: uid={d['uid']} v{d['version']} {d.get('url', '')}")
     if result.publishable_key:
         print(f"  publishable_key (anote, nao sera reexibida):")
         print(f"    {result.publishable_key}")
@@ -270,6 +340,8 @@ def main(argv=None) -> int:
     parser.add_argument("--plano", default="free", choices=list(PLANO_DEFAULTS.keys()))
     parser.add_argument("--bucket", default=None,
                         help="Override do bucket (default: cliente_<slug>)")
+    parser.add_argument("--skip-dashboards", action="store_true",
+                        help="Nao importa dashboards (debug)")
     parser.add_argument("--json", action="store_true", help="Saida JSON")
     args = parser.parse_args(argv)
 
