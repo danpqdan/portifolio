@@ -197,11 +197,12 @@
       "targets": [
         {
           "refId": "A",
-          "query": "from(bucket: \"__BUCKET__\")\n  |> range(start: -24h)\n  |> filter(fn: (r) => r._measurement == \"web_vitals\" and r._field == \"valor\")\n  |> filter(fn: (r) => r.device_type != \"bot\")\n  |> group(columns: [\"nome\", \"rating\"])\n  |> count()\n  |> pivot(rowKey: [\"nome\"], columnKey: [\"rating\"], valueColumn: \"_value\")"
+          "query": "from(bucket: \"__BUCKET__\")\n  |> range(start: -24h)\n  |> filter(fn: (r) => r._measurement == \"web_vitals\" and r._field == \"valor\")\n  |> filter(fn: (r) => r.device_type != \"bot\")\n  |> group(columns: [\"nome\", \"rating\"])\n  |> count()\n  |> group()\n  |> pivot(rowKey: [\"nome\"], columnKey: [\"rating\"], valueColumn: \"_value\")\n  |> drop(columns: [\"_start\", \"_stop\", \"_field\", \"_measurement\"])"
         }
       ],
       "options": {
         "orientation": "vertical",
+        "xField": "nome",
         "stacking": "normal",
         "showValue": "auto",
         "barWidth": 0.7,
