@@ -299,8 +299,10 @@ except Exception as e:
 
 # Servico de ingestao — handler Socket.IO apenas delega para este servico.
 from ingestao import ServicoIngestao  # noqa: E402
+from ingestao.cardinalidade import obter_tracker as obter_cardinalidade_tracker  # noqa: E402
 from auth.sites_cache import SitesCache  # noqa: E402
-# sites_cache_servico e instanciado apos o tenants_repo singleton estar pronto.
+# sites_cache + tenants_repo + cardinalidade sao injetados apos o tenants_repo
+# singleton estar pronto (ver bloco "Auth multi-tenant" abaixo).
 servico_ingestao = ServicoIngestao(influxdb_service=influxdb_service)
 
 # ==================== AUTENTICACAO MULTI-TENANT ====================
@@ -315,8 +317,10 @@ try:
         keys_dir=app.config["JWT_KEYS_DIR"],
         audience=app.config["JWT_AUDIENCE"],
     )
-    # Wire bucket-routing: site_id -> bucket_name resolvido do tenants_repo.
+    # Wire bucket-routing + quota + cardinalidade no servico de ingestao.
     servico_ingestao.sites_cache = SitesCache(_tenants_repo_singleton)
+    servico_ingestao.tenants_repo = _tenants_repo_singleton
+    servico_ingestao.cardinalidade_tracker = obter_cardinalidade_tracker()
     log_safe(security_logger, 'info', "[SUCCESS] Auth multi-tenant inicializado")
 except Exception as e:
     log_safe(security_logger, 'error', f"[ERROR] Falha ao inicializar auth: {str(e)}")
@@ -329,14 +333,22 @@ app.register_blueprint(auth_bp, url_prefix=('/api/auth' if env == 'production' e
 # acessar o dashboard de metricas em /cliente/metricas/*.
 # Referencia: ark/docs/dashboard-cliente.md
 from auth.clientes_users_repo import obter_repo as obter_clientes_users_repo  # noqa: E402
+from auth.grafana_sync import criar_servico_se_configurado as criar_grafana_sync  # noqa: E402
 from auth.sessao_service import SessaoService  # noqa: E402
 from auth import cliente_routes as _cliente_routes_mod  # noqa: E402
 
 try:
     _clientes_users_repo = obter_clientes_users_repo(app.config["TENANTS_DATABASE_URL"])
     _sessao_service = SessaoService(_clientes_users_repo)
-    _cliente_routes_mod.configurar(_sessao_service)
+    _grafana_sync_service = criar_grafana_sync()  # None se env incompleto
+    _cliente_routes_mod.configurar(
+        _sessao_service,
+        grafana_sync=_grafana_sync_service,
+        tenants_repo=_tenants_repo_singleton,
+    )
     app.register_blueprint(_cliente_routes_mod.cliente_auth_bp)
+    if _grafana_sync_service:
+        log_safe(security_logger, 'info', "[SUCCESS] Grafana org sync ativo")
     log_safe(security_logger, 'info', "[SUCCESS] Auth do dashboard inicializado")
 except Exception as e:
     log_safe(security_logger, 'error', f"[ERROR] Falha ao inicializar auth do dashboard: {str(e)}")

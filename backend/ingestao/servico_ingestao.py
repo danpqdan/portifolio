@@ -15,6 +15,7 @@ from influxdb_service import (
     create_temporal_metric_from_heatmap,
     create_web_vitals_from_heatmap,
 )
+from ingestao.cardinalidade import TrackerCardinalidade, limite_para_plano
 from ingestao.idempotencia import (
     EntradaIdempotencia,
     obter_cache_idempotencia,
@@ -134,9 +135,16 @@ class ServicoIngestao:
     cadastrado caem no bucket default do `influxdb_service` (compat legado).
     """
 
-    def __init__(self, influxdb_service=None, sites_cache=None):
+    def __init__(self, influxdb_service=None, sites_cache=None, tenants_repo=None,
+                 cardinalidade_tracker: Optional[TrackerCardinalidade] = None):
         self.influxdb_service = influxdb_service
         self.sites_cache = sites_cache
+        # tenants_repo: usado para enforcement de quota (sec 18 do dashboard-cliente.md).
+        # Quando ausente, ingest aceita qualquer volume (modo dev/legado).
+        self.tenants_repo = tenants_repo
+        # cardinalidade_tracker: enforcement por plano (sec 20). Sem tracker
+        # nao ha enforcement — preserva compat com testes que nao se importam.
+        self.cardinalidade_tracker = cardinalidade_tracker
         self._cache = obter_cache_idempotencia()
         self._ultimos = obter_registro_ultimo()
         self._sequenciador = obter_sequenciador()
@@ -224,7 +232,57 @@ class ServicoIngestao:
                    session_id=session_id, id_registro=heatmap_dados.id_registro,
                    app_id=app_id, site_id=site_id)
 
-        bucket_destino = self._resolver_bucket(site_id, session_id, id_registro)
+        # ---------- quota diaria (sec 18 do dashboard-cliente.md) ----------
+        if self._quota_excedida(site_id):
+            emitir_log(logger, logging.WARNING, 'rejeitado_quota_excedida',
+                       session_id=session_id, id_registro=id_registro, site_id=site_id)
+            return ResumoIngestao(
+                status='error',
+                id_registro=id_registro,
+                code='QUOTA_EXCEDIDA',
+                message='Cota diaria do plano atingida; aguarde reset 00:00 UTC',
+                erros=['site_id'],
+                # retriable=False: SDK descarta silenciosamente. Quota reabre em
+                # 24h, retry exponencial nao ajuda — so gera ruido em log.
+                retriable=False,
+                server_seq=self._sequenciador.proximo(site_id),
+                server_time_ms=server_time,
+                backpressure_hint=backpressure,
+            )
+
+        bucket_destino, motivo_bucket = self._resolver_bucket(
+            site_id, session_id, id_registro,
+        )
+        if motivo_bucket == 'site_sem_bucket':
+            # Strict routing: site identificado mas sem bucket dedicado seria um
+            # leak entre tenants (cairia no INFLUXDB_BUCKET default). Rejeita ao
+            # inves de fallback. site_id=None continua passando para preservar
+            # compat dev (SDK_AUTH_REQUIRED=false) — a fonte do leak fica unica.
+            emitir_log(logger, logging.WARNING, 'rejeitado_bucket_nao_provisionado',
+                       session_id=session_id, id_registro=id_registro, site_id=site_id)
+            return ResumoIngestao(
+                status='error',
+                id_registro=id_registro,
+                code='BUCKET_NAO_PROVISIONADO',
+                message='Site nao tem bucket dedicado; rode provisionar_cliente.py',
+                erros=['site_id'],
+                retriable=False,
+                server_seq=self._sequenciador.proximo(site_id),
+                server_time_ms=server_time,
+                backpressure_hint=backpressure,
+            )
+
+        # ---------- cardinalidade (sec 20 do dashboard-cliente.md) ----------
+        cardinalidade_resultado = self._verificar_cardinalidade(
+            site_id, data, analytics_session_id, session_id, id_registro,
+        )
+        if cardinalidade_resultado is not None:
+            # `cardinalidade_resultado` carrega o ack pronto.
+            cardinalidade_resultado.server_seq = self._sequenciador.proximo(site_id)
+            cardinalidade_resultado.server_time_ms = server_time
+            cardinalidade_resultado.backpressure_hint = backpressure
+            return cardinalidade_resultado
+
         self._persistir_com_resiliencia(session_id, data, user_agent, ip_address,
                                         app_id=app_id, bucket=bucket_destino)
 
@@ -257,27 +315,151 @@ class ServicoIngestao:
         if analytics_session_id and id_registro:
             self._ultimos.registrar(analytics_session_id, id_registro, ts_ms=server_time)
 
+        # Quota diaria — incrementa apos persistir (best-effort; falha so loga).
+        self._registrar_consumo(site_id)
+
         return resumo
 
-    def _resolver_bucket(self, site_id: Optional[str], session_id: str,
-                         id_registro: Optional[str]) -> Optional[str]:
-        """Retorna bucket_name dedicado do site ou None (=> bucket default).
+    def _extrair_pares_tags(self, data: dict, analytics_session_id: Optional[str]
+                            ) -> list[tuple[str, str]]:
+        """Lista pares (tag, valor) que serao escritos como tag em algum measurement.
 
-        Loga warning quando ha site_id mas o site nao tem bucket configurado.
+        Reflete o conjunto de `.tag(...)` em InfluxDBService.write_*. Mantem
+        sincronizado: se um campo deixa de ser tag (ex: ip_address virou field),
+        sai daqui tambem. Tags escolhidas: app_id, ambiente, page_type,
+        session_id (page_analytics), nome (custom_events/web_vitals), rating
+        (web_vitals).
         """
-        if not self.sites_cache or not site_id:
+        pares: list[tuple[str, str]] = []
+        if not isinstance(data, dict):
+            return pares
+        if data.get('app_id'):
+            pares.append(('app_id', data['app_id']))
+        if data.get('ambiente'):
+            pares.append(('ambiente', data['ambiente']))
+        if analytics_session_id:
+            pares.append(('session_id', analytics_session_id))
+        paginas = data.get('paginas') or {}
+        if isinstance(paginas, dict):
+            for page_type, lista in paginas.items():
+                pares.append(('page_type', page_type))
+                if not isinstance(lista, list):
+                    continue
+                for pagina in lista:
+                    if not isinstance(pagina, dict):
+                        continue
+                    for evento in pagina.get('eventos') or []:
+                        if not isinstance(evento, dict):
+                            continue
+                        tipo = evento.get('tipo')
+                        dados = evento.get('dados') or {}
+                        nome = dados.get('nome')
+                        if tipo == 'custom' and nome:
+                            pares.append(('nome', nome))
+                        elif tipo == 'web_vital':
+                            if nome:
+                                pares.append(('nome', nome))
+                            rating = dados.get('rating')
+                            if rating:
+                                pares.append(('rating', rating))
+        return pares
+
+    def _verificar_cardinalidade(
+        self,
+        site_id: Optional[str],
+        data: dict,
+        analytics_session_id: Optional[str],
+        session_id: str,
+        id_registro: Optional[str],
+    ) -> Optional[ResumoIngestao]:
+        """Roda o tracker. Retorna `None` quando aceito ou tracker ausente.
+
+        Quando rejeita, retorna ResumoIngestao parcialmente preenchido — o
+        chamador completa `server_seq`, `server_time_ms`, `backpressure_hint`.
+        """
+        if not self.cardinalidade_tracker or not site_id:
             return None
+        plano = None
+        if self.sites_cache:
+            site = self.sites_cache.obter_site(site_id)
+            plano = site.plano if site else None
+        limite = limite_para_plano(plano)
+        pares = self._extrair_pares_tags(data, analytics_session_id)
+        ok, tag_dominante, total = self.cardinalidade_tracker.verificar_e_registrar(
+            site_id, pares, limite,
+        )
+        if ok:
+            return None
+        emitir_log(logger, logging.WARNING, 'rejeitado_cardinalidade_excedida',
+                   session_id=session_id, id_registro=id_registro,
+                   site_id=site_id, plano=plano, limite=limite,
+                   total=total, tag_dominante=tag_dominante)
+        return ResumoIngestao(
+            status='error',
+            id_registro=id_registro,
+            code='CARDINALIDADE_EXCEDIDA',
+            message=(f'Cardinalidade do plano {plano or "free"} ({limite} valores) '
+                     f'atingida; tag dominante: {tag_dominante}'),
+            erros=[tag_dominante or 'tags'],
+            retriable=False,
+        )
+
+    def _quota_excedida(self, site_id: Optional[str]) -> bool:
+        """Verifica `consumo_diario.eventos >= quotas.eventos_por_dia`.
+
+        Retorna False quando nao ha repo (modo legado), site_id ausente, ou
+        falha ao consultar (degrada permitindo — preferimos perder enforcement
+        do que derrubar ingest).
+        """
+        if not self.tenants_repo or not site_id:
+            return False
+        try:
+            quota = self.tenants_repo.obter_quota(site_id)
+            if quota is None:
+                return False
+            consumido = self.tenants_repo.consumo_hoje(site_id)
+            return consumido >= quota.eventos_por_dia
+        except Exception as erro:
+            emitir_log(logger, logging.ERROR, 'quota_check_erro',
+                       site_id=site_id, motivo=str(erro))
+            return False
+
+    def _registrar_consumo(self, site_id: Optional[str]) -> None:
+        if not self.tenants_repo or not site_id:
+            return
+        try:
+            self.tenants_repo.incrementar_consumo(site_id, eventos=1)
+        except Exception as erro:
+            emitir_log(logger, logging.ERROR, 'consumo_increment_erro',
+                       site_id=site_id, motivo=str(erro))
+
+    def _resolver_bucket(self, site_id: Optional[str], session_id: str,
+                         id_registro: Optional[str]) -> tuple[Optional[str], Optional[str]]:
+        """Retorna (bucket_name, motivo).
+
+        - (bucket_name, None)        : site tem bucket dedicado, escreve la.
+        - (None, None)               : site_id=None ou sem cache (legacy/dev) — bucket default.
+        - (None, 'site_sem_bucket')  : site identificado mas SEM bucket; chamador
+                                       deve rejeitar (leak prevention).
+        - (None, 'sites_cache_erro') : repo ou cache falhou; chamador escolhe se
+                                       degrada (escolhi: degrada para default).
+        """
+        if not site_id:
+            return None, None
+        if not self.sites_cache:
+            return None, None
         try:
             bucket = self.sites_cache.obter_bucket(site_id)
         except Exception as erro:
             emitir_log(logger, logging.ERROR, 'sites_cache_erro',
                        session_id=session_id, id_registro=id_registro,
                        site_id=site_id, motivo=str(erro))
-            return None
+            return None, 'sites_cache_erro'
         if not bucket:
             emitir_log(logger, logging.WARNING, 'site_sem_bucket',
                        session_id=session_id, id_registro=id_registro, site_id=site_id)
-        return bucket
+            return None, 'site_sem_bucket'
+        return bucket, None
 
     def _persistir_com_resiliencia(
         self,
