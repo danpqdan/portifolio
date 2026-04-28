@@ -49,6 +49,31 @@ class CarregarTemplateTests(unittest.TestCase):
         self.assertEqual(out["uid"], "x")
         self.assertEqual(out["panels"][0]["targets"][0]["query"], 'from(bucket: "cliente_acme")')
 
+    def test_substitui_datasource_uid(self):
+        path = self.dir / "test.json"
+        path.write_text(json.dumps({
+            "id": None, "uid": "y",
+            "panels": [{
+                "datasource": {"type": "influxdb", "uid": "__DATASOURCE_UID__"},
+                "targets": [{"query": "from(bucket: \"__BUCKET__\")"}],
+            }],
+        }), encoding="utf-8")
+        out = self._import_carregar()(path, "b1", datasource_uid="abcd1234")
+        self.assertEqual(out["panels"][0]["datasource"]["uid"], "abcd1234")
+        self.assertEqual(out["panels"][0]["targets"][0]["query"], 'from(bucket: "b1")')
+
+    def test_datasource_uid_vazio_substitui_por_string_vazia(self):
+        path = self.dir / "test.json"
+        path.write_text(json.dumps({
+            "id": None,
+            "panels": [{
+                "datasource": {"type": "influxdb", "uid": "__DATASOURCE_UID__"},
+            }],
+        }), encoding="utf-8")
+        # Caller pode nao ter uid (compat) — substitui por "" e Grafana resolve.
+        out = self._import_carregar()(path, "b1", datasource_uid="")
+        self.assertEqual(out["panels"][0]["datasource"]["uid"], "")
+
     def test_substitui_em_multiplos_lugares(self):
         path = self.dir / "test.json"
         path.write_text(json.dumps({
@@ -180,14 +205,18 @@ class WebVitalsTemplateValidoTests(unittest.TestCase):
         self.assertIn("Web Vitals", data["title"])
         self.assertGreater(len(data["panels"]), 3)
         self.assertFalse(data["editable"], "dashboard provisioned deve ser read-only")
-        # Placeholder presente em pelo menos 1 query.
-        achou_placeholder = False
+        # Placeholders presentes em pelo menos 1 painel.
+        achou_bucket = False
+        achou_uid = False
         for p in data["panels"]:
+            ds_uid = (p.get("datasource") or {}).get("uid", "")
+            if ds_uid == "__DATASOURCE_UID__":
+                achou_uid = True
             for t in p.get("targets", []):
                 if "__BUCKET__" in t.get("query", ""):
-                    achou_placeholder = True
-                    break
-        self.assertTrue(achou_placeholder, "nenhum painel referencia __BUCKET__")
+                    achou_bucket = True
+        self.assertTrue(achou_bucket, "nenhum painel referencia __BUCKET__")
+        self.assertTrue(achou_uid, "nenhum painel usa __DATASOURCE_UID__")
 
 
 if __name__ == "__main__":

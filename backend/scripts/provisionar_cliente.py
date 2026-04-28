@@ -187,10 +187,21 @@ def _influx_org(client: InfluxDBClient, org_name: str):
 
 # ----------------------------- Dashboards -----------------------------
 
-def _carregar_template(arquivo: Path, bucket_name: str) -> dict:
-    """Le JSON do disco e substitui __BUCKET__. Falha cedo se template invalido."""
+def _carregar_template(arquivo: Path, bucket_name: str,
+                       datasource_uid: str = "") -> dict:
+    """Le JSON do disco e substitui placeholders.
+
+    Substituicoes:
+      __BUCKET__         -> bucket_name (cliente_<slug>)
+      __DATASOURCE_UID__ -> uid do datasource Influx criado pra esse cliente
+
+    O datasource_uid eh critico: sem uid explicito por painel, Grafana 11.2
+    pode resolver o `"datasource": {"type": "influxdb"}` para o plugin de
+    testdata e mostrar valores aleatorios em vez de "No data".
+    """
     raw = arquivo.read_text(encoding="utf-8")
     raw = raw.replace("__BUCKET__", bucket_name)
+    raw = raw.replace("__DATASOURCE_UID__", datasource_uid)
     try:
         dashboard = json.loads(raw)
     except json.JSONDecodeError as exc:
@@ -201,7 +212,8 @@ def _carregar_template(arquivo: Path, bucket_name: str) -> dict:
 
 
 def _provisionar_dashboards(gf: GrafanaClient, *, org_id: int, slug: str,
-                            bucket_name: str) -> list[dict]:
+                            bucket_name: str,
+                            datasource_uid: str = "") -> list[dict]:
     """Importa todos os JSONs de dashboards/ na org do cliente.
 
     Idempotente: cada JSON tem `uid` fixo; overwrite=True faz versao++.
@@ -212,7 +224,8 @@ def _provisionar_dashboards(gf: GrafanaClient, *, org_id: int, slug: str,
 
     importados = []
     for template in sorted(DASHBOARDS_DIR.glob("*.json")):
-        dashboard = _carregar_template(template, bucket_name)
+        dashboard = _carregar_template(template, bucket_name,
+                                       datasource_uid=datasource_uid)
         try:
             resp = gf.import_dashboard(
                 org_id=org_id, dashboard=dashboard,
@@ -283,6 +296,7 @@ def provisionar(args: argparse.Namespace) -> ProvisionResult:
     if not args.skip_dashboards:
         dashboards = _provisionar_dashboards(
             gf, org_id=gf_org_id, slug=args.slug, bucket_name=bucket_name,
+            datasource_uid=ds.get("uid", ""),
         )
 
     return ProvisionResult(
