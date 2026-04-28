@@ -43,6 +43,9 @@ class TemporalMetric:
     ip_address: Optional[str] = None
     app_id: Optional[str] = None
     ambiente: Optional[str] = None
+    device_type: Optional[str] = None
+    pais: Optional[str] = None
+    referrer_dominio: Optional[str] = None
 
 
 @dataclass
@@ -59,6 +62,9 @@ class WebVitalMetric:
     ip_address: Optional[str] = None
     app_id: Optional[str] = None
     ambiente: Optional[str] = None
+    device_type: Optional[str] = None
+    pais: Optional[str] = None
+    referrer_dominio: Optional[str] = None
 
 
 @dataclass
@@ -73,6 +79,9 @@ class CustomEventMetric:
     ip_address: Optional[str] = None
     app_id: Optional[str] = None
     ambiente: Optional[str] = None
+    device_type: Optional[str] = None
+    pais: Optional[str] = None
+    referrer_dominio: Optional[str] = None
 
 
 class InfluxDBService:
@@ -120,6 +129,9 @@ class InfluxDBService:
                 .tag("page_type", metric.page_type)
                 .tag("app_id", metric.app_id)
                 .tag("ambiente", metric.ambiente)
+                .tag("device_type", metric.device_type or "unknown")
+                .tag("pais", metric.pais or "unknown")
+                .tag("referrer_dominio", metric.referrer_dominio or "direto")
                 .field("ip_address", metric.ip_address or "unknown")
                 .field("permanencia_segundos", float(metric.permanencia_segundos))
                 .field("visualizacoes", int(metric.visualizacoes))
@@ -156,6 +168,9 @@ class InfluxDBService:
                 .tag("rating", metric.rating or "unknown")
                 .tag("app_id", metric.app_id)
                 .tag("ambiente", metric.ambiente)
+                .tag("device_type", metric.device_type or "unknown")
+                .tag("pais", metric.pais or "unknown")
+                .tag("referrer_dominio", metric.referrer_dominio or "direto")
                 .field("ip_address", metric.ip_address or "unknown")
                 .field("valor", float(metric.valor))
                 .field("user_agent", metric.user_agent or "unknown")
@@ -185,6 +200,9 @@ class InfluxDBService:
                 .tag("nome", metric.nome)
                 .tag("app_id", metric.app_id)
                 .tag("ambiente", metric.ambiente)
+                .tag("device_type", metric.device_type or "unknown")
+                .tag("pais", metric.pais or "unknown")
+                .tag("referrer_dominio", metric.referrer_dominio or "direto")
                 .field("ip_address", metric.ip_address or "unknown")
                 .field("ocorrencias", 1)
                 .field("user_agent", metric.user_agent or "unknown")
@@ -481,7 +499,9 @@ def _contar_por_tipo(eventos, tipo: str) -> int:
 
 
 def create_temporal_metric_from_heatmap(session_id: str, heatmap_data: dict,
-                                      user_agent: str = None, ip_address: str = None) -> List[TemporalMetric]:
+                                      user_agent: str = None, ip_address: str = None,
+                                      device_type: str = None, pais: str = None,
+                                      referrer_dominio: str = None) -> List[TemporalMetric]:
     """Agrega contagens por tipo de evento em metricas temporais (uma por pagina)."""
     metrics: List[TemporalMetric] = []
 
@@ -516,13 +536,18 @@ def create_temporal_metric_from_heatmap(session_id: str, heatmap_data: dict,
             ip_address=ip_address,
             app_id=app_id,
             ambiente=ambiente,
+            device_type=device_type,
+            pais=pais,
+            referrer_dominio=referrer_dominio,
         ))
 
     return metrics
 
 
 def create_web_vitals_from_heatmap(session_id: str, heatmap_data: dict,
-                                   user_agent: str = None, ip_address: str = None) -> List[WebVitalMetric]:
+                                   user_agent: str = None, ip_address: str = None,
+                                   device_type: str = None, pais: str = None,
+                                   referrer_dominio: str = None) -> List[WebVitalMetric]:
     resultado: List[WebVitalMetric] = []
 
     paginas = {}
@@ -558,13 +583,18 @@ def create_web_vitals_from_heatmap(session_id: str, heatmap_data: dict,
                 ip_address=ip_address,
                 app_id=app_id,
                 ambiente=ambiente,
+                device_type=device_type,
+                pais=pais,
+                referrer_dominio=referrer_dominio,
             ))
 
     return resultado
 
 
 def create_custom_events_from_heatmap(session_id: str, heatmap_data: dict,
-                                      user_agent: str = None, ip_address: str = None) -> List[CustomEventMetric]:
+                                      user_agent: str = None, ip_address: str = None,
+                                      device_type: str = None, pais: str = None,
+                                      referrer_dominio: str = None) -> List[CustomEventMetric]:
     resultado: List[CustomEventMetric] = []
 
     paginas = {}
@@ -600,6 +630,9 @@ def create_custom_events_from_heatmap(session_id: str, heatmap_data: dict,
                 ip_address=ip_address,
                 app_id=app_id,
                 ambiente=ambiente,
+                device_type=device_type,
+                pais=pais,
+                referrer_dominio=referrer_dominio,
             ))
 
     return resultado
