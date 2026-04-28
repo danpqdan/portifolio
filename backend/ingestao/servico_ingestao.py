@@ -16,6 +16,11 @@ from influxdb_service import (
     create_web_vitals_from_heatmap,
 )
 from ingestao.cardinalidade import TrackerCardinalidade, limite_para_plano
+from ingestao.derivacoes import (
+    detectar_device_type,
+    extrair_pais,
+    extrair_referrer_dominio,
+)
 from ingestao.idempotencia import (
     EntradaIdempotencia,
     obter_cache_idempotencia,
@@ -156,10 +161,16 @@ class ServicoIngestao:
         user_agent: Optional[str] = None,
         ip_address: Optional[str] = None,
         site_id: Optional[str] = None,
+        referer: Optional[str] = None,
+        cf_ipcountry: Optional[str] = None,
     ) -> ResumoIngestao:
         id_registro = data.get('id_registro') if isinstance(data, dict) else None
         app_id = data.get('app_id') if isinstance(data, dict) else None
         analytics_session_id = data.get('session_id') if isinstance(data, dict) else None
+        # Derivacoes server-side (sec 20). Calculadas 1x e propagadas.
+        device_type = detectar_device_type(user_agent)
+        pais = extrair_pais(cf_ipcountry)
+        referrer_dominio = extrair_referrer_dominio(referer)
 
         emitir_log(logger, logging.INFO, 'recebido',
                    session_id=session_id, id_registro=id_registro, app_id=app_id,
@@ -275,6 +286,7 @@ class ServicoIngestao:
         # ---------- cardinalidade (sec 20 do dashboard-cliente.md) ----------
         cardinalidade_resultado = self._verificar_cardinalidade(
             site_id, data, analytics_session_id, session_id, id_registro,
+            device_type=device_type, pais=pais, referrer_dominio=referrer_dominio,
         )
         if cardinalidade_resultado is not None:
             # `cardinalidade_resultado` carrega o ack pronto.
@@ -283,8 +295,11 @@ class ServicoIngestao:
             cardinalidade_resultado.backpressure_hint = backpressure
             return cardinalidade_resultado
 
-        self._persistir_com_resiliencia(session_id, data, user_agent, ip_address,
-                                        app_id=app_id, bucket=bucket_destino)
+        self._persistir_com_resiliencia(
+            session_id, data, user_agent, ip_address,
+            app_id=app_id, bucket=bucket_destino,
+            device_type=device_type, pais=pais, referrer_dominio=referrer_dominio,
+        )
 
         resumo = ResumoIngestao(
             status='success',
@@ -320,7 +335,10 @@ class ServicoIngestao:
 
         return resumo
 
-    def _extrair_pares_tags(self, data: dict, analytics_session_id: Optional[str]
+    def _extrair_pares_tags(self, data: dict, analytics_session_id: Optional[str],
+                            device_type: Optional[str] = None,
+                            pais: Optional[str] = None,
+                            referrer_dominio: Optional[str] = None,
                             ) -> list[tuple[str, str]]:
         """Lista pares (tag, valor) que serao escritos como tag em algum measurement.
 
@@ -328,7 +346,7 @@ class ServicoIngestao:
         sincronizado: se um campo deixa de ser tag (ex: ip_address virou field),
         sai daqui tambem. Tags escolhidas: app_id, ambiente, page_type,
         session_id (page_analytics), nome (custom_events/web_vitals), rating
-        (web_vitals).
+        (web_vitals), device_type, pais, referrer_dominio (sprint 2 bloco B).
         """
         pares: list[tuple[str, str]] = []
         if not isinstance(data, dict):
@@ -339,6 +357,12 @@ class ServicoIngestao:
             pares.append(('ambiente', data['ambiente']))
         if analytics_session_id:
             pares.append(('session_id', analytics_session_id))
+        if device_type:
+            pares.append(('device_type', device_type))
+        if pais:
+            pares.append(('pais', pais))
+        if referrer_dominio:
+            pares.append(('referrer_dominio', referrer_dominio))
         paginas = data.get('paginas') or {}
         if isinstance(paginas, dict):
             for page_type, lista in paginas.items():
@@ -371,6 +395,9 @@ class ServicoIngestao:
         analytics_session_id: Optional[str],
         session_id: str,
         id_registro: Optional[str],
+        device_type: Optional[str] = None,
+        pais: Optional[str] = None,
+        referrer_dominio: Optional[str] = None,
     ) -> Optional[ResumoIngestao]:
         """Roda o tracker. Retorna `None` quando aceito ou tracker ausente.
 
@@ -384,7 +411,10 @@ class ServicoIngestao:
             site = self.sites_cache.obter_site(site_id)
             plano = site.plano if site else None
         limite = limite_para_plano(plano)
-        pares = self._extrair_pares_tags(data, analytics_session_id)
+        pares = self._extrair_pares_tags(
+            data, analytics_session_id,
+            device_type=device_type, pais=pais, referrer_dominio=referrer_dominio,
+        )
         ok, tag_dominante, total = self.cardinalidade_tracker.verificar_e_registrar(
             site_id, pares, limite,
         )
@@ -469,6 +499,9 @@ class ServicoIngestao:
         ip_address: Optional[str],
         app_id: Optional[str] = None,
         bucket: Optional[str] = None,
+        device_type: Optional[str] = None,
+        pais: Optional[str] = None,
+        referrer_dominio: Optional[str] = None,
     ) -> None:
         """Persistencia em InfluxDB nao deve derrubar a ingestao.
 
@@ -486,12 +519,18 @@ class ServicoIngestao:
         # So passamos quando ha override explicito; assim mocks antigos seguem funcionando.
         kw = {"bucket": bucket} if bucket else {}
 
+        derivadas = {
+            "device_type": device_type,
+            "pais": pais,
+            "referrer_dominio": referrer_dominio,
+        }
         try:
             metricas = create_temporal_metric_from_heatmap(
                 session_id=session_id,
                 heatmap_data=data,
                 user_agent=user_agent,
                 ip_address=ip_address,
+                **derivadas,
             )
             for metrica in metricas:
                 self.influxdb_service.write_temporal_metrics_async(metrica, **kw)
@@ -504,6 +543,7 @@ class ServicoIngestao:
                 heatmap_data=data,
                 user_agent=user_agent,
                 ip_address=ip_address,
+                **derivadas,
             )
             for vital in vitals:
                 self.influxdb_service.write_web_vital_async(vital, **kw)
@@ -516,6 +556,7 @@ class ServicoIngestao:
                 heatmap_data=data,
                 user_agent=user_agent,
                 ip_address=ip_address,
+                **derivadas,
             )
             for custom in customizados:
                 self.influxdb_service.write_custom_event_async(custom, **kw)
