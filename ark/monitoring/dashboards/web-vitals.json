@@ -126,7 +126,7 @@
       }
     },
     {
-      "title": "LCP timeline p75 por device_type",
+      "title": "LCP media por device_type",
       "type": "timeseries",
       "gridPos": { "h": 9, "w": 12, "x": 0, "y": 6 },
       "datasource": { "type": "influxdb", "uid": "__DATASOURCE_UID__" },
@@ -189,31 +189,42 @@
       }
     },
     {
-      "title": "Distribuicao Good / Needs Improvement / Poor (24h)",
-      "type": "piechart",
+      "title": "Score Card por metrica (24h) — Bom vs Precisa melhorar vs Ruim",
+      "type": "barchart",
       "gridPos": { "h": 8, "w": 12, "x": 0, "y": 15 },
       "datasource": { "type": "influxdb", "uid": "__DATASOURCE_UID__" },
-      "description": "Total de eventos por rating do Web Vital. Cobre todos os nomes (LCP+INP+CLS).",
+      "description": "Cada barra e uma metrica (LCP/INP/CLS). Altura = total de eventos. Cores = rating (verde=bom, amarelo=precisa melhorar, vermelho=ruim). Misturar ratings entre metricas perde sentido — Bom de LCP (<2.5s) e diferente de Bom de INP (<200ms).",
       "targets": [
         {
           "refId": "A",
-          "query": "from(bucket: \"__BUCKET__\")\n  |> range(start: -24h)\n  |> filter(fn: (r) => r._measurement == \"web_vitals\" and r._field == \"valor\")\n  |> filter(fn: (r) => r.device_type != \"bot\")\n  |> group(columns: [\"rating\"])\n  |> count()"
+          "query": "from(bucket: \"__BUCKET__\")\n  |> range(start: -24h)\n  |> filter(fn: (r) => r._measurement == \"web_vitals\" and r._field == \"valor\")\n  |> filter(fn: (r) => r.device_type != \"bot\")\n  |> group(columns: [\"nome\", \"rating\"])\n  |> count()\n  |> pivot(rowKey: [\"nome\"], columnKey: [\"rating\"], valueColumn: \"_value\")"
         }
       ],
       "options": {
+        "orientation": "vertical",
+        "stacking": "normal",
+        "showValue": "auto",
+        "barWidth": 0.7,
+        "groupWidth": 0.6,
         "legend": {
-          "displayMode": "table",
-          "placement": "right",
-          "values": ["value", "percent"]
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
         },
-        "pieType": "donut",
-        "reduceOptions": { "values": false, "calcs": ["lastNotNull"], "fields": "" }
+        "tooltip": { "mode": "multi", "sort": "none" },
+        "xTickLabelRotation": 0,
+        "xTickLabelSpacing": 0
       },
       "fieldConfig": {
         "defaults": {
-          "displayName": "${__field.labels.rating}",
           "color": { "mode": "palette-classic" },
-          "unit": "short"
+          "unit": "short",
+          "custom": {
+            "lineWidth": 1,
+            "fillOpacity": 80,
+            "axisPlacement": "auto",
+            "axisLabel": "Eventos"
+          }
         },
         "overrides": [
           {
@@ -235,6 +246,12 @@
             "properties": [
               { "id": "color", "value": { "mode": "fixed", "fixedColor": "red" } },
               { "id": "displayName", "value": "Ruim" }
+            ]
+          },
+          {
+            "matcher": { "id": "byName", "options": "nome" },
+            "properties": [
+              { "id": "displayName", "value": "Metrica" }
             ]
           }
         ]
