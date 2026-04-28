@@ -18,10 +18,11 @@
         msg: "Modo teste em container — asserts de producao desabilitados."
 
     - name: Garantir openssl instalado para gerar cert de teste
-      apt:
+      # Modulo `package` agnostico de distro — funciona em Rocky (dnf) e
+      # eventualmente em Ubuntu (apt). Em Rocky openssl ja vem instalado.
+      package:
         name: openssl
         state: present
-        update_cache: false
 
     - name: Criar diretorio do cert mock
       file:
