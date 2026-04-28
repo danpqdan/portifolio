@@ -28,10 +28,19 @@
       - tar
     state: present
     update_cache: true
+    # Rocky 9 minimal vem com curl-minimal por default; sem allowerasing dnf
+    # falha com "conflicts with curl provided by curl". allowerasing permite
+    # swap silencioso de curl-minimal por curl. Inofensivo em hosts que ja
+    # tem curl full (no-op).
+    allowerasing: true
 
 - name: Configurar locale pt_BR.UTF-8
+  # localectl exige systemd como PID 1; em container de teste sem systemd,
+  # falha com "Failed to connect to bus". Em prod (VPS Rocky completo) roda
+  # normal. Tag `systemd` permite skip via --skip-tags em teste-ambiente-a.
   command: localectl set-locale LANG=pt_BR.UTF-8
   changed_when: false
+  tags: [systemd]
 
 - name: Firewalld — ativar servico
   service:
