@@ -7,7 +7,7 @@ import Projects from './pages/Projects';
 import About from './pages/About';
 import ClienteLogin from './pages/ClienteLogin';
 import ClienteMetricas from './pages/ClienteMetricas';
-import { iniciarAnalytics } from './sdk';
+import { iniciarAnalytics, enviarEvento } from './sdk';
 import { WEBSOCKET_URL, DEBUG_ENABLED, NODE_ENV, PUBLISHABLE_KEY } from './config.js';
 
 const AMBIENTES_SUPORTADOS = ['development', 'test', 'staging', 'production'];
@@ -29,7 +29,16 @@ function Portfolio() {
   const [showUi, setShowUi] = useState(false);
 
   useEffect(() => {
-    const onTorreStarted = () => setShowUi(true);
+    const onTorreStarted = () => {
+      setShowUi(true);
+      // Custom event de exemplo: alimenta o dashboard Event Explorer com
+      // dados reais. Em prod cada cliente substitui por chamadas relevantes
+      // (checkout_iniciado, formulario_enviado, video_play, etc.).
+      enviarEvento('app_carregado', {
+        rota_inicial: window.location.pathname,
+        viewport_width: window.innerWidth,
+      });
+    };
     window.addEventListener('torre:started', onTorreStarted);
 
     const handleBeforeUnload = () => {
