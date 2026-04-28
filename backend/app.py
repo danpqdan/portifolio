@@ -809,6 +809,10 @@ def handle_analytics_data(data):
 
         user_agent = request.headers.get('User-Agent', 'unknown')
         ip_address = request.environ.get('REMOTE_ADDR', 'unknown')
+        # Sprint 2 bloco B - tags derivadas server-side. Headers vem do
+        # handshake Socket.IO original; em prod, Cloudflare injeta CF-IPCountry.
+        referer = request.headers.get('Referer')
+        cf_ipcountry = request.headers.get('CF-IPCountry')
 
         site_id_ativo = active_sessions[session_id].get('site_id')
         resumo = servico_ingestao.ingerir(
@@ -817,6 +821,8 @@ def handle_analytics_data(data):
             user_agent=user_agent,
             ip_address=ip_address,
             site_id=site_id_ativo,
+            referer=referer,
+            cf_ipcountry=cf_ipcountry,
         )
 
         if resumo.status == 'success':
