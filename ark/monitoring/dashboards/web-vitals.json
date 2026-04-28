@@ -23,7 +23,7 @@
       "title": "LCP p75 (24h)",
       "type": "stat",
       "gridPos": { "h": 6, "w": 8, "x": 0, "y": 0 },
-      "datasource": { "type": "influxdb" },
+      "datasource": { "type": "influxdb", "uid": "__DATASOURCE_UID__" },
       "description": "Largest Contentful Paint percentil 75. Bom: <2.5s; Precisa melhorar: 2.5-4s; Ruim: >4s. (Core Web Vitals).",
       "targets": [
         {
@@ -58,7 +58,7 @@
       "title": "INP p75 (24h)",
       "type": "stat",
       "gridPos": { "h": 6, "w": 8, "x": 8, "y": 0 },
-      "datasource": { "type": "influxdb" },
+      "datasource": { "type": "influxdb", "uid": "__DATASOURCE_UID__" },
       "description": "Interaction to Next Paint percentil 75. Bom: <200ms; Precisa melhorar: 200-500ms; Ruim: >500ms.",
       "targets": [
         {
@@ -93,7 +93,7 @@
       "title": "CLS p75 (24h)",
       "type": "stat",
       "gridPos": { "h": 6, "w": 8, "x": 16, "y": 0 },
-      "datasource": { "type": "influxdb" },
+      "datasource": { "type": "influxdb", "uid": "__DATASOURCE_UID__" },
       "description": "Cumulative Layout Shift percentil 75. Bom: <0.1; Precisa melhorar: 0.1-0.25; Ruim: >0.25.",
       "targets": [
         {
@@ -129,7 +129,7 @@
       "title": "LCP timeline p75 por device_type",
       "type": "timeseries",
       "gridPos": { "h": 9, "w": 12, "x": 0, "y": 6 },
-      "datasource": { "type": "influxdb" },
+      "datasource": { "type": "influxdb", "uid": "__DATASOURCE_UID__" },
       "description": "Series por mobile/tablet/desktop. Bots filtrados.",
       "targets": [
         {
@@ -163,7 +163,7 @@
       "title": "INP timeline p75 por device_type",
       "type": "timeseries",
       "gridPos": { "h": 9, "w": 12, "x": 12, "y": 6 },
-      "datasource": { "type": "influxdb" },
+      "datasource": { "type": "influxdb", "uid": "__DATASOURCE_UID__" },
       "targets": [
         {
           "refId": "A",
@@ -188,7 +188,7 @@
       "title": "Distribuicao Good / Needs Improvement / Poor (24h)",
       "type": "piechart",
       "gridPos": { "h": 8, "w": 12, "x": 0, "y": 15 },
-      "datasource": { "type": "influxdb" },
+      "datasource": { "type": "influxdb", "uid": "__DATASOURCE_UID__" },
       "description": "Total de eventos por rating do Web Vital. Cobre todos os nomes (LCP+INP+CLS).",
       "targets": [
         {
@@ -221,7 +221,7 @@
       "title": "Top 10 paginas mais lentas (LCP p75, 24h)",
       "type": "bargauge",
       "gridPos": { "h": 8, "w": 12, "x": 12, "y": 15 },
-      "datasource": { "type": "influxdb" },
+      "datasource": { "type": "influxdb", "uid": "__DATASOURCE_UID__" },
       "targets": [
         {
           "refId": "A",
