@@ -193,6 +193,13 @@ class GrafanaClientImportDashboardTests(unittest.TestCase):
             self.assertIn("500", str(ctx.exception))
 
 
+def _carregar_template_repo(nome: str) -> dict:
+    """Helper: carrega um template do repo e parseia."""
+    repo_root = BACKEND_DIR.parent
+    path = repo_root / "ark" / "monitoring" / "dashboards" / nome
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
 class WebVitalsTemplateValidoTests(unittest.TestCase):
     """Garante que o JSON shipado no repo e parseavel, tem placeholder e UID."""
 
@@ -217,6 +224,129 @@ class WebVitalsTemplateValidoTests(unittest.TestCase):
                     achou_bucket = True
         self.assertTrue(achou_bucket, "nenhum painel referencia __BUCKET__")
         self.assertTrue(achou_uid, "nenhum painel usa __DATASOURCE_UID__")
+
+
+class EventExplorerTemplateValidoTests(unittest.TestCase):
+    """Sanity check do Event Explorer (sprint 2 bloco B item 3)."""
+
+    def setUp(self):
+        self.data = _carregar_template_repo("event-explorer.json")
+
+    def test_uid_e_titulo(self):
+        self.assertEqual(self.data["uid"], "portifolio-event-explorer")
+        self.assertIn("Event Explorer", self.data["title"])
+        self.assertFalse(self.data["editable"])
+
+    def test_tem_variaveis_evento_e_breakdown(self):
+        nomes_vars = {v["name"] for v in self.data["templating"]["list"]}
+        self.assertEqual(nomes_vars, {"evento", "breakdown"})
+
+    def test_variavel_evento_query_no_bucket_e_datasource_corretos(self):
+        evento = next(v for v in self.data["templating"]["list"] if v["name"] == "evento")
+        self.assertEqual(evento["type"], "query")
+        self.assertEqual(evento["datasource"]["uid"], "__DATASOURCE_UID__")
+        self.assertIn("__BUCKET__", evento["query"])
+        self.assertIn("custom_events", evento["query"])
+        self.assertIn("nome", evento["query"])
+
+    def test_variavel_breakdown_tem_5_opcoes(self):
+        breakdown = next(v for v in self.data["templating"]["list"] if v["name"] == "breakdown")
+        self.assertEqual(breakdown["type"], "custom")
+        valores = {o["value"] for o in breakdown["options"]}
+        self.assertEqual(valores, {"page_type", "device_type", "pais",
+                                    "referrer_dominio", "rating"})
+        self.assertEqual(breakdown["current"]["value"], "page_type")
+
+    def test_paineis_referenciam_variaveis(self):
+        # Pelo menos 1 painel usa ${evento} e 1 usa ${breakdown}.
+        usos_evento = 0
+        usos_breakdown = 0
+        for p in self.data["panels"]:
+            for t in p.get("targets", []):
+                q = t.get("query", "")
+                if "${evento}" in q:
+                    usos_evento += 1
+                if "${breakdown}" in q:
+                    usos_breakdown += 1
+        self.assertGreater(usos_evento, 4, "evento deveria ser usado em varios paineis")
+        self.assertGreater(usos_breakdown, 1, "breakdown deveria ser usado em pelo menos 2")
+
+    def test_paineis_tem_uid_placeholder(self):
+        for p in self.data["panels"]:
+            ds = p.get("datasource", {})
+            self.assertEqual(
+                ds.get("uid"), "__DATASOURCE_UID__",
+                f"painel {p['title']} sem __DATASOURCE_UID__",
+            )
+
+    def test_substituicao_de_placeholders_gera_json_valido(self):
+        from scripts.provisionar_cliente import _carregar_template
+        repo_root = BACKEND_DIR.parent
+        path = repo_root / "ark" / "monitoring" / "dashboards" / "event-explorer.json"
+        out = _carregar_template(path, "cliente_xpto", datasource_uid="abc123def")
+        # Sem placeholders sobrando
+        as_str = json.dumps(out)
+        self.assertNotIn("__BUCKET__", as_str)
+        self.assertNotIn("__DATASOURCE_UID__", as_str)
+        # Substituicoes feitas
+        self.assertIn("cliente_xpto", as_str)
+        self.assertIn("abc123def", as_str)
+
+
+class EngajamentoTemplateValidoTests(unittest.TestCase):
+    """Sanity check do dashboard Engajamento (sprint 2 bloco B item 4)."""
+
+    def setUp(self):
+        self.data = _carregar_template_repo("engajamento.json")
+
+    def test_uid_e_titulo(self):
+        self.assertEqual(self.data["uid"], "portifolio-engajamento")
+        self.assertIn("Engajamento", self.data["title"])
+        self.assertFalse(self.data["editable"])
+
+    def test_paineis_filtram_bots_e_referenciam_bucket(self):
+        bot_filter_count = 0
+        bucket_ref_count = 0
+        for p in self.data["panels"]:
+            for t in p.get("targets", []):
+                q = t.get("query", "")
+                if 'r.device_type != "bot"' in q:
+                    bot_filter_count += 1
+                if "__BUCKET__" in q:
+                    bucket_ref_count += 1
+        # Espera: pelo menos uns 8 paineis com filtro de bot (todos os de
+        # engajamento — bot inflando metricas e o caso classico).
+        self.assertGreater(bot_filter_count, 7,
+                           "esperava bot filter em quase todos os paineis")
+        self.assertGreater(bucket_ref_count, 7)
+
+    def test_paineis_tem_uid_placeholder(self):
+        for p in self.data["panels"]:
+            ds = p.get("datasource", {})
+            self.assertEqual(
+                ds.get("uid"), "__DATASOURCE_UID__",
+                f"painel {p['title']} sem __DATASOURCE_UID__",
+            )
+
+    def test_metricas_essenciais_cobertas(self):
+        titulos = [p["title"].lower() for p in self.data["panels"]]
+        # Esperamos paineis pra cliques, scrolls, hovers, exposicoes, toques,
+        # device_type, page_type top, permanencia.
+        for esperado in ["cliques", "scrolls", "hovers", "exposicoes",
+                         "toques", "device_type", "permanencia"]:
+            self.assertTrue(
+                any(esperado in t for t in titulos),
+                f"nenhum painel cobre '{esperado}'",
+            )
+
+    def test_substituicao_gera_json_valido(self):
+        from scripts.provisionar_cliente import _carregar_template
+        repo_root = BACKEND_DIR.parent
+        path = repo_root / "ark" / "monitoring" / "dashboards" / "engajamento.json"
+        out = _carregar_template(path, "cliente_test", datasource_uid="ds-uid-x")
+        as_str = json.dumps(out)
+        self.assertNotIn("__BUCKET__", as_str)
+        self.assertNotIn("__DATASOURCE_UID__", as_str)
 
 
 if __name__ == "__main__":
