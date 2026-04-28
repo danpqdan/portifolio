@@ -76,6 +76,10 @@ services:
         VITE_API_URL: ${VITE_API_URL:-http://localhost:5000}
         VITE_WEBSOCKET_URL: ${VITE_WEBSOCKET_URL:-http://localhost:5000}
         VITE_DEBUG: ${VITE_DEBUG:-false}
+        # SDK auth: quando setado, o frontend troca pela publishable por JWT
+        # no /sdk-token e os eventos vao pro bucket dedicado do site_id
+        # correspondente. Vazio = SDK roda sem auth (bucket default).
+        VITE_PUBLISHABLE_KEY: ${VITE_PUBLISHABLE_KEY:-}
     container_name: portifolio-frontend
     depends_on:
       - backend

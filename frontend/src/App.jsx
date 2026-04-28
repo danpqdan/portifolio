@@ -8,7 +8,7 @@ import About from './pages/About';
 import ClienteLogin from './pages/ClienteLogin';
 import ClienteMetricas from './pages/ClienteMetricas';
 import { iniciarAnalytics } from './sdk';
-import { WEBSOCKET_URL, DEBUG_ENABLED, NODE_ENV } from './config.js';
+import { WEBSOCKET_URL, DEBUG_ENABLED, NODE_ENV, PUBLISHABLE_KEY } from './config.js';
 
 const AMBIENTES_SUPORTADOS = ['development', 'test', 'staging', 'production'];
 const ambiente = AMBIENTES_SUPORTADOS.includes(NODE_ENV) ? NODE_ENV : 'development';
@@ -19,6 +19,10 @@ iniciarAnalytics({
   ambiente,
   debug: DEBUG_ENABLED,
   intervaloEnvioMs: 5000,
+  // Em dev local pode ficar vazio (SDK roda sem auth, dados no bucket default).
+  // Pra rotear pra um bucket de cliente real, defina VITE_PUBLISHABLE_KEY no
+  // .env ou docker-compose com a key gerada por scripts.tenant_admin create-key.
+  ...(PUBLISHABLE_KEY ? { publishableKey: PUBLISHABLE_KEY } : {}),
 });
 
 function Portfolio() {
