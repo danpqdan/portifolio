@@ -101,10 +101,12 @@ security_logger.propagate = False
 # ✅ CORS configurado por ambiente
 cors_origins = app.config.get("CORS_ORIGINS", ["http://localhost:5173"])
 
-CORS(app, 
+CORS(app,
      origins=cors_origins,
      supports_credentials=True,
-     allow_headers=['Content-Type', 'Authorization', 'X-Session-Token', 'X-Forwarded-For', 'X-Forwarded-Proto'],
+     allow_headers=['Content-Type', 'Authorization', 'X-Session-Token',
+                    'X-Forwarded-For', 'X-Forwarded-Proto',
+                    'X-SDK-Schema-Version'],
      methods=['GET', 'POST', 'OPTIONS']
 )
 
