@@ -177,17 +177,39 @@ class ServicoIngestaoBucketRoutingTests(unittest.TestCase):
         self.assertEqual(cap.vitais[0][1], "cliente_acme")
         self.assertEqual(cap.customs[0][1], "cliente_acme")
 
-    def test_site_sem_bucket_cai_no_default(self):
+    def test_site_sem_bucket_REJEITA_strict_routing(self):
+        """Sprint 2 item 1: site identificado sem bucket -> reject (nao fallback).
+
+        Antes (sprint 1): caia no bucket default, gerava log mas escrevia mesmo
+        assim — leak entre tenants. Agora rejeita com BUCKET_NAO_PROVISIONADO.
+        """
         site = self.repo.criar_site(
             slug="legacy", nome="Legacy", ambiente="development", dominios=[],
         )
         cap = CapturadorComBucket()
         servico = ServicoIngestao(influxdb_service=cap, sites_cache=SitesCache(self.repo))
-        servico.ingerir(
+        resumo = servico.ingerir(
             session_id="s1", data=_payload(),
             user_agent="ua", ip_address="1.2.3.4", site_id=site.id,
         )
-        # Sem bucket configurado -> bucket=None propaga -> influx_service usa default
+        self.assertEqual(resumo.status, "error")
+        self.assertEqual(resumo.code, "BUCKET_NAO_PROVISIONADO")
+        self.assertFalse(resumo.retriable)
+        # Importante: NADA foi persistido no Influx.
+        self.assertEqual(cap.temporais, [])
+        self.assertEqual(cap.vitais, [])
+        self.assertEqual(cap.customs, [])
+
+    def test_site_id_none_continua_caindo_no_default(self):
+        """Compat: ingest sem site_id (legacy/dev sem auth) ainda funciona."""
+        cap = CapturadorComBucket()
+        servico = ServicoIngestao(influxdb_service=cap, sites_cache=SitesCache(self.repo))
+        resumo = servico.ingerir(
+            session_id="s1", data=_payload(),
+            user_agent="ua", ip_address="1.2.3.4", site_id=None,
+        )
+        self.assertEqual(resumo.status, "success")
+        self.assertEqual(len(cap.temporais), 1)
         _, bucket = cap.temporais[0]
         self.assertIsNone(bucket)
 

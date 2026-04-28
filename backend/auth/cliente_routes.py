@@ -31,7 +31,9 @@ from flask import Blueprint, current_app, g, jsonify, make_response, redirect, r
 
 from .clientes_users_repo import ClientesUsersRepo
 from .email_sender import EmailSender, criar_sender_padrao
+from .grafana_sync import GrafanaSyncService
 from .sessao_service import RateLimitExcedido, SessaoService
+from .tenants_repo import TenantsRepo
 
 
 logger = logging.getLogger("auth.cliente")
@@ -50,13 +52,27 @@ cliente_auth_bp = Blueprint("cliente_auth", __name__, url_prefix="/api/cliente/a
 
 _svc_instance: Optional[SessaoService] = None
 _email_sender: Optional[EmailSender] = None
+_grafana_sync: Optional[GrafanaSyncService] = None
+_tenants_repo: Optional[TenantsRepo] = None
 
 
-def configurar(svc: SessaoService, email_sender: Optional[EmailSender] = None) -> None:
-    """Configura o servico de sessao e o sender. Chamar uma vez no boot."""
-    global _svc_instance, _email_sender
+def configurar(
+    svc: SessaoService,
+    email_sender: Optional[EmailSender] = None,
+    grafana_sync: Optional[GrafanaSyncService] = None,
+    tenants_repo: Optional[TenantsRepo] = None,
+) -> None:
+    """Configura singletons. Chamar uma vez no boot.
+
+    `grafana_sync` e `tenants_repo` sao opcionais; quando ambos estao
+    presentes, /gate sincroniza membership da org Grafana do cliente
+    (sec 13 do dashboard-cliente.md). Sem eles, /gate so valida cookie.
+    """
+    global _svc_instance, _email_sender, _grafana_sync, _tenants_repo
     _svc_instance = svc
     _email_sender = email_sender or criar_sender_padrao()
+    _grafana_sync = grafana_sync
+    _tenants_repo = tenants_repo
 
 
 def _obter_svc() -> SessaoService:
@@ -162,6 +178,9 @@ def gate():
     Sucesso: 200 + header `X-WEBAUTH-USER: <site_id>` que o nginx propaga
     pro Grafana (auth.proxy confia nele e cria/mapeia o user).
     Falha:   401. Nginx aborta a requisicao.
+
+    Sprint 2 — sincroniza membership na org `cliente_<slug>` em best-effort
+    (cache TTL 1h). Falha de sync NAO derruba o /gate; cookie ainda eh valido.
     """
     cookie = request.cookies.get(COOKIE_NAME, "")
     user = _obter_svc().validar_cookie(cookie)
@@ -171,10 +190,26 @@ def gate():
     security_logger.info(
         "evento=auth_cliente_gate_ok site_id=%s user_id=%s", user.site_id, user.id,
     )
+    _sincronizar_grafana_org(user.site_id)
     resp = make_response("", 200)
     resp.headers["X-WEBAUTH-USER"] = user.site_id
     resp.headers["X-WEBAUTH-PAPEL"] = user.papel
     return resp
+
+
+def _sincronizar_grafana_org(site_id: str) -> None:
+    """Best-effort: garante user na org cliente_<slug>. No-op se nao configurado."""
+    if _grafana_sync is None or _tenants_repo is None:
+        return
+    try:
+        site = _tenants_repo.obter_site(site_id)
+    except Exception as erro:
+        logger.warning("evento=grafana_sync_lookup_falhou site_id=%s motivo=%s", site_id, erro)
+        return
+    if site is None or not site.slug:
+        return
+    org_name = f"cliente_{site.slug}"
+    _grafana_sync.garantir_membership(login=site_id, org_name=org_name)
 
 
 @cliente_auth_bp.route("/magic-link/solicitar", methods=["POST"])

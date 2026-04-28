@@ -24,12 +24,9 @@ Envs requeridos:
 from __future__ import annotations
 
 import argparse
-import base64
 import json
 import os
 import sys
-import urllib.error
-import urllib.request
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
@@ -40,6 +37,7 @@ if str(BACKEND_DIR) not in sys.path:
 
 from auth.tenants_repo import TenantsRepo, criar_tenants_repo  # noqa: E402
 from config import config  # noqa: E402
+from integrations.grafana_client import GrafanaClient  # noqa: E402
 
 from influxdb_client import (  # noqa: E402
     Authorization,
@@ -168,107 +166,10 @@ def _influx_org(client: InfluxDBClient, org_name: str):
 
 
 # ----------------------------- Grafana -----------------------------
-
-class GrafanaClient:
-    def __init__(self, base_url: str, user: str, password: str):
-        self.base_url = base_url.rstrip("/")
-        token = base64.b64encode(f"{user}:{password}".encode()).decode()
-        self.basic_auth = f"Basic {token}"
-
-    def _req(self, method: str, path: str, *, body: Optional[dict] = None,
-             org_id: Optional[int] = None, expect_status: tuple[int, ...] = (200, 201)):
-        url = f"{self.base_url}{path}"
-        data = json.dumps(body).encode() if body is not None else None
-        req = urllib.request.Request(url, data=data, method=method)
-        req.add_header("Authorization", self.basic_auth)
-        req.add_header("Accept", "application/json")
-        if data is not None:
-            req.add_header("Content-Type", "application/json")
-        if org_id is not None:
-            req.add_header("X-Grafana-Org-Id", str(org_id))
-        try:
-            with urllib.request.urlopen(req, timeout=10) as resp:
-                payload = resp.read()
-                status = resp.status
-                if status not in expect_status:
-                    raise SystemExit(
-                        f"grafana {method} {path} -> {status}: {payload.decode(errors='replace')}"
-                    )
-                return json.loads(payload) if payload else {}
-        except urllib.error.HTTPError as exc:
-            payload = exc.read().decode(errors="replace")
-            return {"__http_error__": exc.code, "__body__": payload}
-
-    def get_org_by_name(self, name: str) -> Optional[dict]:
-        out = self._req("GET", f"/api/orgs/name/{urllib_quote(name)}", expect_status=(200,))
-        if out.get("__http_error__") == 404:
-            return None
-        if "__http_error__" in out:
-            raise SystemExit(f"grafana GET /api/orgs/name failed: {out}")
-        return out
-
-    def create_org(self, name: str) -> int:
-        out = self._req("POST", "/api/orgs", body={"name": name}, expect_status=(200,))
-        if out.get("__http_error__") == 409:
-            existing = self.get_org_by_name(name)
-            if existing:
-                return existing["id"]
-            raise SystemExit(f"grafana 409 ao criar org '{name}' mas GET nao encontrou")
-        if "__http_error__" in out:
-            raise SystemExit(f"grafana POST /api/orgs failed: {out}")
-        return out["orgId"]
-
-    def get_or_create_org(self, name: str) -> int:
-        existing = self.get_org_by_name(name)
-        if existing:
-            return existing["id"]
-        return self.create_org(name)
-
-    def get_datasource_by_name(self, name: str, *, org_id: int) -> Optional[dict]:
-        out = self._req("GET", f"/api/datasources/name/{urllib_quote(name)}",
-                        org_id=org_id, expect_status=(200,))
-        if out.get("__http_error__") == 404:
-            return None
-        if "__http_error__" in out:
-            raise SystemExit(f"grafana GET datasource failed: {out}")
-        return out
-
-    def upsert_influx_datasource(self, *, org_id: int, name: str, influx_url: str,
-                                  influx_org: str, bucket: str, token: str) -> dict:
-        body = {
-            "name": name,
-            "type": "influxdb",
-            "access": "proxy",
-            "url": influx_url,
-            "isDefault": False,
-            "jsonData": {
-                "version": "Flux",
-                "organization": influx_org,
-                "defaultBucket": bucket,
-                "tlsSkipVerify": False,
-            },
-            "secureJsonData": {"token": token},
-            "readOnly": False,
-        }
-        existing = self.get_datasource_by_name(name, org_id=org_id)
-        if existing:
-            uid = existing["uid"]
-            body["uid"] = uid
-            out = self._req("PUT", f"/api/datasources/uid/{uid}",
-                            body=body, org_id=org_id, expect_status=(200,))
-            if "__http_error__" in out:
-                raise SystemExit(f"grafana PUT datasource failed: {out}")
-            return out["datasource"]
-        out = self._req("POST", "/api/datasources",
-                        body=body, org_id=org_id, expect_status=(200, 201))
-        if "__http_error__" in out:
-            raise SystemExit(f"grafana POST datasource failed: {out}")
-        return out["datasource"]
-
-
-def urllib_quote(value: str) -> str:
-    from urllib.parse import quote
-    return quote(value, safe="")
+# GrafanaClient lifted para backend/integrations/grafana_client.py — compartilhado
+# com auth/grafana_sync.py. Se chamadas falharem aqui, queremos SystemExit
+# (script falha). Se falharem no sync runtime, queremos best-effort. Por isso
+# wrappers locais que convertem RuntimeError do client em SystemExit.
 
 
 # ----------------------------- main flow -----------------------------
@@ -308,14 +209,17 @@ def provisionar(args: argparse.Namespace) -> ProvisionResult:
     gf_pass = os.environ.get("GRAFANA_ADMIN_PASSWORD", "admin")
     gf = GrafanaClient(grafana_url, gf_user, gf_pass)
 
-    org_name = f"cliente_{args.slug}"
-    gf_org_id = gf.get_or_create_org(org_name)
-    ds_name = f"influxdb_{args.slug}"
-    ds = gf.upsert_influx_datasource(
-        org_id=gf_org_id, name=ds_name,
-        influx_url=os.environ.get("INFLUXDB_URL_INTERNAL", influx_url),
-        influx_org=influx_org_name, bucket=bucket_name, token=token.token,
-    )
+    try:
+        org_name = f"cliente_{args.slug}"
+        gf_org_id = gf.get_or_create_org(org_name)
+        ds_name = f"influxdb_{args.slug}"
+        ds = gf.upsert_influx_datasource(
+            org_id=gf_org_id, name=ds_name,
+            influx_url=os.environ.get("INFLUXDB_URL_INTERNAL", influx_url),
+            influx_org=influx_org_name, bucket=bucket_name, token=token.token,
+        )
+    except RuntimeError as erro:
+        raise SystemExit(f"erro Grafana: {erro}")
 
     return ProvisionResult(
         site_id=site.id, slug=args.slug, plano=args.plano,
