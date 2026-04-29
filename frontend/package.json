@@ -6,13 +6,13 @@
   "scripts": {
     "dev": "vite --mode development",
     "build": "vite build --mode production",
-    "build:sdk": "vite build --config vite.sdk.config.js",
     "lint": "eslint .",
     "preview": "vite preview --mode production",
     "test": "vitest run",
     "test:watch": "vitest"
   },
   "dependencies": {
+    "@danpqdan/dsplayground-analytics-sdk": "^0.3.0",
     "@react-spring/web": "^10.0.3",
     "react": "^19.2.5",
     "react-dom": "^19.2.5",

@@ -28,13 +28,10 @@ app = Flask(__name__)
 env = os.environ.get("FLASK_ENV", "development")
 app.config.from_object(config[env])
 
-# ✅ CONFIGURAR PREFIXO /api PARA PRODUÇÃO
-if env == 'production':
-    # Blueprint para organizar rotas com prefixo
-    api_bp = Blueprint('api', __name__, url_prefix='/api')
-else:
-    # Em desenvolvimento, usar sem prefixo
-    api_bp = Blueprint('api', __name__)
+# Blueprint canonico — paths SEM prefixo `/api/` em todos os ambientes.
+# Externamente, `api.dsplayground.com.br` proxia direto e `dsplayground.com.br/api/*`
+# strippa o prefixo no nginx antes de chegar aqui (ver ark/nginx/portifolio.conf).
+api_bp = Blueprint('api', __name__)
 
 # ✅ CONFIGURAÇÕES DE SEGURANÇA AVANÇADAS
 SECRET_KEY = app.config.get('SECRET_KEY') or secrets.token_urlsafe(32)
@@ -101,10 +98,12 @@ security_logger.propagate = False
 # ✅ CORS configurado por ambiente
 cors_origins = app.config.get("CORS_ORIGINS", ["http://localhost:5173"])
 
-CORS(app, 
+CORS(app,
      origins=cors_origins,
      supports_credentials=True,
-     allow_headers=['Content-Type', 'Authorization', 'X-Session-Token', 'X-Forwarded-For', 'X-Forwarded-Proto'],
+     allow_headers=['Content-Type', 'Authorization', 'X-Session-Token',
+                    'X-Forwarded-For', 'X-Forwarded-Proto',
+                    'X-SDK-Schema-Version'],
      methods=['GET', 'POST', 'OPTIONS']
 )
 
@@ -117,11 +116,17 @@ socketio_config = {
     'ping_interval': 25
 }
 
-if env == 'production':
-    socketio_config.update({
-        'path': '/api/socket.io',  # Caminho customizado para produção
-        'async_mode': 'eventlet'   # Melhor para produção
-    })
+# Path canonico SEM /api/. Externalmente o cliente acessa
+# `https://api.dsplayground.com.br/socket.io/` (proxy direto) ou
+# `https://dsplayground.com.br/api/socket.io/` (nginx strippa /api/).
+# Backend sempre escuta em /socket.io/.
+socketio_config['path'] = '/socket.io'
+
+# async_mode 'eventlet' habilita upgrade WebSocket. O Dockerfile de
+# producao roda 'gunicorn --worker-class eventlet', entao o Socket.IO
+# precisa do mesmo loop async em todos os ambientes — sem isso o
+# handshake retorna `upgrades:[]` e o cliente cicla em polling.
+socketio_config['async_mode'] = 'eventlet'
 
 socketio = SocketIO(app, **socketio_config)
 
@@ -160,8 +165,17 @@ session_metrics = defaultdict(lambda: {
     'ip_address': None, 'user_agent': None,
     'security_score': 100, 'warnings': []
 })
-suspicious_ips = set()
+suspicious_ips: dict[str, float] = {}   # ip -> ban_expira_em (timestamp)
 rate_limit_violations = defaultdict(list)
+# Threshold do anti-abuse. SDK de analytics em batch envia ~12 frames/min/sessao
+# (1 batch a cada 5s + page_view + scroll + cliques + ping/pong). Em prod cada
+# IP e um end-user; em dev local TODO trafego vem do mesmo IP da bridge Docker.
+SUSPICIOUS_REQS_PER_MIN = int(os.environ.get('ANTIABUSE_REQS_PER_MIN', '600'))
+SUSPICIOUS_BAN_TTL = int(os.environ.get('ANTIABUSE_BAN_TTL_SECONDS', '300'))
+# IPs internos (loopback, docker bridges, redes privadas) nao sao banidos —
+# evita auto-DoS do dev local. Em prod o trafego chega via X-Forwarded-For
+# do nginx, que e IP publico real.
+ANTIABUSE_SKIP_PRIVATE = os.environ.get('ANTIABUSE_SKIP_PRIVATE', 'true').lower() == 'true'
 
 def generate_session_token():
     return secrets.token_urlsafe(32)
@@ -186,16 +200,43 @@ def validate_session_integrity(session_id: str, request) -> bool:
         return False
     return True
 
+def _ip_eh_privado(ip: str) -> bool:
+    """Loopback, docker bridges e redes privadas — nao sao banidos."""
+    if not ip or ip == 'unknown':
+        return True
+    try:
+        from ipaddress import ip_address as parse_ip
+        addr = parse_ip(ip)
+        return addr.is_private or addr.is_loopback or addr.is_link_local
+    except (ValueError, ImportError):
+        return False
+
+
 def check_suspicious_activity(session_id: str, request) -> bool:
     ip_address = request.environ.get('REMOTE_ADDR', '')
     current_time = time.time()
-    if ip_address in suspicious_ips:
-        log_safe(security_logger, 'warning', f"[BLOCKED] IP suspeito tentando acesso: {ip_address}")
-        return False
-    recent_requests = [t for t in rate_limit_violations[ip_address] if current_time - t < 60]
-    if len(recent_requests) > 30:
-        log_safe(security_logger, 'warning', f"[WARNING] Rate limit excedido para IP: {ip_address}")
-        suspicious_ips.add(ip_address)
+
+    # Pula bloqueio para IPs internos (dev local, traffic via docker bridge).
+    if ANTIABUSE_SKIP_PRIVATE and _ip_eh_privado(ip_address):
+        return True
+
+    # Ban com TTL: se expirou, remove e segue normal.
+    ban_expira = suspicious_ips.get(ip_address)
+    if ban_expira is not None:
+        if ban_expira > current_time:
+            log_safe(security_logger, 'warning', f"[BLOCKED] IP suspeito tentando acesso: {ip_address}")
+            return False
+        del suspicious_ips[ip_address]
+
+    # Janela movel de 60s.
+    rate_limit_violations[ip_address] = [
+        t for t in rate_limit_violations[ip_address] if current_time - t < 60
+    ]
+    if len(rate_limit_violations[ip_address]) > SUSPICIOUS_REQS_PER_MIN:
+        log_safe(security_logger, 'warning',
+                 f"[WARNING] Rate limit excedido para IP: {ip_address} "
+                 f"({len(rate_limit_violations[ip_address])} req/min, ban {SUSPICIOUS_BAN_TTL}s)")
+        suspicious_ips[ip_address] = current_time + SUSPICIOUS_BAN_TTL
         return False
     rate_limit_violations[ip_address].append(current_time)
     return True
@@ -258,6 +299,10 @@ except Exception as e:
 
 # Servico de ingestao — handler Socket.IO apenas delega para este servico.
 from ingestao import ServicoIngestao  # noqa: E402
+from ingestao.cardinalidade import obter_tracker as obter_cardinalidade_tracker  # noqa: E402
+from auth.sites_cache import SitesCache  # noqa: E402
+# sites_cache + tenants_repo + cardinalidade sao injetados apos o tenants_repo
+# singleton estar pronto (ver bloco "Auth multi-tenant" abaixo).
 servico_ingestao = ServicoIngestao(influxdb_service=influxdb_service)
 
 # ==================== AUTENTICACAO MULTI-TENANT ====================
@@ -267,17 +312,47 @@ from auth.routes import auth_bp  # noqa: E402
 from auth.tenants_repo import obter_repo as obter_tenants_repo  # noqa: E402
 
 try:
-    obter_tenants_repo(app.config["TENANTS_DATABASE_URL"])
+    _tenants_repo_singleton = obter_tenants_repo(app.config["TENANTS_DATABASE_URL"])
     obter_jwt_service(
         keys_dir=app.config["JWT_KEYS_DIR"],
         audience=app.config["JWT_AUDIENCE"],
     )
+    # Wire bucket-routing + quota + cardinalidade no servico de ingestao.
+    servico_ingestao.sites_cache = SitesCache(_tenants_repo_singleton)
+    servico_ingestao.tenants_repo = _tenants_repo_singleton
+    servico_ingestao.cardinalidade_tracker = obter_cardinalidade_tracker()
     log_safe(security_logger, 'info', "[SUCCESS] Auth multi-tenant inicializado")
 except Exception as e:
     log_safe(security_logger, 'error', f"[ERROR] Falha ao inicializar auth: {str(e)}")
     raise
 
-app.register_blueprint(auth_bp, url_prefix=('/api/auth' if env == 'production' else '/auth'))
+app.register_blueprint(auth_bp, url_prefix='/auth')
+
+# ==================== AUTH DO DASHBOARD DO CLIENTE ====================
+# Blueprint `/api/cliente/auth` com login humano (cookie HttpOnly) para
+# acessar o dashboard de metricas em /cliente/metricas/*.
+# Referencia: ark/docs/dashboard-cliente.md
+from auth.clientes_users_repo import obter_repo as obter_clientes_users_repo  # noqa: E402
+from auth.grafana_sync import criar_servico_se_configurado as criar_grafana_sync  # noqa: E402
+from auth.sessao_service import SessaoService  # noqa: E402
+from auth import cliente_routes as _cliente_routes_mod  # noqa: E402
+
+try:
+    _clientes_users_repo = obter_clientes_users_repo(app.config["TENANTS_DATABASE_URL"])
+    _sessao_service = SessaoService(_clientes_users_repo)
+    _grafana_sync_service = criar_grafana_sync()  # None se env incompleto
+    _cliente_routes_mod.configurar(
+        _sessao_service,
+        grafana_sync=_grafana_sync_service,
+        tenants_repo=_tenants_repo_singleton,
+    )
+    app.register_blueprint(_cliente_routes_mod.cliente_auth_bp)
+    if _grafana_sync_service:
+        log_safe(security_logger, 'info', "[SUCCESS] Grafana org sync ativo")
+    log_safe(security_logger, 'info', "[SUCCESS] Auth do dashboard inicializado")
+except Exception as e:
+    log_safe(security_logger, 'error', f"[ERROR] Falha ao inicializar auth do dashboard: {str(e)}")
+    raise
 
 # ==================== ROTAS COM BLUEPRINT ====================
 
@@ -318,11 +393,16 @@ def _influxdb_saudavel() -> bool:
 @api_bp.route("/health/app", methods=["GET"])
 @limiter.limit("60 per minute")
 def health_app():
+    # `ambiente` no payload e o sinal canonico de FLASK_ENV — usado pelo
+    # workflow prod-regression pra detectar quando dev server voltou a rodar
+    # em producao. Antes esse check era feito via presenca/ausencia do
+    # prefixo /api/ na URL, mas o prefixo deixou de variar entre ambientes.
     return jsonify({
         "status": "healthy",
         "detalhe": {
             "timestamp": datetime.now().isoformat(),
             "active_sessions": len(active_sessions),
+            "ambiente": env,
         },
     })
 
@@ -670,6 +750,35 @@ def handle_disconnect():
     if session_id in temporal_stats_cache["active_sessions"]:
         del temporal_stats_cache["active_sessions"][session_id]
 
+
+# Background reaper de sessoes zombies. Roda a cada 30s, remove sessoes
+# sem atividade ha > SESSION_IDLE_TIMEOUT segundos. handle_disconnect ja
+# limpa quando o evento dispara, mas em casos de network drop/queda
+# abrupta o evento nem sempre chega — sem isso o dict acumula zombies
+# (cleanup_temporal_cache so roda dentro de handle_analytics_data, que
+# nao dispara em sessoes inativas).
+SESSION_IDLE_TIMEOUT = int(os.environ.get('SESSION_IDLE_TIMEOUT', '180'))   # 3 min
+SESSION_REAPER_INTERVAL = int(os.environ.get('SESSION_REAPER_INTERVAL', '30'))
+
+
+def _reaper_de_sessoes():
+    while True:
+        socketio.sleep(SESSION_REAPER_INTERVAL)
+        agora = time.time()
+        zombies = [
+            sid for sid, data in list(active_sessions.items())
+            if agora - data.get('last_activity', data.get('created_at', agora)) > SESSION_IDLE_TIMEOUT
+        ]
+        if zombies:
+            for sid in zombies:
+                active_sessions.pop(sid, None)
+                temporal_stats_cache["active_sessions"].pop(sid, None)
+            log_safe(security_logger, 'info',
+                     f"[REAPER] removidas {len(zombies)} sessoes zombies (idle > {SESSION_IDLE_TIMEOUT}s)")
+
+
+socketio.start_background_task(_reaper_de_sessoes)
+
 @socketio.on("analytics_data")
 @security_middleware
 def handle_analytics_data(data):
@@ -685,8 +794,15 @@ def handle_analytics_data(data):
         active_sessions[session_id]['last_activity'] = time.time()
         active_sessions[session_id]['request_count'] += 1
 
-        if active_sessions[session_id]['request_count'] > 100:
-            log_safe(security_logger, 'warning', f"[WARNING] Rate limit de sessao excedido: {session_id}")
+        # Limite total de batches por sessao. SDK envia 1 batch a cada
+        # `intervaloEnvioMs` (default 5s = 12/min). Em 1h normal de navegacao
+        # sao ~720 batches; em sessoes muito longas (varias horas), bumpar
+        # pra mais via ENV. Valor zerado/negativo desabilita o limite.
+        teto = int(app.config.get('SESSION_REQUEST_LIMIT', 10000))
+        if teto > 0 and active_sessions[session_id]['request_count'] > teto:
+            log_safe(security_logger, 'warning',
+                     f"[WARNING] Rate limit de sessao excedido: {session_id} "
+                     f"({active_sessions[session_id]['request_count']} > {teto})")
             emit("analytics_error", {"status": "error", "code": "RATE_LIMIT", "message": "Rate limit excedido"})
             return
 
@@ -698,6 +814,10 @@ def handle_analytics_data(data):
 
         user_agent = request.headers.get('User-Agent', 'unknown')
         ip_address = request.environ.get('REMOTE_ADDR', 'unknown')
+        # Sprint 2 bloco B - tags derivadas server-side. Headers vem do
+        # handshake Socket.IO original; em prod, Cloudflare injeta CF-IPCountry.
+        referer = request.headers.get('Referer')
+        cf_ipcountry = request.headers.get('CF-IPCountry')
 
         site_id_ativo = active_sessions[session_id].get('site_id')
         resumo = servico_ingestao.ingerir(
@@ -706,6 +826,8 @@ def handle_analytics_data(data):
             user_agent=user_agent,
             ip_address=ip_address,
             site_id=site_id_ativo,
+            referer=referer,
+            cf_ipcountry=cf_ipcountry,
         )
 
         if resumo.status == 'success':

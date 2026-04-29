@@ -21,6 +21,9 @@ TIPOS_EVENTO_VALIDOS = frozenset({
 })
 
 
+AMBIENTES_VALIDOS = frozenset({'development', 'test', 'staging', 'production'})
+
+
 def validar_payload(data: Any) -> Tuple[bool, List[str]]:
     if not isinstance(data, dict):
         return False, ['payload']
@@ -28,6 +31,8 @@ def validar_payload(data: Any) -> Tuple[bool, List[str]]:
     erros: List[str] = []
 
     _validar_string_obrigatoria(data, 'id_registro', erros)
+    _validar_string_obrigatoria(data, 'app_id', erros)
+    _validar_ambiente(data, erros)
     _validar_numero_obrigatorio(data, 'timestamp_inicial', erros)
     _validar_numero_obrigatorio(data, 'timestamp_final', erros)
     _validar_paginas(data.get('paginas'), erros)
@@ -48,6 +53,12 @@ def _validar_numero_obrigatorio(data: dict, chave: str, erros: List[str]) -> Non
     valor = data[chave]
     if isinstance(valor, bool) or not isinstance(valor, (int, float)):
         erros.append(chave)
+
+
+def _validar_ambiente(data: dict, erros: List[str]) -> None:
+    valor = data.get('ambiente')
+    if not isinstance(valor, str) or valor not in AMBIENTES_VALIDOS:
+        erros.append('ambiente')
 
 
 def _validar_paginas(paginas: Any, erros: List[str]) -> None:

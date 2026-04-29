@@ -11,6 +11,7 @@ CREATE TABLE IF NOT EXISTS sites (
     ambiente        TEXT NOT NULL CHECK (ambiente IN ('development','test','staging','production')),
     plano           TEXT NOT NULL DEFAULT 'free',
     status          TEXT NOT NULL DEFAULT 'ativo' CHECK (status IN ('ativo','suspenso','bloqueado')),
+    bucket_name     TEXT UNIQUE,                     -- bucket Influx dedicado (null = legacy/compat)
     criado_em       TEXT NOT NULL DEFAULT (datetime('now')),
     atualizado_em   TEXT NOT NULL DEFAULT (datetime('now'))
 );

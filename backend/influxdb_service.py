@@ -43,6 +43,9 @@ class TemporalMetric:
     ip_address: Optional[str] = None
     app_id: Optional[str] = None
     ambiente: Optional[str] = None
+    device_type: Optional[str] = None
+    pais: Optional[str] = None
+    referrer_dominio: Optional[str] = None
 
 
 @dataclass
@@ -59,6 +62,9 @@ class WebVitalMetric:
     ip_address: Optional[str] = None
     app_id: Optional[str] = None
     ambiente: Optional[str] = None
+    device_type: Optional[str] = None
+    pais: Optional[str] = None
+    referrer_dominio: Optional[str] = None
 
 
 @dataclass
@@ -73,6 +79,9 @@ class CustomEventMetric:
     ip_address: Optional[str] = None
     app_id: Optional[str] = None
     ambiente: Optional[str] = None
+    device_type: Optional[str] = None
+    pais: Optional[str] = None
+    referrer_dominio: Optional[str] = None
 
 
 class InfluxDBService:
@@ -110,7 +119,7 @@ class InfluxDBService:
 
     # ==================== ESCRITA ====================
 
-    def write_temporal_metrics(self, metric: TemporalMetric) -> bool:
+    def write_temporal_metrics(self, metric: TemporalMetric, bucket: Optional[str] = None) -> bool:
         if not self.enabled:
             return False
         try:
@@ -118,9 +127,12 @@ class InfluxDBService:
                 Point("page_analytics")
                 .tag("session_id", metric.session_id)
                 .tag("page_type", metric.page_type)
-                .tag("app_id", metric.app_id or "desconhecido")
-                .tag("ambiente", metric.ambiente or "desconhecido")
-                .tag("ip_address", metric.ip_address or "unknown")
+                .tag("app_id", metric.app_id)
+                .tag("ambiente", metric.ambiente)
+                .tag("device_type", metric.device_type or "unknown")
+                .tag("pais", metric.pais or "unknown")
+                .tag("referrer_dominio", metric.referrer_dominio or "direto")
+                .field("ip_address", metric.ip_address or "unknown")
                 .field("permanencia_segundos", float(metric.permanencia_segundos))
                 .field("visualizacoes", int(metric.visualizacoes))
                 .field("cliques", int(metric.cliques))
@@ -133,18 +145,18 @@ class InfluxDBService:
                 .field("user_agent", metric.user_agent or "unknown")
                 .time(metric.timestamp or datetime.now(timezone.utc))
             )
-            self.write_api.write(bucket=self.bucket, record=point)
+            self.write_api.write(bucket=bucket or self.bucket, record=point)
             return True
         except Exception as e:
             logging.error(f"Erro ao escrever page_analytics: {str(e)}")
             return False
 
-    def write_temporal_metrics_async(self, metric: TemporalMetric):
+    def write_temporal_metrics_async(self, metric: TemporalMetric, bucket: Optional[str] = None):
         if not self.enabled:
             return
-        self.executor.submit(lambda: self.write_temporal_metrics(metric))
+        self.executor.submit(lambda: self.write_temporal_metrics(metric, bucket=bucket))
 
-    def write_web_vital(self, metric: WebVitalMetric) -> bool:
+    def write_web_vital(self, metric: WebVitalMetric, bucket: Optional[str] = None) -> bool:
         if not self.enabled:
             return False
         try:
@@ -154,27 +166,30 @@ class InfluxDBService:
                 .tag("page_type", metric.page_type)
                 .tag("nome", metric.nome)
                 .tag("rating", metric.rating or "unknown")
-                .tag("app_id", metric.app_id or "desconhecido")
-                .tag("ambiente", metric.ambiente or "desconhecido")
-                .tag("ip_address", metric.ip_address or "unknown")
+                .tag("app_id", metric.app_id)
+                .tag("ambiente", metric.ambiente)
+                .tag("device_type", metric.device_type or "unknown")
+                .tag("pais", metric.pais or "unknown")
+                .tag("referrer_dominio", metric.referrer_dominio or "direto")
+                .field("ip_address", metric.ip_address or "unknown")
                 .field("valor", float(metric.valor))
                 .field("user_agent", metric.user_agent or "unknown")
                 .time(metric.timestamp or datetime.now(timezone.utc))
             )
             if metric.metric_id:
-                point = point.tag("metric_id", metric.metric_id)
-            self.write_api.write(bucket=self.bucket, record=point)
+                point = point.field("metric_id", metric.metric_id)
+            self.write_api.write(bucket=bucket or self.bucket, record=point)
             return True
         except Exception as e:
             logging.error(f"Erro ao escrever web_vitals: {str(e)}")
             return False
 
-    def write_web_vital_async(self, metric: WebVitalMetric):
+    def write_web_vital_async(self, metric: WebVitalMetric, bucket: Optional[str] = None):
         if not self.enabled:
             return
-        self.executor.submit(lambda: self.write_web_vital(metric))
+        self.executor.submit(lambda: self.write_web_vital(metric, bucket=bucket))
 
-    def write_custom_event(self, metric: CustomEventMetric) -> bool:
+    def write_custom_event(self, metric: CustomEventMetric, bucket: Optional[str] = None) -> bool:
         if not self.enabled:
             return False
         try:
@@ -183,9 +198,12 @@ class InfluxDBService:
                 .tag("session_id", metric.session_id)
                 .tag("page_type", metric.page_type)
                 .tag("nome", metric.nome)
-                .tag("app_id", metric.app_id or "desconhecido")
-                .tag("ambiente", metric.ambiente or "desconhecido")
-                .tag("ip_address", metric.ip_address or "unknown")
+                .tag("app_id", metric.app_id)
+                .tag("ambiente", metric.ambiente)
+                .tag("device_type", metric.device_type or "unknown")
+                .tag("pais", metric.pais or "unknown")
+                .tag("referrer_dominio", metric.referrer_dominio or "direto")
+                .field("ip_address", metric.ip_address or "unknown")
                 .field("ocorrencias", 1)
                 .field("user_agent", metric.user_agent or "unknown")
                 .time(metric.timestamp or datetime.now(timezone.utc))
@@ -200,16 +218,16 @@ class InfluxDBService:
                 elif isinstance(valor, str):
                     point = point.field(chave_sanitizada, valor)
                 # None/outros descartados
-            self.write_api.write(bucket=self.bucket, record=point)
+            self.write_api.write(bucket=bucket or self.bucket, record=point)
             return True
         except Exception as e:
             logging.error(f"Erro ao escrever custom_events: {str(e)}")
             return False
 
-    def write_custom_event_async(self, metric: CustomEventMetric):
+    def write_custom_event_async(self, metric: CustomEventMetric, bucket: Optional[str] = None):
         if not self.enabled:
             return
-        self.executor.submit(lambda: self.write_custom_event(metric))
+        self.executor.submit(lambda: self.write_custom_event(metric, bucket=bucket))
 
     # ==================== QUERIES ====================
 
@@ -481,7 +499,9 @@ def _contar_por_tipo(eventos, tipo: str) -> int:
 
 
 def create_temporal_metric_from_heatmap(session_id: str, heatmap_data: dict,
-                                      user_agent: str = None, ip_address: str = None) -> List[TemporalMetric]:
+                                      user_agent: str = None, ip_address: str = None,
+                                      device_type: str = None, pais: str = None,
+                                      referrer_dominio: str = None) -> List[TemporalMetric]:
     """Agrega contagens por tipo de evento em metricas temporais (uma por pagina)."""
     metrics: List[TemporalMetric] = []
 
@@ -516,13 +536,18 @@ def create_temporal_metric_from_heatmap(session_id: str, heatmap_data: dict,
             ip_address=ip_address,
             app_id=app_id,
             ambiente=ambiente,
+            device_type=device_type,
+            pais=pais,
+            referrer_dominio=referrer_dominio,
         ))
 
     return metrics
 
 
 def create_web_vitals_from_heatmap(session_id: str, heatmap_data: dict,
-                                   user_agent: str = None, ip_address: str = None) -> List[WebVitalMetric]:
+                                   user_agent: str = None, ip_address: str = None,
+                                   device_type: str = None, pais: str = None,
+                                   referrer_dominio: str = None) -> List[WebVitalMetric]:
     resultado: List[WebVitalMetric] = []
 
     paginas = {}
@@ -558,13 +583,18 @@ def create_web_vitals_from_heatmap(session_id: str, heatmap_data: dict,
                 ip_address=ip_address,
                 app_id=app_id,
                 ambiente=ambiente,
+                device_type=device_type,
+                pais=pais,
+                referrer_dominio=referrer_dominio,
             ))
 
     return resultado
 
 
 def create_custom_events_from_heatmap(session_id: str, heatmap_data: dict,
-                                      user_agent: str = None, ip_address: str = None) -> List[CustomEventMetric]:
+                                      user_agent: str = None, ip_address: str = None,
+                                      device_type: str = None, pais: str = None,
+                                      referrer_dominio: str = None) -> List[CustomEventMetric]:
     resultado: List[CustomEventMetric] = []
 
     paginas = {}
@@ -600,6 +630,9 @@ def create_custom_events_from_heatmap(session_id: str, heatmap_data: dict,
                 ip_address=ip_address,
                 app_id=app_id,
                 ambiente=ambiente,
+                device_type=device_type,
+                pais=pais,
+                referrer_dominio=referrer_dominio,
             ))
 
     return resultado
