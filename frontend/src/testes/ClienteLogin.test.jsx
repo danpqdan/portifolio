@@ -50,7 +50,7 @@ describe('ClienteLogin', () => {
       expect(screen.getByRole('status')).toHaveTextContent(/verifique sua caixa/i);
     });
     expect(globalThis.fetch).toHaveBeenCalledWith(
-      expect.stringContaining('/api/cliente/auth/magic-link/solicitar'),
+      expect.stringContaining('/cliente/auth/magic-link/solicitar'),
       expect.objectContaining({ credentials: 'include', method: 'POST' }),
     );
   });

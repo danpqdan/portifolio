@@ -1,4 +1,4 @@
-"""Blueprint `/api/cliente/auth` — auth humana do dashboard do cliente.
+"""Blueprint `/cliente/auth` — auth humana do dashboard do cliente.
 
 Endpoints:
   POST /login                    — body {email, senha}, set cookie, 200/401
@@ -43,7 +43,7 @@ security_logger = logging.getLogger("security")
 COOKIE_NAME = "cliente_session"
 
 
-cliente_auth_bp = Blueprint("cliente_auth", __name__, url_prefix="/api/cliente/auth")
+cliente_auth_bp = Blueprint("cliente_auth", __name__, url_prefix="/cliente/auth")
 
 
 # ---------- singletons configuraveis em runtime ----------
@@ -278,7 +278,7 @@ def verificar_magic_link():
 
 def _construir_link_verificar(token: str) -> str:
     base = os.environ.get("DASHBOARD_BASE_URL", "https://dsplayground.com.br")
-    return f"{base.rstrip('/')}/api/cliente/auth/magic-link/verificar?{urlencode({'t': token})}"
+    return f"{base.rstrip('/')}/cliente/auth/magic-link/verificar?{urlencode({'t': token})}"
 
 
 __all__ = ["cliente_auth_bp", "configurar", "COOKIE_NAME"]

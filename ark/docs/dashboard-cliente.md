@@ -17,7 +17,7 @@
 | Repo (CRUD + indexes) | `backend/auth/clientes_users_repo.py` | ✅ SQLite + Postgres |
 | Service (sessao + magic-link + rate-limit) | `backend/auth/sessao_service.py` | ✅ |
 | Email sender (stdout + Resend) | `backend/auth/email_sender.py` | ✅ |
-| Flask blueprint `/api/cliente/auth` | `backend/auth/cliente_routes.py` | ✅ |
+| Flask blueprint `/cliente/auth` | `backend/auth/cliente_routes.py` | ✅ |
 | Registro no app.py | `backend/app.py` | ✅ |
 | Nginx `/cliente/metricas` + `auth_request` | `ark/ansible/roles/nginx/templates/portifolio.conf.j2` + espelho | ✅ |
 | Grafana `auth.proxy` + subpath | `ark/monitoring/docker-compose.monitoring.yml` | ✅ |
@@ -45,7 +45,7 @@
 - **Org-per-cliente fim-a-fim no Grafana**: o `provisionar_cliente.py` ja cria a org, mas usuarios do `auth.proxy` continuam caindo na "Main Org". Falta logica no `/gate` (ou script de membership) que adiciona o user a org certa idempotente via Grafana API.
 - 4 dashboards out-of-the-box provisionados na org do cliente: Web Vitals, Engajamento, Funil, Event Explorer.
 - Container `analytics-archiver`: cron diario que exporta `[now-retencao-1d, now-retencao]` em line protocol comprimido pra `/var/backups/analytics/<slug>/YYYY-MM-DD.lp.gz`.
-- Endpoint `GET /api/cliente/exportar?inicio=...&fim=...` com signed URL (nginx X-Accel-Redirect).
+- Endpoint `GET /cliente/exportar?inicio=...&fim=...` com signed URL (nginx X-Accel-Redirect).
 - Validacao end-to-end em `ark/teste-ambiente-a` (Docker) e `teste-ambiente-b` (Vagrant).
 
 **Pendente — proximas sprints (v2/v3):**
@@ -124,7 +124,7 @@ Padrao da industria (NR, Datadog, Segment): **separar credenciais**.
 ```
 Cliente → Cloudflare → Nginx host → /cliente/metricas/*
                             ↓
-              Flask /api/cliente/auth/gate
+              Flask /cliente/auth/gate
               (valida cookie de sessao → Postgres)
                             ↓ (200 + X-WEBAUTH-USER: <cliente_id>)
               proxy_pass → Grafana (127.0.0.1:3001)
@@ -187,7 +187,7 @@ CREATE TABLE clientes_magic_links (
 );
 ```
 
-## 6. Endpoints (Flask blueprint `/api/cliente/auth`)
+## 6. Endpoints (Flask blueprint `/cliente/auth`)
 
 | Metodo | Rota                          | Payload          | Resposta                                            |
 |--------|-------------------------------|------------------|-----------------------------------------------------|
@@ -221,7 +221,7 @@ CREATE TABLE clientes_magic_links (
    expirou, nao foi consumido) → marca `consumido_em = now()` →
    cria sessao → Set-Cookie → 302 → `/cliente/metricas`.
 4. Cada request a `/cliente/metricas/*` passa por
-   `auth_request /api/cliente/auth/gate` → valida cookie → injeta
+   `auth_request /cliente/auth/gate` → valida cookie → injeta
    header `X-WEBAUTH-USER: <cliente_id>`.
 
 ## 9. Rate-limit & lockout
@@ -247,7 +247,7 @@ Formato `evento=<x> cliente_id=<id> user_id=<id> ip=<ip> ua=<ua>`:
    contato.
 3. Backend dispara magic-link "bem-vindo, clique pra acessar seu
    dashboard". Sem fricção de senha inicial.
-4. Admin pode adicionar mais users via `/api/cliente/users`
+4. Admin pode adicionar mais users via `/cliente/users`
    (futuro v2).
 
 ## 12. E-mail — lacuna do stack
@@ -456,7 +456,7 @@ para cada site com plano != free:
 **Endpoint pro cliente baixar:**
 
 ```
-GET /api/cliente/exportar?inicio=YYYY-MM-DD&fim=YYYY-MM-DD
+GET /cliente/exportar?inicio=YYYY-MM-DD&fim=YYYY-MM-DD
   -> 302 + signed URL local (filesystem -> nginx X-Accel-Redirect)
 ```
 
