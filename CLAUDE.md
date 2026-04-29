@@ -50,9 +50,11 @@ Volumes persistentes (nao apagar sem checar):
 ```
 Internet → Cloudflare (laranja, Full strict, Origin Cert)
               └→ Nginx host (80/443, TLS CF Origin Cert ate 2041)
-                    ├─ dsplayground.com.br          → 127.0.0.1:3000 (frontend nginx:alpine → dist/)
+                    ├─ dsplayground.com.br + portifolio.X  → 127.0.0.1:3000 (frontend nginx:alpine → dist/)
                     │    ├─ /api/*                 → 127.0.0.1:5000 (nginx strippa /api/, paths backend canonicos)
                     │    └─ /cliente/metricas/*     → auth_request → 127.0.0.1:3001 (Grafana c/ auth.proxy)
+                    │    Apex e portifolio.X compartilham o vhost; split planejado quando landing
+                    │    do produto for separada do portfolio pessoal.
                     ├─ api.dsplayground.com.br      → 127.0.0.1:5000 (backend Flask, paths canonicos sem /api/)
                     │                                  WS em /socket.io/, REST em /auth/sdk-token, /cliente/auth/*
                     ├─ grafana.dsplayground.com.br  → 127.0.0.1:3001 (Grafana — admin direto)
