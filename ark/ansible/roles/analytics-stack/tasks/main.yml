@@ -18,12 +18,16 @@
   tags: [git-clone]
 
 - name: Reforcar owner:group apos git clone (arquivos herdam primary group do deploy)
+  # Modo simbolico `X` (maiusculo) so aplica +x em diretorios (ou arquivos que
+  # ja tinham +x preservados). Sem isso, `mode: "0750"` com recurse marca
+  # *todos* os arquivos como executaveis — quebra `.vault-password` (Ansible
+  # tenta executar como script e da "Erro no formato exec").
   file:
     path: "{{ repo_dir }}"
     state: directory
     owner: "{{ deploy_user }}"
     group: analytics
-    mode: "0750"
+    mode: "u=rwX,g=rX,o="
     recurse: true
 
 - name: SGID no diretorio backend para novos arquivos herdarem grupo analytics
