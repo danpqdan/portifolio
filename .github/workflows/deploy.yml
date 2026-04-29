@@ -16,6 +16,7 @@ on:
 
 permissions:
   contents: read
+  packages: read   # docker compose build precisa baixar @danpqdan/* (GitHub Packages)
 
 concurrency:
   # Serializa deploys — uma fila ordenada e mais seguro que cancelar meio
@@ -38,6 +39,11 @@ jobs:
         # Usa /opt/portifolio diretamente (repo clonado pelo Ansible, owned
         # por deploy:analytics). Nao usamos actions/checkout porque ele grava
         # no workspace do runner, nao no repo de producao.
+        env:
+          # Token para baixar SDK privado @danpqdan/* do GitHub Packages
+          # durante `docker compose build frontend`. BuildKit secret no
+          # Dockerfile garante que nao escapa pra layer da imagem.
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
           cd /opt/portifolio

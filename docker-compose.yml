@@ -80,6 +80,12 @@ services:
         # no /sdk-token e os eventos vao pro bucket dedicado do site_id
         # correspondente. Vazio = SDK roda sem auth (bucket default).
         VITE_PUBLISHABLE_KEY: ${VITE_PUBLISHABLE_KEY:-}
+      # BuildKit secret para baixar @danpqdan/dsplayground-analytics-sdk do
+      # GitHub Packages (registry privado). Token nao persiste em nenhuma
+      # layer da imagem — exposto apenas durante o RUN npm ci.
+      # Antes de buildar:  export NODE_AUTH_TOKEN=$(gh auth token)
+      secrets:
+        - NODE_AUTH_TOKEN
     container_name: portifolio-frontend
     depends_on:
       - backend
@@ -88,6 +94,10 @@ services:
     ports:
       - "127.0.0.1:3000:80"
     restart: unless-stopped
+
+secrets:
+  NODE_AUTH_TOKEN:
+    environment: NODE_AUTH_TOKEN
 
 volumes:
   influxdb_data:
