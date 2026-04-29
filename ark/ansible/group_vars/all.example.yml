@@ -13,6 +13,7 @@ repo_branch: main
 flask_secret_key: trocar-em-producao
 cors_origins:
   - https://dsplayground.com.br
+  - https://portifolio.dsplayground.com.br
 
 # === InfluxDB ===
 influxdb_url: http://influxdb:8086
