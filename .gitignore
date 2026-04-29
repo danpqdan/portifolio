@@ -42,6 +42,13 @@ backend/.env.*
 # Compose secrets (raiz)
 /.env
 
+# Auth tokens — nunca versionar (NODE_AUTH_TOKEN, etc.)
+.npmrc.local
+.env.local
+**/auth_token
+**/*.token
+cookies.txt
+
 # Dados runtime do backend (auth multi-tenant)
 backend/data/keys/
 backend/data/tenants.db
