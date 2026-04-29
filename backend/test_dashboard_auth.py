@@ -366,29 +366,29 @@ class ClienteAuthEndpointsTests(unittest.TestCase):
 
     # /login
     def test_login_ok_seta_cookie(self):
-        r = self.client.post("/api/cliente/auth/login",
+        r = self.client.post("/cliente/auth/login",
                              json={"email": "dan@acme.com", "senha": "secret-123"})
         self.assertEqual(r.status_code, 200)
         self.assertIn("cliente_session", r.headers.get("Set-Cookie", ""))
 
     def test_login_credenciais_invalidas_retorna_401(self):
-        r = self.client.post("/api/cliente/auth/login",
+        r = self.client.post("/cliente/auth/login",
                              json={"email": "dan@acme.com", "senha": "errada"})
         self.assertEqual(r.status_code, 401)
 
     def test_login_sem_payload_retorna_400(self):
-        r = self.client.post("/api/cliente/auth/login", json={})
+        r = self.client.post("/cliente/auth/login", json={})
         self.assertEqual(r.status_code, 400)
 
     # /me
     def test_me_sem_cookie_retorna_401(self):
-        r = self.client.get("/api/cliente/auth/me")
+        r = self.client.get("/cliente/auth/me")
         self.assertEqual(r.status_code, 401)
 
     def test_me_com_cookie_valido_retorna_user(self):
-        self.client.post("/api/cliente/auth/login",
+        self.client.post("/cliente/auth/login",
                          json={"email": "dan@acme.com", "senha": "secret-123"})
-        r = self.client.get("/api/cliente/auth/me")
+        r = self.client.get("/cliente/auth/me")
         self.assertEqual(r.status_code, 200)
         body = r.get_json()
         self.assertEqual(body["email"], "dan@acme.com")
@@ -397,30 +397,30 @@ class ClienteAuthEndpointsTests(unittest.TestCase):
 
     # /gate
     def test_gate_sem_cookie_retorna_401(self):
-        r = self.client.get("/api/cliente/auth/gate")
+        r = self.client.get("/cliente/auth/gate")
         self.assertEqual(r.status_code, 401)
 
     def test_gate_com_cookie_valido_retorna_header_webauth(self):
-        self.client.post("/api/cliente/auth/login",
+        self.client.post("/cliente/auth/login",
                          json={"email": "dan@acme.com", "senha": "secret-123"})
-        r = self.client.get("/api/cliente/auth/gate")
+        r = self.client.get("/cliente/auth/gate")
         self.assertEqual(r.status_code, 200)
         self.assertEqual(r.headers.get("X-WEBAUTH-USER"), self.site_id)
         self.assertEqual(r.headers.get("X-WEBAUTH-PAPEL"), "admin")
 
     # /logout
     def test_logout_revoga_sessao_e_limpa_cookie(self):
-        self.client.post("/api/cliente/auth/login",
+        self.client.post("/cliente/auth/login",
                          json={"email": "dan@acme.com", "senha": "secret-123"})
-        r = self.client.post("/api/cliente/auth/logout")
+        r = self.client.post("/cliente/auth/logout")
         self.assertEqual(r.status_code, 200)
         # apos logout, /me deve retornar 401
-        r2 = self.client.get("/api/cliente/auth/me")
+        r2 = self.client.get("/cliente/auth/me")
         self.assertEqual(r2.status_code, 401)
 
     # /magic-link/solicitar
     def test_magic_link_solicitar_email_existente_dispara_e_responde_200(self):
-        r = self.client.post("/api/cliente/auth/magic-link/solicitar",
+        r = self.client.post("/cliente/auth/magic-link/solicitar",
                              json={"email": "dan@acme.com"})
         self.assertEqual(r.status_code, 200)
         self.assertEqual(len(self.sender.enviados), 1)
@@ -429,7 +429,7 @@ class ClienteAuthEndpointsTests(unittest.TestCase):
         self.assertIn("?t=", self.sender.enviados[0]["texto"])
 
     def test_magic_link_solicitar_email_fantasma_responde_200_mas_nao_envia(self):
-        r = self.client.post("/api/cliente/auth/magic-link/solicitar",
+        r = self.client.post("/cliente/auth/magic-link/solicitar",
                              json={"email": "nao-existe@x.com"})
         self.assertEqual(r.status_code, 200)
         self.assertEqual(len(self.sender.enviados), 0)
@@ -441,9 +441,9 @@ class ClienteAuthEndpointsTests(unittest.TestCase):
         mod._svc_instance = svc_tight
 
         for _ in range(1):
-            self.client.post("/api/cliente/auth/magic-link/solicitar",
+            self.client.post("/cliente/auth/magic-link/solicitar",
                              json={"email": "dan@acme.com"})
-        r = self.client.post("/api/cliente/auth/magic-link/solicitar",
+        r = self.client.post("/cliente/auth/magic-link/solicitar",
                              json={"email": "dan@acme.com"})
         self.assertEqual(r.status_code, 429)
 
@@ -452,7 +452,7 @@ class ClienteAuthEndpointsTests(unittest.TestCase):
 
     # /magic-link/verificar
     def test_magic_link_verificar_ok_redireciona_e_seta_cookie(self):
-        self.client.post("/api/cliente/auth/magic-link/solicitar",
+        self.client.post("/cliente/auth/magic-link/solicitar",
                          json={"email": "dan@acme.com"})
         # extrair token do email capturado
         import re
@@ -461,31 +461,31 @@ class ClienteAuthEndpointsTests(unittest.TestCase):
         self.assertIsNotNone(m)
         token = m.group(1)
 
-        r = self.client.get(f"/api/cliente/auth/magic-link/verificar?t={token}")
+        r = self.client.get(f"/cliente/auth/magic-link/verificar?t={token}")
         self.assertEqual(r.status_code, 302)
         self.assertIn("cliente_session", r.headers.get("Set-Cookie", ""))
         # apos verificar, /me deve dar 200
-        r2 = self.client.get("/api/cliente/auth/me")
+        r2 = self.client.get("/cliente/auth/me")
         self.assertEqual(r2.status_code, 200)
 
     def test_magic_link_verificar_token_invalido_retorna_400(self):
-        r = self.client.get("/api/cliente/auth/magic-link/verificar?t=xxx-invalido")
+        r = self.client.get("/cliente/auth/magic-link/verificar?t=xxx-invalido")
         self.assertEqual(r.status_code, 400)
 
     def test_magic_link_verificar_sem_token_retorna_400(self):
-        r = self.client.get("/api/cliente/auth/magic-link/verificar")
+        r = self.client.get("/cliente/auth/magic-link/verificar")
         self.assertEqual(r.status_code, 400)
 
     def test_magic_link_verificar_token_ja_consumido_falha(self):
-        self.client.post("/api/cliente/auth/magic-link/solicitar",
+        self.client.post("/cliente/auth/magic-link/solicitar",
                          json={"email": "dan@acme.com"})
         import re
         texto = self.sender.enviados[0]["texto"]
         token = re.search(r"t=([^&\s]+)", texto).group(1)
         # consome 1a vez
-        self.client.get(f"/api/cliente/auth/magic-link/verificar?t={token}")
+        self.client.get(f"/cliente/auth/magic-link/verificar?t={token}")
         # 2a vez falha
-        r = self.client.get(f"/api/cliente/auth/magic-link/verificar?t={token}")
+        r = self.client.get(f"/cliente/auth/magic-link/verificar?t={token}")
         self.assertEqual(r.status_code, 400)
 
 

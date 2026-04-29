@@ -67,7 +67,7 @@ jobs:
           echo "==> aguardando health do backend (timeout ~60s)"
           ok=0
           for i in $(seq 1 20); do
-            if curl -sf http://127.0.0.1:5000/api/health/app >/dev/null 2>&1; then
+            if curl -sf http://127.0.0.1:5000/health/app >/dev/null 2>&1; then
               ok=1
               break
             fi
@@ -75,7 +75,7 @@ jobs:
           done
 
           if [ "$ok" -ne 1 ]; then
-            echo "::error::Backend nao respondeu saudavel em /api/health/app apos deploy"
+            echo "::error::Backend nao respondeu saudavel em /health/app apos deploy"
             docker compose logs --tail 100 backend
             exit 1
           fi

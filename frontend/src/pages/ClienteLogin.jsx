@@ -37,7 +37,7 @@ export default function ClienteLogin() {
     setEstado('enviando');
     setMensagemErro('');
     try {
-      const r = await fetch(`${API_BASE}/api/cliente/auth/magic-link/solicitar`, {
+      const r = await fetch(`${API_BASE}/cliente/auth/magic-link/solicitar`, {
         method: 'POST',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
@@ -61,7 +61,7 @@ export default function ClienteLogin() {
     setEstado('enviando');
     setMensagemErro('');
     try {
-      const r = await fetch(`${API_BASE}/api/cliente/auth/login`, {
+      const r = await fetch(`${API_BASE}/cliente/auth/login`, {
         method: 'POST',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },

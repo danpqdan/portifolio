@@ -28,13 +28,10 @@ app = Flask(__name__)
 env = os.environ.get("FLASK_ENV", "development")
 app.config.from_object(config[env])
 
-# ✅ CONFIGURAR PREFIXO /api PARA PRODUÇÃO
-if env == 'production':
-    # Blueprint para organizar rotas com prefixo
-    api_bp = Blueprint('api', __name__, url_prefix='/api')
-else:
-    # Em desenvolvimento, usar sem prefixo
-    api_bp = Blueprint('api', __name__)
+# Blueprint canonico — paths SEM prefixo `/api/` em todos os ambientes.
+# Externamente, `api.dsplayground.com.br` proxia direto e `dsplayground.com.br/api/*`
+# strippa o prefixo no nginx antes de chegar aqui (ver ark/nginx/portifolio.conf).
+api_bp = Blueprint('api', __name__)
 
 # ✅ CONFIGURAÇÕES DE SEGURANÇA AVANÇADAS
 SECRET_KEY = app.config.get('SECRET_KEY') or secrets.token_urlsafe(32)
@@ -119,10 +116,11 @@ socketio_config = {
     'ping_interval': 25
 }
 
-# Path padronizado em todos os ambientes — frontend SDK usa '/api/socket.io/'
-# como path canonico (ver frontend/src/sdk/WebSocketService.tsx). Em prod o
-# nginx faz proxy /api/socket.io/ -> backend; em dev o frontend bate direto.
-socketio_config['path'] = '/api/socket.io'
+# Path canonico SEM /api/. Externalmente o cliente acessa
+# `https://api.dsplayground.com.br/socket.io/` (proxy direto) ou
+# `https://dsplayground.com.br/api/socket.io/` (nginx strippa /api/).
+# Backend sempre escuta em /socket.io/.
+socketio_config['path'] = '/socket.io'
 
 # async_mode 'eventlet' habilita upgrade WebSocket. O Dockerfile de
 # producao roda 'gunicorn --worker-class eventlet', entao o Socket.IO
@@ -328,7 +326,7 @@ except Exception as e:
     log_safe(security_logger, 'error', f"[ERROR] Falha ao inicializar auth: {str(e)}")
     raise
 
-app.register_blueprint(auth_bp, url_prefix=('/api/auth' if env == 'production' else '/auth'))
+app.register_blueprint(auth_bp, url_prefix='/auth')
 
 # ==================== AUTH DO DASHBOARD DO CLIENTE ====================
 # Blueprint `/api/cliente/auth` com login humano (cookie HttpOnly) para
@@ -395,11 +393,16 @@ def _influxdb_saudavel() -> bool:
 @api_bp.route("/health/app", methods=["GET"])
 @limiter.limit("60 per minute")
 def health_app():
+    # `ambiente` no payload e o sinal canonico de FLASK_ENV — usado pelo
+    # workflow prod-regression pra detectar quando dev server voltou a rodar
+    # em producao. Antes esse check era feito via presenca/ausencia do
+    # prefixo /api/ na URL, mas o prefixo deixou de variar entre ambientes.
     return jsonify({
         "status": "healthy",
         "detalhe": {
             "timestamp": datetime.now().isoformat(),
             "active_sessions": len(active_sessions),
+            "ambiente": env,
         },
     })
 
