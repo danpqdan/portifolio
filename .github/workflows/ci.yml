@@ -70,7 +70,7 @@ jobs:
           cache-dependency-path: frontend/package-lock.json
       - name: Install (com auth pro GitHub Packages)
         env:
-          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_AUTH_TOKEN }}
         run: npm ci
       - run: npm run lint
       - run: npm run test
@@ -88,7 +88,7 @@ jobs:
       - name: Build da imagem frontend (args dummy)
         uses: docker/build-push-action@v6
         env:
-          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_AUTH_TOKEN }}
         with:
           context: ./frontend
           push: false
@@ -98,7 +98,7 @@ jobs:
             VITE_WEBSOCKET_URL=http://ci-dummy:5000
             VITE_DEBUG=false
           secrets: |
-            NODE_AUTH_TOKEN=${{ secrets.GITHUB_TOKEN }}
+            NODE_AUTH_TOKEN=${{ secrets.NPM_AUTH_TOKEN }}
 
   backend:
     name: Backend (lint + test)

@@ -43,7 +43,7 @@ jobs:
           # Token para baixar SDK privado @danpqdan/* do GitHub Packages
           # durante `docker compose build frontend`. BuildKit secret no
           # Dockerfile garante que nao escapa pra layer da imagem.
-          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_AUTH_TOKEN }}
         run: |
           set -euo pipefail
           cd /opt/portifolio
