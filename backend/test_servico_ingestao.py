@@ -30,6 +30,8 @@ def payload_valido(id_registro: str | None = None):
     agora_ms = int(time.time() * 1000)
     return {
         "id_registro": id_registro or f"sessao-{uuid.uuid4()}",
+        "app_id": "teste-app",
+        "ambiente": "production",
         "timestamp_inicial": agora_ms - 5000,
         "timestamp_final": agora_ms,
         "paginas": {

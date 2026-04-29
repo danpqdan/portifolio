@@ -42,20 +42,30 @@ def cmd_create(args: argparse.Namespace) -> int:
         print(f"erro: slug '{args.slug}' ja existe (site_id={existente.id})", file=sys.stderr)
         return 1
 
+    # Strict routing: todo site novo nasce com bucket_name preenchido. Sem isso,
+    # ingest cai no bucket default e mistura tenants. provisionar_cliente.py
+    # ainda eh quem cria o bucket no Influx; tenant_admin so registra o nome.
+    bucket_name = args.bucket or f"cliente_{args.slug}"
+
     site = repo.criar_site(
         slug=args.slug,
         nome=args.nome,
         ambiente=args.ambiente,
         dominios=args.dominio or [],
         plano=args.plano,
+        bucket_name=bucket_name,
     )
     _, valor = repo.criar_publishable_key(
         site_id=site.id, ambiente=args.ambiente, nome="default"
     )
     print(f"site criado: id={site.id} slug={site.slug} ambiente={site.ambiente}")
+    print(f"bucket_name reservado: {bucket_name}")
     print(f"dominios permitidos: {', '.join(args.dominio) if args.dominio else '(nenhum)'}")
     print(f"publishable_key (guarde agora, nao sera exibida novamente):")
     print(f"  {valor}")
+    print(f"AVISO: o bucket Influx ainda nao existe. Rode:")
+    print(f"  python -m scripts.provisionar_cliente --slug {args.slug} "
+          f"--nome '{args.nome}' --ambiente {args.ambiente} --plano {args.plano}")
     return 0
 
 
@@ -180,6 +190,32 @@ def cmd_cleanup(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_backfill_buckets(args: argparse.Namespace) -> int:
+    """Define bucket_name=cliente_<slug> para sites antigos sem bucket.
+
+    Ainda nao cria o bucket no Influx — apenas registra no Postgres. O
+    provisionar_cliente.py precisa ser rodado depois para materializar.
+    """
+    repo = _obter_repo()
+    afetados = []
+    for site in repo.listar_sites():
+        if not site.bucket_name:
+            bucket_name = f"cliente_{site.slug}"
+            if args.dry_run:
+                print(f"[dry-run] {site.slug}: would set bucket_name={bucket_name}")
+            else:
+                repo.definir_bucket_name(site.id, bucket_name)
+                print(f"{site.slug}: bucket_name={bucket_name}")
+            afetados.append(site.slug)
+    if not afetados:
+        print("(nenhum site precisa de backfill)")
+    elif not args.dry_run:
+        print(f"\n{len(afetados)} site(s) atualizados. Provisione cada um com:")
+        for slug in afetados:
+            print(f"  python -m scripts.provisionar_cliente --slug {slug} ...")
+    return 0
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Administracao de tenants do SDK")
     sub = parser.add_subparsers(dest="comando", required=True)
@@ -192,6 +228,8 @@ def main() -> int:
     p_create.add_argument("--dominio", action="append",
                           help="URL raiz permitida. Pode repetir.")
     p_create.add_argument("--plano", default="free")
+    p_create.add_argument("--bucket", default=None,
+                          help="Override do bucket_name (default: cliente_<slug>).")
     p_create.set_defaults(func=cmd_create)
 
     p_list = sub.add_parser("list", help="Lista sites cadastrados")
@@ -237,6 +275,12 @@ def main() -> int:
     p_clean = sub.add_parser("cleanup-emissions", help="Expurga log de emissoes antigas")
     p_clean.add_argument("--dias", type=int, default=7)
     p_clean.set_defaults(func=cmd_cleanup)
+
+    p_backfill = sub.add_parser("backfill-buckets",
+                                help="Define bucket_name=cliente_<slug> para sites antigos")
+    p_backfill.add_argument("--dry-run", action="store_true",
+                            help="Mostra o que faria sem alterar")
+    p_backfill.set_defaults(func=cmd_backfill_buckets)
 
     args = parser.parse_args()
     return args.func(args)

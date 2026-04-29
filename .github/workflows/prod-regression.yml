@@ -47,23 +47,26 @@ jobs:
 
       - name: Health endpoint responde 200
         run: |
-          code=$(curl -sk -o /dev/null -w '%{http_code}' "${HOST}/api/health/app")
+          # Path canonico (sem /api/). Subdominio api.X proxia direto pro
+          # backend, que escuta em /health/app. Apex /api/health/app tambem
+          # funciona (nginx strippa o prefixo).
+          code=$(curl -sk -o /dev/null -w '%{http_code}' "${HOST}/health/app")
           echo "HTTP $code"
           if [ "$code" != "200" ]; then
-            echo "::error::Backend nao respondeu saudavel em /api/health/app (HTTP $code)."
+            echo "::error::Backend nao respondeu saudavel em /health/app (HTTP $code)."
             exit 1
           fi
 
-      - name: Backend responde em modo producao (sem prefixo antigo)
+      - name: FLASK_ENV=production (sinal via campo ambiente do health)
         run: |
-          # Em development o blueprint nao tem url_prefix, entao /health/app
-          # responderia 200. Em producao o prefixo vira /api, e essa rota
-          # retorna 404. Se aqui der 200 e porque FLASK_ENV=development
-          # voltou a rodar em producao.
-          code=$(curl -sk -o /dev/null -w '%{http_code}' "${HOST}/health/app")
-          echo "HTTP $code"
-          if [ "$code" = "200" ]; then
-            echo "::error::REGRESSAO: /health/app responde sem prefixo /api, indicando FLASK_ENV=development em producao."
+          # Antes esse check usava presenca/ausencia do prefixo /api/ na URL
+          # (em dev nao tinha prefixo, em prod tinha). Como removemos essa
+          # diferenca, o sinal canonico agora e o campo `ambiente` retornado
+          # pelo proprio /health/app. Em prod precisa ser exatamente "production".
+          body=$(curl -sk "${HOST}/health/app")
+          echo "$body"
+          if ! echo "$body" | grep -q '"ambiente": *"production"'; then
+            echo "::error::REGRESSAO: /health/app nao reporta ambiente=production. Backend rodando em FLASK_ENV nao-prod?"
             exit 1
           fi
 

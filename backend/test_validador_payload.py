@@ -10,6 +10,8 @@ from ingestao.validador import validar_payload
 def payload_valido():
     return {
         "id_registro": "sessao-xyz",
+        "app_id": "teste",
+        "ambiente": "production",
         "timestamp_inicial": 1760000000000,
         "timestamp_final": 1760000005000,
         "paginas": {
@@ -156,10 +158,33 @@ class ValidadorPayloadTest(unittest.TestCase):
         ok, erros = validar_payload(data)
         self.assertFalse(ok)
         self.assertIn("id_registro", erros)
+        self.assertIn("app_id", erros)
+        self.assertIn("ambiente", erros)
         self.assertIn("timestamp_inicial", erros)
         self.assertIn("timestamp_final", erros)
         self.assertIn("paginas./[0].eventos[0].tipo", erros)
         self.assertIn("paginas./[0].eventos[1].timestamp", erros)
+
+    def test_rejeita_app_id_ausente(self):
+        data = payload_valido()
+        data.pop("app_id")
+        ok, erros = validar_payload(data)
+        self.assertFalse(ok)
+        self.assertIn("app_id", erros)
+
+    def test_rejeita_ambiente_invalido(self):
+        data = payload_valido()
+        data["ambiente"] = "homologacao"
+        ok, erros = validar_payload(data)
+        self.assertFalse(ok)
+        self.assertIn("ambiente", erros)
+
+    def test_rejeita_ambiente_ausente(self):
+        data = payload_valido()
+        data.pop("ambiente")
+        ok, erros = validar_payload(data)
+        self.assertFalse(ok)
+        self.assertIn("ambiente", erros)
 
 
 if __name__ == "__main__":

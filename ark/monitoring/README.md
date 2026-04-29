@@ -22,11 +22,52 @@ make monitoring-up
 
 `grafana/provisioning/datasources/` e `grafana/provisioning/dashboards/` sao montados read-only. Alterar datasources ou dashboard base exige edicao nos arquivos e `make monitoring-down && make monitoring-up`.
 
-Dashboard base: `dashboards/analytics-overview.json` — inclui painel de sanidade do backend (latencia de ingestao quando `/metrics` vier, contagem de emits e estado do InfluxDB).
+### Datasource InfluxDB
+
+Definido em `grafana/provisioning/datasources/datasources.yml`. Usa **substituicao de env vars** do Grafana (so suporta `$VAR` ou `${VAR}`, **nao** `${VAR:-default}` da bash). Variaveis sao passadas pelo `docker-compose.monitoring.yml`:
+
+```yaml
+environment:
+  INFLUXDB_TOKEN: ${INFLUXDB_TOKEN:-dev-local-influxdb-token}
+  INFLUXDB_ORG:   ${INFLUXDB_ORG:-zen}
+  INFLUXDB_BUCKET: ${INFLUXDB_BUCKET:-portifolio_prod}
+```
+
+E precisam tambem estar no `ark/monitoring/.env` (gitignored). Token deve **bater com o que o container InfluxDB foi inicializado** — volume `portifolio_influxdb_data` guarda o token na primeira subida; mudar `.env` depois nao re-inicializa o banco.
+
+### Dashboard base — `dashboards/analytics-overview.json`
+
+4 paineis sobre o measurement `page_analytics` (single measurement do schema atual):
+
+| Painel | Tipo | O que mostra |
+|---|---|---|
+| 1 — Eventos ingeridos (24h) | stat (5 metricas) | Visualizacoes, Cliques, Scrolls, Hovers, Mouse moves — totais via `sum()` |
+| 2 — Cliques por pagina (1h) | timeseries stacked bars | `cliques` agrupado por `page_type`, janelas de 5min |
+| 3 — Tempo total na pagina (24h) | timeseries lines | `permanencia_segundos` somado por janela de 5min, por `page_type` (NAO usar `mean` — `permanencia_segundos` e duracao do batch ~5s, soma agrega tempo real) |
+| 4 — Engajamento por pagina | bargauge gradient | `cliques`/`hovers`/`mouse_moves`/`toques`/`exposicoes`/`custom_events` × `page_type`, com `displayName: ${__field.labels._field} · ${__field.labels.page_type}` |
+
+**Padrao Flux importante**: sempre `group(columns: ["page_type"])` ANTES de `aggregateWindow(fn: sum)`. Inverter resulta em uma serie por `session_id` com valores 0 — visualmente confuso.
+
+### Auth.proxy do Grafana
+
+Pra suportar dashboard self-service do cliente em `/cliente/metricas` (ver `ark/docs/dashboard-cliente.md`), o Grafana e configurado com:
+
+```yaml
+GF_SERVER_ROOT_URL: https://dsplayground.com.br/cliente/metricas/
+GF_SERVER_SERVE_FROM_SUB_PATH: "true"
+GF_AUTH_PROXY_ENABLED: "true"
+GF_AUTH_PROXY_HEADER_NAME: X-WEBAUTH-USER
+GF_AUTH_PROXY_AUTO_SIGN_UP: "true"
+GF_AUTH_PROXY_HEADERS: "Role:X-WEBAUTH-PAPEL"
+GF_AUTH_PROXY_WHITELIST: "127.0.0.1, ::1, 172.16.0.0/12, 10.0.0.0/8"
+GF_USERS_AUTO_ASSIGN_ORG_ROLE: Viewer
+```
+
+Quando o nginx propaga `X-WEBAUTH-USER=<site_id>`, o Grafana auto-cria um user com `username=<site_id>` e role Viewer. Sem o header (acesso direto via `grafana.dsplayground.com.br`), Grafana cai pro login form admin (porque `GF_AUTH_DISABLE_LOGIN_FORM=false`).
 
 ## Producao
 
 - Role Ansible `monitoring` (em `ark/ansible/roles/monitoring/`) usa este mesmo compose — mesmo binario, mesma config.
 - Senha do Grafana vem do `GF_SECURITY_ADMIN_PASSWORD` no `.env` real.
-- Exponha Grafana atras de Nginx com autenticacao adicional (SSO ou basic auth).
+- Exponha Grafana atras de Nginx com autenticacao adicional (SSO ou basic auth) — em prod o nginx do host ja faz isso via `auth_request` no path `/cliente/metricas/`.
 - Ajuste `retention` do Prometheus (`--storage.tsdb.retention.time=15d`) conforme necessidade — 15 dias e o default.
