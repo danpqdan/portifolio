@@ -27,6 +27,37 @@ services:
       GF_SECURITY_ADMIN_USER: ${GF_ADMIN_USER:-admin}
       GF_SECURITY_ADMIN_PASSWORD: ${GF_ADMIN_PASSWORD:-admin}
       GF_USERS_ALLOW_SIGN_UP: "false"
+      # Substituicao no datasource provisionado (datasources.yml).
+      # Tem que casar com o token e bucket do container influxdb.
+      INFLUXDB_TOKEN: ${INFLUXDB_TOKEN:-dev-local-influxdb-token}
+      INFLUXDB_ORG: ${INFLUXDB_ORG:-zen}
+      INFLUXDB_BUCKET: ${INFLUXDB_BUCKET:-portifolio_prod}
+      # ------ Dashboard self-service do cliente ------
+      # Ver ark/docs/dashboard-cliente.md. Grafana serve sob subpath
+      # /cliente/metricas/ e confia no header X-WEBAUTH-USER injetado
+      # pelo nginx apos validacao do cookie pelo backend Flask.
+      GF_SERVER_ROOT_URL: ${GF_ROOT_URL:-https://dsplayground.com.br/cliente/metricas/}
+      GF_SERVER_SERVE_FROM_SUB_PATH: "true"
+      GF_AUTH_PROXY_ENABLED: "true"
+      GF_AUTH_PROXY_HEADER_NAME: X-WEBAUTH-USER
+      GF_AUTH_PROXY_HEADER_PROPERTY: username
+      GF_AUTH_PROXY_AUTO_SIGN_UP: "true"
+      GF_AUTH_PROXY_HEADERS: "Role:X-WEBAUTH-PAPEL"
+      GF_AUTH_PROXY_WHITELIST: "127.0.0.1, ::1, 172.16.0.0/12, 10.0.0.0/8"
+      GF_USERS_AUTO_ASSIGN_ORG_ROLE: Viewer
+      # ------ Hardening Viewer (impede edicao de query/painel ate na sessao) ------
+      # Default do Grafana e permitir Viewer editar painel em-memoria. Sem isso,
+      # cliente abre dashboard provisionado, troca a query (ou usa Explore) e ve
+      # bucket/measurement de outro tenant. Tres travas:
+      #   1) Viewer NUNCA edita painel, nem na sessao;
+      #   2) Aba Explore desligada (queries arbitrarias proibidas);
+      #   3) Snapshots externos desligados (evita exfiltrar dado por URL publica).
+      GF_USERS_VIEWERS_CAN_EDIT: "false"
+      GF_EXPLORE_ENABLED: "false"
+      GF_SNAPSHOTS_EXTERNAL_ENABLED: "false"
+      # Admin ainda consegue acessar login form em /cliente/metricas/login
+      # quando o header nao esta presente (fluxo administrativo).
+      GF_AUTH_DISABLE_LOGIN_FORM: "false"
     volumes:
       - ./grafana/provisioning:/etc/grafana/provisioning:ro
       - ./grafana/dashboards:/var/lib/grafana/dashboards:ro

@@ -20,6 +20,7 @@ services:
       interval: 10s
       timeout: 5s
       retries: 10
+    restart: unless-stopped
 
   postgres:
     image: postgres:16-alpine
@@ -36,6 +37,7 @@ services:
       interval: 5s
       timeout: 3s
       retries: 10
+    restart: unless-stopped
 
   backend:
     build:
@@ -58,6 +60,12 @@ services:
       # Volume dedicado para chaves RSA do sdk_jwt. Fora do bind de codigo para
       # que nunca cai no git, e para persistir entre rebuilds da imagem.
       - backend_keys:/app/data/keys
+      # Templates de dashboard provisionados por scripts/provisionar_cliente.py.
+      # Read-only — o container nao escreve la, so le e POSTa para Grafana API.
+      - ./ark/monitoring/dashboards:/app/dashboards:ro
+    environment:
+      DASHBOARDS_TEMPLATE_DIR: /app/dashboards
+    restart: unless-stopped
 
   frontend:
     build:
@@ -68,6 +76,16 @@ services:
         VITE_API_URL: ${VITE_API_URL:-http://localhost:5000}
         VITE_WEBSOCKET_URL: ${VITE_WEBSOCKET_URL:-http://localhost:5000}
         VITE_DEBUG: ${VITE_DEBUG:-false}
+        # SDK auth: quando setado, o frontend troca pela publishable por JWT
+        # no /sdk-token e os eventos vao pro bucket dedicado do site_id
+        # correspondente. Vazio = SDK roda sem auth (bucket default).
+        VITE_PUBLISHABLE_KEY: ${VITE_PUBLISHABLE_KEY:-}
+      # BuildKit secret para baixar @danpqdan/dsplayground-analytics-sdk do
+      # GitHub Packages (registry privado). Token nao persiste em nenhuma
+      # layer da imagem — exposto apenas durante o RUN npm ci.
+      # Antes de buildar:  export NODE_AUTH_TOKEN=$(gh auth token)
+      secrets:
+        - NODE_AUTH_TOKEN
     container_name: portifolio-frontend
     depends_on:
       - backend
@@ -76,6 +94,10 @@ services:
     ports:
       - "127.0.0.1:3000:80"
     restart: unless-stopped
+
+secrets:
+  NODE_AUTH_TOKEN:
+    environment: NODE_AUTH_TOKEN
 
 volumes:
   influxdb_data:

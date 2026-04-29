@@ -50,15 +50,26 @@ Volumes persistentes (nao apagar sem checar):
 ```
 Internet → Cloudflare (laranja, Full strict, Origin Cert)
               └→ Nginx host (80/443, TLS CF Origin Cert ate 2041)
-                    ├─ dsplayground.com.br          → 127.0.0.1:3000 (frontend nginx:alpine → dist/)
-                    ├─ api.dsplayground.com.br      → 127.0.0.1:5000 (backend Flask, prefixo /api/*)
-                    │                                  WS em /api/socket.io/ (NAO /socket.io/)
-                    ├─ grafana.dsplayground.com.br  → 127.0.0.1:3001 (Grafana)
+                    ├─ dsplayground.com.br + portifolio.X  → 127.0.0.1:3000 (frontend nginx:alpine → dist/)
+                    │    ├─ /api/*                 → 127.0.0.1:5000 (nginx strippa /api/, paths backend canonicos)
+                    │    └─ /cliente/metricas/*     → auth_request → 127.0.0.1:3001 (Grafana c/ auth.proxy)
+                    │    Apex e portifolio.X compartilham o vhost; split planejado quando landing
+                    │    do produto for separada do portfolio pessoal.
+                    ├─ api.dsplayground.com.br      → 127.0.0.1:5000 (backend Flask, paths canonicos sem /api/)
+                    │                                  WS em /socket.io/, REST em /auth/sdk-token, /cliente/auth/*
+                    ├─ grafana.dsplayground.com.br  → 127.0.0.1:3001 (Grafana — admin direto)
                     └─ influx.dsplayground.com.br   → 127.0.0.1:8086 (InfluxDB)
 
 Backend → influxdb:8086, postgres:5432 (rede portifolio_default)
 CrowdSec le /var/log/nginx + backend/security.log → aplica decisoes via bouncer
 Prometheus scrape backend:5000/metrics (quando existir) + node-exporter
+
+Dashboard do cliente (detalhes em ark/docs/dashboard-cliente.md):
+  Browser → /cliente/metricas/* → nginx auth_request /__cliente_auth_gate
+        → Flask /cliente/auth/gate (valida cookie cliente_session)
+        → 200 + header X-WEBAUTH-USER=<site_id>
+        → nginx propaga pro Grafana
+        → Grafana auth.proxy confia no header e mapeia user
 ```
 
 Detalhes completos em `/opt/portifolio/ark/docs/servidor-producao.md`.
@@ -90,9 +101,9 @@ docker inspect portifolio-backend --format '{{.State.Health.Status}}'
 Health checks da aplicacao (via loopback — backend bindando so em `127.0.0.1:5000`, so Nginx alcanca). Em prod o blueprint tem `url_prefix=/api`; em dev local nao tem prefixo (ver `app.py:31`).
 
 ```bash
-curl -s http://127.0.0.1:5000/api/health/app
-curl -s http://127.0.0.1:5000/api/health/socketio
-curl -s http://127.0.0.1:5000/api/health/influxdb
+curl -s http://127.0.0.1:5000/health/app
+curl -s http://127.0.0.1:5000/health/socketio
+curl -s http://127.0.0.1:5000/health/influxdb
 ```
 
 ## CI / CD (GitHub Actions + self-hosted runner)
@@ -144,7 +155,7 @@ Grupo compartilhado **`analytics` GID 10001** e a ponte host↔container. Nao mu
 
 1. Editar arquivo relevante dentro de `/opt/portifolio` (app) ou `/opt/portifolio/ark` (infra).
 2. Se for infra gerenciada por Ansible: `make -f ark/Makefile ansible-check` primeiro (**hoje quebra por falta de `ignore_errors` na task de health — ver pendencias**), depois `ansible-apply`.
-3. Se for so app (backend/frontend): o CD automatico ja cuida apos merge em `main`. Para deploy manual: `make -f ark/Makefile dev` e validar `/api/health/app`.
+3. Se for so app (backend/frontend): o CD automatico ja cuida apos merge em `main`. Para deploy manual: `make -f ark/Makefile dev` e validar `/health/app`.
 4. Conferir logs: `make -f ark/Makefile logs` e `docker logs` dos containers relacionados.
 5. Nao comitar sem o usuario pedir. Quando pedir, seguir Conventional Commits em pt-BR (ver `AGENTS.md`).
 

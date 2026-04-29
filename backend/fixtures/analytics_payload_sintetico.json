@@ -1,5 +1,7 @@
 {
   "id_registro": "fixture-analytics-sintetico",
+  "app_id": "teste",
+  "ambiente": "production",
   "timestamp_inicial": 1760000000000,
   "timestamp_final": 1760000007000,
   "paginas": {

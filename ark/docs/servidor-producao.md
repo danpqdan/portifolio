@@ -39,12 +39,12 @@
 
 | componente | responsabilidade |
 |---|---|
-| Nginx | TLS, compressao, upgrade WebSocket, rate limit de borda, bloqueio de paths admin |
-| Backend | recebe `analytics_data`, valida, persiste no InfluxDB, serve API de consulta + admin LGPD |
-| InfluxDB | series temporais de analytics (`page_analytics`, `web_vitals`, `custom_events`) |
-| PostgreSQL | **apenas no modo comercial** — clientes, tokens, refresh tokens, quotas, audit log |
+| Nginx | TLS, compressao, upgrade WebSocket, rate limit de borda, bloqueio de paths admin, `auth_request` do dashboard self-service |
+| Backend | recebe `analytics_data`, valida, persiste no InfluxDB, serve API de consulta + admin LGPD + auth do dashboard cliente |
+| InfluxDB | series temporais de analytics — single measurement `page_analytics` com fields: `cliques`, `visualizacoes`, `scrolls`, `mouse_moves`, `hovers`, `toques`, `exposicoes`, `permanencia_segundos`, `custom_events`, `user_agent`. Tags: `ambiente`, `app_id`, `page_type`, `session_id`, `ip_address`. (`web_vitals` e `custom_events` como measurements separados ainda NAO existem — sao pendencias de schema.) |
+| PostgreSQL | auth multi-tenant: `sites`, `site_dominios`, `publishable_keys`, `quotas`, `emissoes_jwt`, `consumo_diario` (SDK ingest); `clientes_users`, `clientes_users_sessoes`, `clientes_magic_links` (dashboard humano — ver `ark/docs/dashboard-cliente.md`) |
 | Prometheus | scrape de metricas operacionais do backend e do host |
-| Grafana | dashboards de analytics e de operacao |
+| Grafana | dashboards de analytics + dashboard self-service do cliente em `/cliente/metricas` (auth.proxy via header `X-WEBAUTH-USER` injetado pelo nginx) |
 | CrowdSec | le `security.log` + `/var/log/nginx/`, aplica decisoes em Nginx via bouncer |
 
 ## Ordem de deploy via Ansible
@@ -96,11 +96,28 @@ Dois arquivos de vhost em `/etc/nginx/conf.d/`:
 | Arquivo | Hostnames | Upstream |
 |---|---|---|
 | `portifolio.conf` | `dsplayground.com.br` | `127.0.0.1:3000` (frontend — nginx no container servindo dist/) |
+|  | `dsplayground.com.br/cliente/auth/*` | `127.0.0.1:5000` (backend — login humano do dashboard) |
+|  | `dsplayground.com.br/cliente/metricas/*` | `127.0.0.1:3001` (Grafana — atras de `auth_request /__cliente_auth_gate`) |
 |  | `api.dsplayground.com.br` | `127.0.0.1:5000` (backend Flask) |
-| `portifolio.monitoring.conf` | `grafana.dsplayground.com.br` | `127.0.0.1:3001` |
+| `portifolio.monitoring.conf` | `grafana.dsplayground.com.br` | `127.0.0.1:3001` (admin direto, fora do auth.proxy) |
 |  | `influx.dsplayground.com.br` | `127.0.0.1:8086` |
 
-Socket.IO: o backend monta o blueprint com `url_prefix='/api'`, entao o path real e `/api/socket.io/` — NAO o default `/socket.io/`. O cliente `socket.io-client` tem `path: '/api/socket.io/'` hardcoded em `frontend/src/sdk/WebSocketService.tsx`. Requests WS da forma `wss://api.dsplayground.com.br/api/socket.io/` passam pelo `location /` do vhost da api (upgrade habilitado) e chegam no backend.
+Socket.IO: path canonico `/socket.io/` em todos os ambientes. O backend hardcode esse path independente de `FLASK_ENV` (ver `backend/app.py` `socketio_config['path']`); o cliente `socket.io-client` tem `path: '/socket.io/'` em `frontend/src/sdk/WebSocketService.tsx`. Requests WS da forma `wss://api.dsplayground.com.br/socket.io/` passam pelo `location /` do vhost da api (upgrade habilitado) e chegam no backend. Em dev local sem nginx, o frontend bate direto em `http://localhost:5000/socket.io/`. `async_mode='eventlet'` em todos os ambientes — sem isso o handshake retorna `upgrades:[]` e o cliente cicla em polling.
+
+### Dashboard self-service do cliente
+
+Fluxo do `/cliente/metricas/*` (detalhes em `ark/docs/dashboard-cliente.md`):
+
+```
+Browser -> nginx (location /cliente/metricas/)
+        -> auth_request /__cliente_auth_gate
+        -> Flask /cliente/auth/gate (valida cookie cliente_session)
+        -> 200 + header X-WEBAUTH-USER=<site_id>
+        -> proxy_pass para Grafana 127.0.0.1:3001
+        -> Grafana auth.proxy confia no header e auto-cria/mapeia user
+```
+
+Login humano em `/cliente/login` (frontend React) emite cookie `cliente_session` (HttpOnly, Secure, SameSite=Strict, 7d). Suporta senha (POST `/cliente/auth/login`) e magic-link (`/magic-link/solicitar` + `/magic-link/verificar`). Logout em `POST /cliente/auth/logout`.
 
 Frontend em producao e um bundle estatico (`vite build`) servido por `nginx:alpine` dentro do container `portifolio-frontend` — nao ha dev server exposto. SPA fallback em `docker-nginx.conf` serve `index.html` para qualquer rota nao-estatica. URLs da API sao embutidas no bundle em build time via build args `VITE_API_URL` e `VITE_WEBSOCKET_URL`, vindos do `.env` do compose (gerado pelo Ansible) — alterar esses valores exige rebuild da imagem.
 
@@ -209,14 +226,55 @@ Logs: estruturados no formato `evento=<nome> chave=valor`. Estagios principais:
 - `erro_persistencia` — falha de InfluxDB (nao derruba ingestao)
 - `backpressure` — fila do executor > 50 itens
 - `acesso_bloqueado` — middleware de seguranca bloqueou IP
+- `[REAPER]` — background task limpou sessoes Socket.IO zombies (idle > `SESSION_IDLE_TIMEOUT`)
+- `auth_cliente_login_ok` / `auth_cliente_login_fail` — login do dashboard (senha)
+- `auth_cliente_magic_solicitado` / `auth_cliente_magic_consumido` / `auth_cliente_magic_invalido` — fluxo magic-link
+- `auth_cliente_gate_ok` / `auth_cliente_gate_negado` — `auth_request` do nginx pro Grafana
 - `[ADMIN-AUDIT]` — qualquer chamada aos endpoints `/admin/*`
 
 `security.log` tem rotacao automatica (10 MB x 5 arquivos). Monte em volume dedicado em producao.
 
 Metricas: endpoint `/metrics` no backend e follow-up (`docs/plano-backend.md` D.2). Quando existir, o Prometheus ja esta configurado para fazer scrape em `backend:5000/metrics`.
 
+## Variaveis de ambiente (resumo)
+
+Tudo vem do `backend/.env` (ou `ark/monitoring/.env` para Grafana). Renderizado pelo Ansible em prod.
+
+**Backend (`backend/.env`):**
+
+| Variavel | Default | Descricao |
+|---|---|---|
+| `SECRET_KEY` | (obrigatorio) | secret do Flask |
+| `INFLUXDB_ENABLED` | false | habilita persistencia em Influx |
+| `INFLUXDB_URL/TOKEN/ORG/BUCKET` | — | conexao InfluxDB; exigidos se enabled |
+| `TENANTS_DATABASE_URL` | sqlite:///./data/tenants.db | postgres em prod, sqlite em dev |
+| `JWT_KEYS_DIR` | ./data/keys | chaves RSA do sdk_jwt |
+| `SDK_TOKEN_TTL_SECONDS` | 300 | TTL do token publico do SDK |
+| `SDK_AUTH_REQUIRED` | false | exige sdk_jwt em todos os Socket.IO connects |
+| `SESSION_REQUEST_LIMIT` | 10000 | maximo de batches por sessao Socket.IO; 0 desabilita |
+| `SESSION_IDLE_TIMEOUT` | 180 | segundos sem atividade ate sessao virar zombie (reaper limpa) |
+| `SESSION_REAPER_INTERVAL` | 30 | frequencia do reaper de zombies |
+| `ANTIABUSE_REQS_PER_MIN` | 600 | janela 60s de tolerancia por IP no anti-abuse |
+| `ANTIABUSE_BAN_TTL_SECONDS` | 300 | duracao do ban quando estoura threshold (em prod era permanente, agora TTL) |
+| `ANTIABUSE_SKIP_PRIVATE` | true | pula bloqueio para IPs privados (loopback, docker bridge, redes internas) |
+| `RESEND_API_KEY` | — | (opcional) envia magic-link via Resend; sem isso, fallback stdout |
+| `EMAIL_FROM` | no-reply@dsplayground.com.br | remetente do magic-link |
+| `DASHBOARD_BASE_URL` | https://dsplayground.com.br | base da URL do magic-link |
+| `DASHBOARD_REDIRECT` | /cliente/metricas | destino apos consumir magic-link |
+| `COOKIE_SECURE` | true | flag Secure no cookie de sessao do cliente; false em dev http |
+
+**Monitoring (`ark/monitoring/.env`):**
+
+| Variavel | Descricao |
+|---|---|
+| `GF_ADMIN_USER`, `GF_ADMIN_PASSWORD` | bootstrap do admin Grafana |
+| `GF_ROOT_URL` | base do Grafana — em prod `https://dsplayground.com.br/cliente/metricas/` |
+| `INFLUXDB_TOKEN`, `INFLUXDB_ORG`, `INFLUXDB_BUCKET` | passados ao container Grafana, interpolados no datasource provisionado |
+
+**`auth.proxy` e configurado direto no `docker-compose.monitoring.yml`** via `GF_AUTH_PROXY_*` e `GF_USERS_AUTO_ASSIGN_ORG_ROLE=Viewer` — ver o arquivo pra valores.
+
 ## Backup e restore
 
 Ver secao "Backup e Restore do InfluxDB" em `docs/backend/DEPLOY-GUIDE.md`.
 
-Para PostgreSQL (quando entrar no modo comercial): `pg_dump` diario via cron sidecar, retencao 30 dias. A definir quando o schema estabilizar.
+Para PostgreSQL: `pg_dump` diario via cron sidecar, retencao 30 dias. A definir quando o schema estabilizar.

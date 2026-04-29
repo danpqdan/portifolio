@@ -43,7 +43,10 @@
   notify: reload nginx
 
 - name: Garantir Nginx ativo
+  # service: requer systemd; em container de teste, valida-se renderizacao
+  # do vhost mas o servico nao sobe. Em prod o nginx do host esta ativo.
   service:
     name: nginx
     state: started
     enabled: true
+  tags: [systemd]

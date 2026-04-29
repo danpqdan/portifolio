@@ -12,9 +12,22 @@ CREATE TABLE IF NOT EXISTS sites (
     ambiente        TEXT NOT NULL CHECK (ambiente IN ('development','test','staging','production')),
     plano           TEXT NOT NULL DEFAULT 'free',
     status          TEXT NOT NULL DEFAULT 'ativo' CHECK (status IN ('ativo','suspenso','bloqueado')),
+    bucket_name     TEXT UNIQUE,
     criado_em       TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     atualizado_em   TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+-- Migracao idempotente para DBs criados antes do bucket-per-cliente.
+ALTER TABLE sites ADD COLUMN IF NOT EXISTS bucket_name TEXT;
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_indexes WHERE indexname = 'sites_bucket_name_key'
+    ) THEN
+        CREATE UNIQUE INDEX sites_bucket_name_key ON sites(bucket_name)
+            WHERE bucket_name IS NOT NULL;
+    END IF;
+END$$;
 
 CREATE TABLE IF NOT EXISTS site_dominios (
     site_id         UUID NOT NULL REFERENCES sites(id) ON DELETE CASCADE,

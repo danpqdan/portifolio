@@ -16,6 +16,7 @@ on:
 
 permissions:
   contents: read
+  packages: read   # docker compose build precisa baixar @danpqdan/* (GitHub Packages)
 
 concurrency:
   # Serializa deploys — uma fila ordenada e mais seguro que cancelar meio
@@ -38,6 +39,11 @@ jobs:
         # Usa /opt/portifolio diretamente (repo clonado pelo Ansible, owned
         # por deploy:analytics). Nao usamos actions/checkout porque ele grava
         # no workspace do runner, nao no repo de producao.
+        env:
+          # Token para baixar SDK privado @danpqdan/* do GitHub Packages
+          # durante `docker compose build frontend`. BuildKit secret no
+          # Dockerfile garante que nao escapa pra layer da imagem.
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_AUTH_TOKEN }}
         run: |
           set -euo pipefail
           cd /opt/portifolio
@@ -61,7 +67,7 @@ jobs:
           echo "==> aguardando health do backend (timeout ~60s)"
           ok=0
           for i in $(seq 1 20); do
-            if curl -sf http://127.0.0.1:5000/api/health/app >/dev/null 2>&1; then
+            if curl -sf http://127.0.0.1:5000/health/app >/dev/null 2>&1; then
               ok=1
               break
             fi
@@ -69,7 +75,7 @@ jobs:
           done
 
           if [ "$ok" -ne 1 ]; then
-            echo "::error::Backend nao respondeu saudavel em /api/health/app apos deploy"
+            echo "::error::Backend nao respondeu saudavel em /health/app apos deploy"
             docker compose logs --tail 100 backend
             exit 1
           fi
