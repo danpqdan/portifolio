@@ -21,7 +21,7 @@ export default function ClienteMetricas() {
     let cancelado = false;
     (async () => {
       try {
-        const r = await fetch(`${API_BASE}/api/cliente/auth/me`, {
+        const r = await fetch(`${API_BASE}/cliente/auth/me`, {
           credentials: 'include',
         });
         if (cancelado) return;
@@ -53,7 +53,7 @@ export default function ClienteMetricas() {
   }, [estado]);
 
   async function sair() {
-    await fetch(`${API_BASE}/api/cliente/auth/logout`, {
+    await fetch(`${API_BASE}/cliente/auth/logout`, {
       method: 'POST', credentials: 'include',
     });
     navigate('/cliente/login', { replace: true });

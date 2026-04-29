@@ -217,13 +217,13 @@ class GateIntegracaoSyncTests(unittest.TestCase):
         self._tmp.cleanup()
 
     def _login(self):
-        r = self.test_client.post("/api/cliente/auth/login",
+        r = self.test_client.post("/cliente/auth/login",
                                   json={"email": "dan@acme.com", "senha": "secret-123"})
         self.assertEqual(r.status_code, 200)
 
     def test_gate_dispara_sync_grafana_com_org_correta(self):
         self._login()
-        r = self.test_client.get("/api/cliente/auth/gate")
+        r = self.test_client.get("/cliente/auth/gate")
         self.assertEqual(r.status_code, 200)
         # Sync deve ter sido chamada com (site_id, cliente_<slug>)
         self.client_grafana.get_org_by_name.assert_called_with("cliente_acme")
@@ -231,7 +231,7 @@ class GateIntegracaoSyncTests(unittest.TestCase):
     def test_gate_continua_funcionando_se_sync_falhar(self):
         self.client_grafana.get_org_by_name.side_effect = RuntimeError("grafana 500")
         self._login()
-        r = self.test_client.get("/api/cliente/auth/gate")
+        r = self.test_client.get("/cliente/auth/gate")
         # Sync falhou mas /gate retornou 200 + header — cookie vale.
         self.assertEqual(r.status_code, 200)
         self.assertEqual(r.headers.get("X-WEBAUTH-USER"), self.site_id)
@@ -241,14 +241,14 @@ class GateIntegracaoSyncTests(unittest.TestCase):
         mod._grafana_sync = None
         mod._tenants_repo = None
         self._login()
-        r = self.test_client.get("/api/cliente/auth/gate")
+        r = self.test_client.get("/cliente/auth/gate")
         self.assertEqual(r.status_code, 200)
         self.client_grafana.get_org_by_name.assert_not_called()
 
     def test_gate_chamadas_repetidas_usam_cache(self):
         self._login()
         for _ in range(5):
-            self.test_client.get("/api/cliente/auth/gate")
+            self.test_client.get("/cliente/auth/gate")
         # Apenas 1 sync de fato (cache TTL).
         self.assertEqual(self.client_grafana.get_org_by_name.call_count, 1)
 

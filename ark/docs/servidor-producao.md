@@ -96,13 +96,13 @@ Dois arquivos de vhost em `/etc/nginx/conf.d/`:
 | Arquivo | Hostnames | Upstream |
 |---|---|---|
 | `portifolio.conf` | `dsplayground.com.br` | `127.0.0.1:3000` (frontend — nginx no container servindo dist/) |
-|  | `dsplayground.com.br/api/cliente/auth/*` | `127.0.0.1:5000` (backend — login humano do dashboard) |
+|  | `dsplayground.com.br/cliente/auth/*` | `127.0.0.1:5000` (backend — login humano do dashboard) |
 |  | `dsplayground.com.br/cliente/metricas/*` | `127.0.0.1:3001` (Grafana — atras de `auth_request /__cliente_auth_gate`) |
 |  | `api.dsplayground.com.br` | `127.0.0.1:5000` (backend Flask) |
 | `portifolio.monitoring.conf` | `grafana.dsplayground.com.br` | `127.0.0.1:3001` (admin direto, fora do auth.proxy) |
 |  | `influx.dsplayground.com.br` | `127.0.0.1:8086` |
 
-Socket.IO: path canonico `/api/socket.io/` em todos os ambientes. O backend hardcode esse path independente de `FLASK_ENV` (ver `backend/app.py` `socketio_config['path']`); o cliente `socket.io-client` tem `path: '/api/socket.io/'` em `frontend/src/sdk/WebSocketService.tsx`. Requests WS da forma `wss://api.dsplayground.com.br/api/socket.io/` passam pelo `location /` do vhost da api (upgrade habilitado) e chegam no backend. Em dev local sem nginx, o frontend bate direto em `http://localhost:5000/api/socket.io/`. `async_mode='eventlet'` em todos os ambientes — sem isso o handshake retorna `upgrades:[]` e o cliente cicla em polling.
+Socket.IO: path canonico `/socket.io/` em todos os ambientes. O backend hardcode esse path independente de `FLASK_ENV` (ver `backend/app.py` `socketio_config['path']`); o cliente `socket.io-client` tem `path: '/socket.io/'` em `frontend/src/sdk/WebSocketService.tsx`. Requests WS da forma `wss://api.dsplayground.com.br/socket.io/` passam pelo `location /` do vhost da api (upgrade habilitado) e chegam no backend. Em dev local sem nginx, o frontend bate direto em `http://localhost:5000/socket.io/`. `async_mode='eventlet'` em todos os ambientes — sem isso o handshake retorna `upgrades:[]` e o cliente cicla em polling.
 
 ### Dashboard self-service do cliente
 
@@ -111,13 +111,13 @@ Fluxo do `/cliente/metricas/*` (detalhes em `ark/docs/dashboard-cliente.md`):
 ```
 Browser -> nginx (location /cliente/metricas/)
         -> auth_request /__cliente_auth_gate
-        -> Flask /api/cliente/auth/gate (valida cookie cliente_session)
+        -> Flask /cliente/auth/gate (valida cookie cliente_session)
         -> 200 + header X-WEBAUTH-USER=<site_id>
         -> proxy_pass para Grafana 127.0.0.1:3001
         -> Grafana auth.proxy confia no header e auto-cria/mapeia user
 ```
 
-Login humano em `/cliente/login` (frontend React) emite cookie `cliente_session` (HttpOnly, Secure, SameSite=Strict, 7d). Suporta senha (POST `/api/cliente/auth/login`) e magic-link (`/magic-link/solicitar` + `/magic-link/verificar`). Logout em `POST /api/cliente/auth/logout`.
+Login humano em `/cliente/login` (frontend React) emite cookie `cliente_session` (HttpOnly, Secure, SameSite=Strict, 7d). Suporta senha (POST `/cliente/auth/login`) e magic-link (`/magic-link/solicitar` + `/magic-link/verificar`). Logout em `POST /cliente/auth/logout`.
 
 Frontend em producao e um bundle estatico (`vite build`) servido por `nginx:alpine` dentro do container `portifolio-frontend` — nao ha dev server exposto. SPA fallback em `docker-nginx.conf` serve `index.html` para qualquer rota nao-estatica. URLs da API sao embutidas no bundle em build time via build args `VITE_API_URL` e `VITE_WEBSOCKET_URL`, vindos do `.env` do compose (gerado pelo Ansible) — alterar esses valores exige rebuild da imagem.
 
