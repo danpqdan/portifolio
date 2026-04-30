@@ -41,6 +41,26 @@ sdk_auth_required: false
 # === Admin LGPD ===
 admin_api_token: ""  # gerar com `python -c "import secrets; print(secrets.token_urlsafe(32))"`
 
+# === Landing comercial (apex dsplayground.com.br) ===
+# PAT GitHub com `read:packages` — baixa @danpqdan/dsplayground-analytics-sdk
+# do GitHub Packages durante o build do container `landing`. Exposto so durante
+# o RUN via BuildKit secret; NAO persiste em layer da imagem.
+# Gerar com: gh auth token  (ou criar PAT classico em github.com/settings/tokens)
+node_auth_token: ""
+
+# Dogfood: publishable key da propria landing. Gere com:
+#   docker compose exec backend python scripts/tenant_admin.py create-key \
+#       --slug dsplayground-landing --nome "DS Playground - Landing" \
+#       --ambiente production
+# e cole o pk_production_... aqui. Vazio = eventos da landing caem no bucket
+# default (so faz sentido em staging/dev).
+landing_publishable_key: ""
+
+# Build args do landing — defaults validos pra prod. Sobrescrever em staging.
+landing_site_url: "https://dsplayground.com.br"
+landing_api_url: "https://api.dsplayground.com.br"
+landing_debug: "false"
+
 # === Tunables do backend (analytics temporal) ===
 # Opcionais: o template aplica defaults via jinja `default()` se nao definidos.
 # temporal_realtime_interval: "5000"    # ms entre pushes de metricas em tempo real
