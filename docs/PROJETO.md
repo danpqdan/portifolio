@@ -483,26 +483,44 @@ docker exec portifolio-influxdb influx backup /var/lib/influxdb2/backups
 
 ## 10. Pendências priorizadas
 
+> Inventário operacional de contas/tokens/recovery em **`ark/docs/contas-e-acessos.md`**.
+> Esta seção é só a fila acionável.
+
+### 10.1 P0 fechados em 2026-04-30
+
+- ✅ **Auth nos `/analytics/* REST**` (commit `d07c841`) — cookie obrigatório + bucket forçado por site_id; 9 testes em `test_analytics_auth.py`
+- ✅ **Trigger automático de provisionamento pós-cadastro** (commit `e9beb96`) — thread daemon best-effort chama `scripts.provisionar_cliente`; 5 testes
+- ✅ **Quota enforcement** — já estava implementado (sprint anterior); 6 testes verde validados em 2026-04-30
+
+### 10.2 Fila atual
+
 | Prio | Item | Bloqueia | Onde | Estimativa |
 |---|---|---|---|---|
-| 🔴 P0 | Trigger automático de `provisionar_cliente.py` no handler `/cliente/auth/cadastro` | Self-service real (hoje cliente faz cadastro mas Influx/Grafana ficam sem provisionar) | `backend/auth/cliente_routes.py:cadastro()` | 1-2d (best-effort) |
-| 🔴 P0 | Quota enforcement: rejeitar evento com `analytics_error code=QUOTA_EXCEDIDA` quando `consumo_diario > quotas.eventos_por_dia` | Plano free abre buraco de abuso | `backend/ingestao/servico_ingestao.py` | 1d |
-| 🟡 P1 | Cardinalidade enforcement em runtime: contador `(bucket, tag) → set` + Postgres + alert em 80%/95% | Cliente pode detonar bucket InfluxDB | `backend/ingestao/validador.py` | 2-3d |
-| 🟡 P1 | Container `analytics-archiver`: cron diário exporta `[now-retencao-1d, now-retencao]` em `.lp.gz` pra `/var/backups/analytics/<slug>/` | Free tier sem backup; clientes pagos sem export | novo: `backend/archiver/` | 2d |
-| 🟡 P1 | Endpoint `GET /cliente/exportar?inicio=&fim=` com signed URL (nginx X-Accel-Redirect) | Compliance LGPD pra cliente pagante | `backend/auth/cliente_routes.py` + nginx | 1d |
-| 🟡 P1 | Email diário com counts agregados de rejeições (1×/dia, não 1×/evento) | UX: cliente não sabe que está rejeitando | novo: `backend/scripts/email_diario.py` + cron | 1-2d |
-| 🟡 P2 | Onda 1 do contrato SDK↔Backend: cache LRU idempotência + retry exponencial + dead-letter | Onda 2 e 3 dependem | SDK repo + `backend/ingestao/` | 3-5d |
-| 🟡 P2 | Onda 2: validação timestamp + skew correction + overflow priority | Onda 3 depende | SDK repo | 2-3d |
-| 🟡 P2 | Onda 3: backpressure dinâmico + schema version negotiation | Coordenação dinâmica em escala | SDK + backend | 2-3d |
-| 🟡 P2 | CORS dinâmico via `sites.dominios_permitidos` (Postgres) substituindo lista estática em `.env` | Multi-cliente real (cada cliente novo exige re-aplicar Ansible hoje) | `backend/app.py` middleware + `tenants_repo.py` | 2d |
-| 🟡 P2 | Tags derivadas server-side: `device_type` (User-Agent), `pais` (GeoIP), `referrer_dominio` (Referer) | Reduz dependência do cliente em enviar tags consistentes | `backend/ingestao/normalizador.py` | 1-2d |
-| 🟡 P2 | Org-per-cliente fim-a-fim no Grafana: `provisionar_cliente.py` cria org, mas `/gate` não força membership idempotente | Cliente cai na "Main Org" hoje | `backend/auth/cliente_routes.py:gate()` + Grafana API | 1-2d |
-| 🟢 P3 | Backend `/metrics` Prometheus-client | Dashboards de operação no Grafana operacional | `backend/app.py` + scrape config | 1d |
-| 🟢 P3 | `RESEND_API_KEY` em prod via Vault (hoje stdout sender em dev) | Magic-links e bem-vindo emails reais | `group_vars/all.yml` + `email_sender.py` | 0.5d |
-| 🟢 P3 | DNS Cloudflare: criar `portifolio.dsplayground.com.br` CNAME proxiado | Subdomínio do portfolio pessoal não resolve | tarefa do user (Cloudflare panel) | 5min |
-| 🟢 P3 | Validação end-to-end em `ark/teste-ambiente-a` (Docker) e `teste-ambiente-b` (Vagrant) dos 5 cenários de recovery | SLO interno antes de virar chave comercial | `ark/teste-ambiente-*/` | 1-2d cada cenário |
-| 🟢 P3 | 2FA TOTP no dashboard do cliente | v2 — não MVP | `backend/auth/sessao_service.py` + `clientes_users.totp_secret` | 3-5d |
-| 🟢 P3 | Migração de backup local pra S3-compatible (Backblaze B2 / Wasabi / R2) | Quando volume passar de ~50 GB ou primeiro cliente pago | `analytics-archiver` + creds | 1d |
+| 🔴 **P0** | **Hostname do dashboard cliente** — quando CF Pages assumir apex, `/cliente/metricas/*` quebra (CF Pages é estático, não roteia pro Grafana via auth_request). Decidir: `app.X` dedicado, ou Pages Functions, ou pausar cutover. | Signup público (cliente cadastra mas o "ver painel" some). Ver `contas-e-acessos.md` §3.1 PG-1 | nginx + DNS + CF | 1-2d decisão + 0.5d implementação |
+| 🔴 **P0** | **Rotacionar PAT GitHub `ghp_TjbESMOV7vi...`** vazado em chat 2026-04-29 + emitir PAT enxuto (`read:packages` only) e substituir em CF Pages secret + Ansible vault | Token amplo com `admin:org`, `repo`, `workflow`, `delete_repo` em circulação | github.com/settings/tokens | 30 min |
+| 🔴 **P0** | **2FA + recovery codes offline** em GitHub e Cloudflare | Recovery em incidente sem 2FA = days/weeks no support | painéis dos provedores | 1-2h |
+| 🟡 **P1** | **Email transacional (Resend)** — sem isso magic-link em prod cai no stdout do container = "esqueci senha" totalmente quebrado | Recover password de cliente real | `group_vars/all.yml` + `email_sender.py` (já tem stub) | 0.5d |
+| 🟡 **P1** | **Email do produto `contato@dsplayground.com.br`** — landing referencia (plano Business). Cloudflare Email Routing → forward Gmail (free) é o caminho mais rápido | UX de contato comercial | painel CF | 1-2h |
+| 🟡 **P1** | **Dashboard de Settings do cliente** — mostrar `publishable_key` (botão copiar), trocar email/senha, ver plano + consumo, baixar export LGPD | Cliente sabe a key dele e como usar; sem isso o produto não vende | new pages no `comercial` repo + endpoints REST autenticados | 3-5d |
+| 🟡 **P1** | **Recover password UX** (`/cliente/esqueci-senha` page) — magic-link já tem endpoint, falta tela | Cliente esquece senha, perde acesso | `comercial` repo | 0.5d (depende de Resend) |
+| 🟡 **P1** | **Conta empresa/CNPJ** (PJ MEI/ME/SLU + contador) | Emitir NF pro primeiro cliente pago | externo | varia |
+| 🟡 **P1** | Cardinalidade enforcement runtime + alert em 80%/95% | Cliente pode detonar bucket InfluxDB | `backend/ingestao/validador.py` | 2-3d |
+| 🟡 **P1** | Container `analytics-archiver` — cron diário exporta retenção em `.lp.gz` | Free tier sem backup; clientes pagos sem export | novo: `backend/archiver/` | 2d |
+| 🟡 **P1** | Endpoint `GET /cliente/exportar?inicio=&fim=` com signed URL | Compliance LGPD pra cliente pagante | `backend/auth/cliente_routes.py` + nginx | 1d |
+| 🟡 **P1** | Email diário com counts agregados de rejeições | UX: cliente não sabe que está rejeitando | novo: `backend/scripts/email_diario.py` + cron | 1-2d |
+| 🟡 **P1** | Backup offline de credenciais (1Password ou age key + pen drive): vault Ansible, recovery codes, age key dos backups | Recovery em catástrofe | externo + processo | 1-2h |
+| 🟢 **P2** | **Upgrade de plano** (billing Stripe ou MercadoPago — webhook → atualiza `sites.plano` + quotas) | Cliente Pro/Business sem caminho de pagamento | new `backend/billing/` | 5-7d |
+| 🟢 **P2** | Onda 1 do contrato SDK↔Backend: cache LRU idempotência + retry exponencial + dead-letter | Onda 2 e 3 dependem | SDK repo + `backend/ingestao/` | 3-5d |
+| 🟢 **P2** | Onda 2: validação timestamp + skew correction + overflow priority | Onda 3 depende | SDK repo | 2-3d |
+| 🟢 **P2** | Onda 3: backpressure dinâmico + schema version negotiation | Coordenação dinâmica em escala | SDK + backend | 2-3d |
+| 🟢 **P2** | CORS dinâmico via `sites.dominios_permitidos` | Multi-cliente real (cada cliente novo exige re-aplicar Ansible hoje) | `backend/app.py` middleware + `tenants_repo.py` | 2d |
+| 🟢 **P2** | Tags derivadas server-side: `device_type`, `pais` (GeoIP), `referrer_dominio` | Reduz dependência do cliente em enviar tags consistentes | `backend/ingestao/normalizador.py` | 1-2d |
+| 🟢 **P2** | Org-per-cliente fim-a-fim no Grafana: `/gate` força membership idempotente | Cliente cai na "Main Org" hoje | `cliente_routes.py:gate()` + Grafana API | 1-2d |
+| 🟢 **P3** | Backend `/metrics` Prometheus-client | Dashboards de operação | `backend/app.py` + scrape config | 1d |
+| 🟢 **P3** | DNS Cloudflare: criar `portifolio.dsplayground.com.br` CNAME proxiado | Subdomínio portfolio pessoal não resolve | painel CF | 5min |
+| 🟢 **P3** | Validação E2E nos 5 cenários de recovery em `ark/teste-ambiente-{a,b}` | SLO interno antes de virar chave comercial | `ark/teste-ambiente-*/` | 1-2d cada |
+| 🟢 **P3** | 2FA TOTP no dashboard do cliente | v2 — não MVP | `sessao_service.py` + `clientes_users.totp_secret` | 3-5d |
+| 🟢 **P3** | Migração backup local → S3-compatible (R2/B2/Wasabi) | Quando volume > 50 GB ou primeiro Pro contratado | `analytics-archiver` + creds | 1d |
 
 ---
 
@@ -541,6 +559,8 @@ docker exec portifolio-influxdb influx backup /var/lib/influxdb2/backups
 | `ark/docs/dashboard-cliente.md` | Design completo do produto multi-tenant + recovery runbook (sec 1-23) |
 | `ark/docs/servidor-producao.md` | Arquitetura VPS, TLS, CrowdSec, hardening |
 | `ark/docs/api-prefix-redundancia.md` | Histórico do refactor canonical (sem `/api/`) |
+| `ark/docs/migracao-multi-vps.md` | Plano executivo de migração multi-repo + multi-VPS + CDN + LB |
+| `ark/docs/contas-e-acessos.md` | Inventário de contas/tokens + recovery + checklist hardening |
 | `ark/README.md`, `ark/nginx/README.md`, `ark/ansible/README.md`, `ark/crowdsec/README.md` | Operação por área |
 | **`docs/PROJETO.md`** (este arquivo) | Estado canônico consolidado |
 
