@@ -257,7 +257,7 @@ Para o backend pegar o IP real do cliente (e nao o do Nginx), confirme que `X-Fo
 |---|---|---|
 | `FLASK_ENV` | sim | `production` |
 | `SECRET_KEY` | sim | chave Flask, gerar com `secrets.token_urlsafe(32)` |
-| `CORS_ORIGINS` | sim | lista de origens permitidas (separadas por virgula) |
+| `CORS_ORIGINS` | sim | lista de origens permitidas, separadas por virgula. Hoje cobre apenas dominios da propria plataforma — adicionar dominio de cliente exige editar `cors_origins` no vault Ansible e re-aplicar (ver `docs/plano-clientes-ambientes.md`, secao "CORS e origens permitidas"). Migracao para CORS dinamico por `sites.dominios_permitidos` esta planejada |
 | `INFLUXDB_URL` | sim | URL do InfluxDB |
 | `INFLUXDB_TOKEN` | sim | token com permissao de `buckets:read,write` |
 | `INFLUXDB_ORG` | sim | organizacao |
