@@ -1,0 +1,31 @@
+---
+import { SITE_NAME } from '~/config';
+const path = Astro.url.pathname;
+const items = [
+  { href: '/', label: 'Início' },
+  { href: '/precos', label: 'Preços' },
+  { href: '/cliente/login', label: 'Entrar' },
+];
+---
+<header class="sticky top-0 z-30 border-b border-slate-800/80 bg-slate-950/80 backdrop-blur">
+  <div class="mx-auto flex max-w-6xl items-center justify-between px-4 py-3 sm:px-6">
+    <a href="/" class="flex items-center gap-2 font-semibold tracking-tight">
+      <span class="grid size-7 place-items-center rounded-md bg-brand-500 text-white">DS</span>
+      <span class="hidden text-slate-100 sm:inline">{SITE_NAME}</span>
+    </a>
+    <nav class="flex items-center gap-1 sm:gap-3">
+      {items.map(item => (
+        <a
+          href={item.href}
+          class:list={[
+            'rounded-md px-3 py-1.5 text-sm transition',
+            path === item.href ? 'text-white' : 'text-slate-300 hover:text-white',
+          ]}
+        >
+          {item.label}
+        </a>
+      ))}
+      <a href="/cliente/cadastro" class="btn-primary !py-1.5 !px-4 ml-1">Criar conta</a>
+    </nav>
+  </div>
+</header>

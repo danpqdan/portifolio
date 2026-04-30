@@ -1,0 +1,107 @@
+---
+import Base from '~/layouts/Base.astro';
+---
+<Base
+  title="Criar conta"
+  description="Crie sua conta grátis e comece a entender seu site em minutos. Sem cartão de crédito."
+  noindex={false}
+>
+  <section class="mx-auto flex min-h-[70vh] max-w-md flex-col justify-center px-4 py-16 sm:px-6">
+    <div class="card">
+      <h1 class="text-2xl font-bold text-white">Criar conta</h1>
+      <p class="mt-1 text-sm text-slate-400">É grátis. Sem cartão de crédito.</p>
+
+      <form id="form-cadastro" class="mt-6 space-y-4" novalidate>
+        <div>
+          <label for="nome_site" class="input-label">Nome do seu site ou negócio</label>
+          <input id="nome_site" name="nome_site" type="text" autocomplete="organization" required class="input-field" placeholder="Minha Loja de Tênis" />
+        </div>
+        <div>
+          <label for="slug" class="input-label">Apelido do site</label>
+          <input id="slug" name="slug" type="text" autocomplete="off" required pattern="[a-z0-9](?:[a-z0-9\-]{1,30}[a-z0-9])" minlength="3" maxlength="32" class="input-field" placeholder="minha-loja" />
+          <p class="mt-1 text-xs text-slate-500">Vai aparecer na URL do seu painel. Use letras minúsculas, números e hífen.</p>
+        </div>
+        <div>
+          <label for="email" class="input-label">Email</label>
+          <input id="email" name="email" type="email" autocomplete="email" required class="input-field" placeholder="voce@suaempresa.com.br" />
+        </div>
+        <div>
+          <label for="senha" class="input-label">Senha</label>
+          <input id="senha" name="senha" type="password" autocomplete="new-password" required minlength="8" class="input-field" placeholder="pelo menos 8 caracteres" />
+        </div>
+
+        <div id="erro" role="alert" class="hidden rounded-md border border-red-500/40 bg-red-500/10 px-3 py-2 text-sm text-red-200"></div>
+
+        <button id="submit" type="submit" class="btn-primary w-full" data-cta="form-cadastro">Criar conta</button>
+        <p class="text-center text-sm text-slate-400">
+          Já tem conta? <a href="/cliente/login" class="text-brand-300 hover:text-brand-200">Entrar</a>
+        </p>
+      </form>
+    </div>
+  </section>
+
+  <script>
+    import { cadastrar } from '~/lib/api';
+    import { API_URL } from '~/config';
+
+    const form = document.getElementById('form-cadastro') as HTMLFormElement | null;
+    const erroBox = document.getElementById('erro')!;
+    const submitBtn = document.getElementById('submit') as HTMLButtonElement | null;
+
+    function mensagemPorCode(code: string): string {
+      switch (code) {
+        case 'EMAIL_JA_CADASTRADO': return 'Esse email já tem conta. Você pode entrar por aqui mesmo.';
+        case 'SLUG_JA_CADASTRADO':  return 'Esse apelido já está sendo usado. Tenta outro.';
+        case 'SLUG_INVALIDO':       return 'Apelido inválido. Use letras minúsculas, números e hífen (3 a 32 caracteres).';
+        case 'EMAIL_INVALIDO':      return 'Esse email não parece válido. Confere se digitou certo.';
+        case 'SENHA_CURTA':         return 'A senha precisa ter pelo menos 8 caracteres.';
+        case 'PAYLOAD_INCOMPLETO':  return 'Preencha todos os campos pra continuar.';
+        case 'REDE':                return 'Sem internet agora. Tenta de novo em alguns segundos.';
+        default:                    return 'Não deu pra criar a conta agora. Tenta de novo, por favor.';
+      }
+    }
+
+    function mostrarErro(msg: string) {
+      erroBox.textContent = msg;
+      erroBox.classList.remove('hidden');
+    }
+    function limparErro() {
+      erroBox.textContent = '';
+      erroBox.classList.add('hidden');
+    }
+
+    form?.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      limparErro();
+      submitBtn!.disabled = true;
+      submitBtn!.textContent = 'Criando conta…';
+
+      const fd = new FormData(form);
+      const payload = {
+        email: String(fd.get('email') ?? '').trim(),
+        senha: String(fd.get('senha') ?? ''),
+        nome_site: String(fd.get('nome_site') ?? '').trim(),
+        slug: String(fd.get('slug') ?? '').trim().toLowerCase(),
+      };
+
+      const r = await cadastrar(payload, { apiUrl: API_URL });
+
+      const sdk = (window as any).__dsplayground;
+
+      if (r.ok) {
+        sdk?.enviarEvento?.('cadastro_concluido', {
+          site_id: r.user.site_id, plano: r.site.plano,
+        });
+        window.location.href = '/cliente/metricas';
+        return;
+      }
+
+      sdk?.enviarEvento?.('formulario_erro', {
+        formulario: 'cadastro', code: r.code, status: r.status,
+      });
+      mostrarErro(mensagemPorCode(r.code));
+      submitBtn!.disabled = false;
+      submitBtn!.textContent = 'Criar conta';
+    });
+  </script>
+</Base>
