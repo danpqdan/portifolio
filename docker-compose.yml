@@ -89,10 +89,32 @@ services:
     container_name: portifolio-frontend
     depends_on:
       - backend
-    # Frontend servido por nginx:alpine no container (porta 80 interna).
-    # Nginx do host faz proxy para 127.0.0.1:3000 → dsplayground.com.br.
+    # Frontend (portfolio pessoal React 3D) servido por nginx:alpine.
+    # Nginx do host faz proxy para 127.0.0.1:3000 → portifolio.dsplayground.com.br.
     ports:
       - "127.0.0.1:3000:80"
+    restart: unless-stopped
+
+  landing:
+    build:
+      context: ./landing
+      args:
+        # URLs embutidas no bundle Astro em build time. Defaults apontam pra prod.
+        PUBLIC_SITE_URL: ${PUBLIC_SITE_URL:-https://dsplayground.com.br}
+        PUBLIC_API_URL: ${PUBLIC_API_URL:-https://api.dsplayground.com.br}
+        PUBLIC_PUBLISHABLE_KEY: ${PUBLIC_PUBLISHABLE_KEY:-}
+        PUBLIC_DEBUG: ${PUBLIC_DEBUG:-false}
+      # BuildKit secret pra baixar @danpqdan/dsplayground-analytics-sdk do
+      # GitHub Packages — mesmo padrao do frontend.
+      secrets:
+        - NODE_AUTH_TOKEN
+    container_name: portifolio-landing
+    depends_on:
+      - backend
+    # Landing comercial (Astro estatico) servida em apex (dsplayground.com.br).
+    # Nginx do host faz proxy para 127.0.0.1:3002 → dsplayground.com.br.
+    ports:
+      - "127.0.0.1:3002:80"
     restart: unless-stopped
 
 secrets:
