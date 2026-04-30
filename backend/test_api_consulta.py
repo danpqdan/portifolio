@@ -1,8 +1,24 @@
-"""Testes dos endpoints REST de consulta (Frente B) e LGPD (Frente C)."""
+"""Testes dos endpoints REST de consulta (Frente B) e LGPD (Frente C).
+
+Apos P0 #1 (auth REST), os endpoints `/analytics/*` exigem cookie
+`cliente_session` valido. Estes testes validam apenas:
+  - 401 sem cookie (caminho default)
+  - 503 quando InfluxDB nao inicializado (sem auth pra simplificar)
+  - LGPD admin (auth via Authorization Bearer, separada)
+
+Cobertura "happy path com cookie + bucket forcado" vive em test_analytics_auth.py.
+"""
 import os
 import sys
+import tempfile
 import unittest
 from unittest.mock import MagicMock
+
+# Bootstrap do env ANTES de importar app — evita eventlet/Postgres em test local
+_TMP_DB = tempfile.NamedTemporaryFile(suffix=".db", delete=False)
+_TMP_DB.close()
+os.environ.setdefault("TENANTS_DATABASE_URL", f"sqlite:///{_TMP_DB.name}")
+os.environ.setdefault("SOCKETIO_ASYNC_MODE", "threading")
 
 sys.path.append(os.path.dirname(__file__))
 
@@ -39,58 +55,9 @@ class _CapturadorInfluxDB:
         return self._healthy
 
 
-class ApiConsultaTest(unittest.TestCase):
-    def setUp(self):
-        self.client = app_module.app.test_client()
-        self._influx_original = app_module.influxdb_service
-
-    def tearDown(self):
-        app_module.influxdb_service = self._influx_original
-
-    def test_metricas_retorna_pontos_agregados(self):
-        app_module.influxdb_service = _CapturadorInfluxDB(metricas=[
-            {"page_type": "/", "totais": {"cliques": 12, "visualizacoes": 3}},
-        ])
-        resposta = self.client.get('/analytics/metricas?app_id=portfolio&page_type=/&limit=50')
-        self.assertEqual(resposta.status_code, 200)
-        corpo = resposta.get_json()
-        self.assertEqual(corpo['status'], 'success')
-        self.assertEqual(corpo['filtros']['app_id'], 'portfolio')
-        self.assertEqual(corpo['filtros']['limit'], 50)
-        self.assertEqual(len(corpo['pontos']), 1)
-        self.assertEqual(corpo['pontos'][0]['totais']['cliques'], 12)
-
-    def test_metricas_503_sem_influxdb(self):
-        app_module.influxdb_service = None
-        resposta = self.client.get('/analytics/metricas')
-        self.assertEqual(resposta.status_code, 503)
-
-    def test_metricas_limita_limit_no_maximo(self):
-        app_module.influxdb_service = _CapturadorInfluxDB()
-        resposta = self.client.get('/analytics/metricas?limit=999999')
-        self.assertEqual(resposta.get_json()['filtros']['limit'], 1000)
-
-    def test_metricas_default_limit_100(self):
-        app_module.influxdb_service = _CapturadorInfluxDB()
-        resposta = self.client.get('/analytics/metricas')
-        self.assertEqual(resposta.get_json()['filtros']['limit'], 100)
-
-    def test_web_vitals_aceita_filtro_por_nome(self):
-        app_module.influxdb_service = _CapturadorInfluxDB(vitals=[
-            {"nome": "LCP", "page_type": "/", "rating": "good", "valor": 1800},
-        ])
-        resposta = self.client.get('/analytics/web-vitals?nome=LCP')
-        self.assertEqual(resposta.status_code, 200)
-        self.assertEqual(resposta.get_json()['filtros']['nome'], 'LCP')
-
-    def test_custom_events_retorna_ocorrencias(self):
-        app_module.influxdb_service = _CapturadorInfluxDB(customs=[
-            {"nome": "checkout_iniciado", "page_type": "/", "ocorrencias": 4},
-        ])
-        resposta = self.client.get('/analytics/custom-events?nome=checkout_iniciado')
-        self.assertEqual(resposta.status_code, 200)
-        corpo = resposta.get_json()
-        self.assertEqual(corpo['pontos'][0]['ocorrencias'], 4)
+# NOTA: classe `ApiConsultaTest` removida em P0 #1. Os endpoints `/analytics/*`
+# agora exigem cookie `cliente_session` e forcam bucket-per-cliente — cobertura
+# completa em test_analytics_auth.py.
 
 
 class AdminLgpdTest(unittest.TestCase):

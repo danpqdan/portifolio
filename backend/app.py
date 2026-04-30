@@ -126,7 +126,9 @@ socketio_config['path'] = '/socket.io'
 # producao roda 'gunicorn --worker-class eventlet', entao o Socket.IO
 # precisa do mesmo loop async em todos os ambientes — sem isso o
 # handshake retorna `upgrades:[]` e o cliente cicla em polling.
-socketio_config['async_mode'] = 'eventlet'
+# Em ambientes de teste local sem eventlet (Windows), passe
+# SOCKETIO_ASYNC_MODE=threading no env pra evitar import error.
+socketio_config['async_mode'] = os.environ.get('SOCKETIO_ASYNC_MODE', 'eventlet')
 
 socketio = SocketIO(app, **socketio_config)
 
@@ -345,6 +347,7 @@ try:
         _sessao_service,
         grafana_sync=_grafana_sync_service,
         tenants_repo=_tenants_repo_singleton,
+        clientes_users_repo=_clientes_users_repo,
     )
     app.register_blueprint(_cliente_routes_mod.cliente_auth_bp)
     if _grafana_sync_service:
@@ -513,19 +516,50 @@ def _parametros_consulta_comuns():
     }
 
 
+def _resolver_site_do_cookie():
+    """Valida cookie `cliente_session` e devolve (site_id, bucket_name).
+
+    Retorna (None, None) quando cookie ausente, invalido, expirado, revogado
+    ou usuario inativo. Resposta 401 deve ser feita pelo caller.
+    """
+    from auth import cliente_routes as _cr_mod
+    cookie = request.cookies.get(_cr_mod.COOKIE_NAME, "")
+    if not cookie:
+        return None, None
+    user = _cr_mod._obter_svc().validar_cookie(cookie)  # noqa: SLF001
+    if user is None:
+        return None, None
+    # bucket vem de tenants_repo (mesmo singleton injetado em cliente_routes)
+    repo = _cr_mod._tenants_repo  # noqa: SLF001
+    if repo is None:
+        return user.site_id, None
+    site = repo.obter_site(user.site_id)
+    bucket = site.bucket_name if site else None
+    return user.site_id, bucket
+
+
 @api_bp.route("/analytics/metricas", methods=["GET"])
 @limiter.limit("30 per minute")
 @security_middleware
 def get_analytics_metricas():
-    """Soma contadores agregados de `page_analytics` por pagina e periodo."""
+    """Soma contadores agregados de `page_analytics` por pagina e periodo.
+
+    Auth obrigatoria via cookie `cliente_session`. Bucket e SEMPRE forcado
+    pelo site_id do cookie — querystring `app_id` nao consegue ler dados
+    de outro site (isolamento multi-tenant).
+    """
+    site_id, bucket = _resolver_site_do_cookie()
+    if site_id is None:
+        return jsonify({"status": "error", "code": "NAO_AUTENTICADO"}), 401
+
     if not influxdb_service:
         return jsonify({"status": "unavailable", "detalhe": "InfluxDB nao inicializado"}), 503
 
     params = _parametros_consulta_comuns()
-    pontos = influxdb_service.query_metricas_agregadas(**params)
+    pontos = influxdb_service.query_metricas_agregadas(**params, bucket=bucket)
     return jsonify({
         "status": "success",
-        "filtros": params,
+        "filtros": {**params, "site_id": site_id},
         "pontos": pontos,
     })
 
@@ -534,13 +568,16 @@ def get_analytics_metricas():
 @limiter.limit("30 per minute")
 @security_middleware
 def get_analytics_web_vitals():
-    """Lista pontos de Web Vitals (LCP/CLS/INP)."""
+    """Lista pontos de Web Vitals (LCP/CLS/INP). Auth via cookie + bucket forcado."""
+    site_id, bucket = _resolver_site_do_cookie()
+    if site_id is None:
+        return jsonify({"status": "error", "code": "NAO_AUTENTICADO"}), 401
+
     if not influxdb_service:
         return jsonify({"status": "unavailable"}), 503
 
     params = _parametros_consulta_comuns()
     nome = request.args.get('nome')
-    # page_type/ambiente nao sao usados no filter do web-vitals atualmente
     pontos = influxdb_service.query_web_vitals(
         app_id=params['app_id'],
         page_type=params['page_type'],
@@ -548,10 +585,11 @@ def get_analytics_web_vitals():
         inicio=params['inicio'],
         fim=params['fim'],
         limit=params['limit'],
+        bucket=bucket,
     )
     return jsonify({
         "status": "success",
-        "filtros": {**params, "nome": nome},
+        "filtros": {**params, "site_id": site_id, "nome": nome},
         "pontos": pontos,
     })
 
@@ -560,7 +598,11 @@ def get_analytics_web_vitals():
 @limiter.limit("30 per minute")
 @security_middleware
 def get_analytics_custom_events():
-    """Soma ocorrencias de eventos customizados por nome e pagina."""
+    """Soma ocorrencias de eventos customizados. Auth via cookie + bucket forcado."""
+    site_id, bucket = _resolver_site_do_cookie()
+    if site_id is None:
+        return jsonify({"status": "error", "code": "NAO_AUTENTICADO"}), 401
+
     if not influxdb_service:
         return jsonify({"status": "unavailable"}), 503
 
@@ -573,10 +615,11 @@ def get_analytics_custom_events():
         inicio=params['inicio'],
         fim=params['fim'],
         limit=params['limit'],
+        bucket=bucket,
     )
     return jsonify({
         "status": "success",
-        "filtros": {**params, "nome": nome},
+        "filtros": {**params, "site_id": site_id, "nome": nome},
         "pontos": pontos,
     })
 
