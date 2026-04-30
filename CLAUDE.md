@@ -159,6 +159,19 @@ Grupo compartilhado **`analytics` GID 10001** e a ponte host↔container. Nao mu
 4. Conferir logs: `make -f ark/Makefile logs` e `docker logs` dos containers relacionados.
 5. Nao comitar sem o usuario pedir. Quando pedir, seguir Conventional Commits em pt-BR (ver `AGENTS.md`).
 
+## CORS e origens permitidas
+
+Backend opera com CORS **estatico** por enquanto: lista vem de `cors_origins` em `group_vars/all.yml` (vault Ansible) -> `CORS_ORIGINS` no `.env` -> `Flask-CORS` + `socketio.cors_allowed_origins`. Cobre so dominios da propria plataforma (`dsplayground.com.br` + subdominios). **Nao escala para clientes** — cada novo dominio assinante exige editar o vault e re-aplicar.
+
+Adicionar uma origem hoje:
+
+1. `cd ark/ansible && ansible-vault edit group_vars/all.yml` (ajusta `cors_origins:`).
+2. `make -f ark/Makefile ansible-apply` — regenera `backend/.env`.
+3. `docker compose up -d --force-recreate --no-deps backend` — `restart` nao recarrega `env_file`.
+4. Validar: `docker exec portifolio-backend env | grep CORS_ORIGINS`.
+
+Detalhes do plano de migracao para CORS dinamico (por `sites.dominios_permitidos`, ja previsto no schema do Postgres) em `docs/plano-clientes-ambientes.md` -> "CORS e origens permitidas".
+
 ## Observabilidade
 
 - Logs da app sao estruturados (`evento=<nome> chave=valor`). Eventos-chave: `conectado`, `recebido`, `validado`, `rejeitado`, `persistido_*`, `erro_persistencia`, `backpressure`, `acesso_bloqueado`, `[ADMIN-AUDIT]`.
