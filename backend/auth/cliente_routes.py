@@ -1,6 +1,7 @@
 """Blueprint `/cliente/auth` — auth humana do dashboard do cliente.
 
 Endpoints:
+  POST /cadastro                 — body {email,senha,nome_site,slug}; 201 + cookie
   POST /login                    — body {email, senha}, set cookie, 200/401
   POST /logout                   — revoga sessao, limpa cookie, 200
   GET  /me                       — retorna {user_id, site_id, papel} ou 401
@@ -24,6 +25,8 @@ from __future__ import annotations
 
 import logging
 import os
+import re
+import sqlite3
 from typing import Optional
 from urllib.parse import urlencode
 
@@ -34,6 +37,11 @@ from .email_sender import EmailSender, criar_sender_padrao
 from .grafana_sync import GrafanaSyncService
 from .sessao_service import RateLimitExcedido, SessaoService
 from .tenants_repo import TenantsRepo
+
+
+_RE_SLUG = re.compile(r"^[a-z0-9](?:[a-z0-9\-]{1,30}[a-z0-9])$")
+_RE_EMAIL = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+_SENHA_MIN = 8
 
 
 logger = logging.getLogger("auth.cliente")
@@ -54,6 +62,7 @@ _svc_instance: Optional[SessaoService] = None
 _email_sender: Optional[EmailSender] = None
 _grafana_sync: Optional[GrafanaSyncService] = None
 _tenants_repo: Optional[TenantsRepo] = None
+_clientes_users_repo: Optional[ClientesUsersRepo] = None
 
 
 def configurar(
@@ -61,18 +70,23 @@ def configurar(
     email_sender: Optional[EmailSender] = None,
     grafana_sync: Optional[GrafanaSyncService] = None,
     tenants_repo: Optional[TenantsRepo] = None,
+    clientes_users_repo: Optional[ClientesUsersRepo] = None,
 ) -> None:
     """Configura singletons. Chamar uma vez no boot.
 
     `grafana_sync` e `tenants_repo` sao opcionais; quando ambos estao
     presentes, /gate sincroniza membership da org Grafana do cliente
     (sec 13 do dashboard-cliente.md). Sem eles, /gate so valida cookie.
+
+    `tenants_repo` e `clientes_users_repo` sao obrigatorios para /cadastro.
     """
     global _svc_instance, _email_sender, _grafana_sync, _tenants_repo
+    global _clientes_users_repo
     _svc_instance = svc
     _email_sender = email_sender or criar_sender_padrao()
     _grafana_sync = grafana_sync
     _tenants_repo = tenants_repo
+    _clientes_users_repo = clientes_users_repo
 
 
 def _obter_svc() -> SessaoService:
@@ -111,7 +125,152 @@ def _erro(code: str, message: str, status: int):
     return jsonify({"status": "error", "code": code, "message": message}), status
 
 
+def _provisionar_pos_cadastro(*, slug: str, nome: str, plano: str,
+                              ambiente: str, site_id: str) -> None:
+    """Dispara provisionamento idempotente em background (best-effort).
+
+    Cria bucket Influx + token + org Grafana + datasource + dashboards.
+    Falhas sao logadas em security_logger; cadastro NAO falha por causa disso
+    (admin pode reconciliar com `python scripts/provisionar_cliente.py --slug X`).
+
+    Esta funcao e o ponto de hook substituido em testes (sincrono, capturando
+    chamadas). Em producao spawna `_executar_provisionamento` em thread daemon.
+    """
+    import threading
+    threading.Thread(
+        target=_executar_provisionamento,
+        kwargs={
+            "slug": slug, "nome": nome, "plano": plano,
+            "ambiente": ambiente, "site_id": site_id,
+        },
+        daemon=True,
+        name=f"provisionar-{slug}",
+    ).start()
+
+
+def _executar_provisionamento(*, slug: str, nome: str, plano: str,
+                              ambiente: str, site_id: str) -> None:
+    """Execucao real do provisionamento — chamado em thread daemon.
+
+    Constroi argparse.Namespace artificial pra reaproveitar `provisionar()`
+    do scripts/provisionar_cliente.py sem refactor. Logs estruturados pro
+    CrowdSec parsear.
+    """
+    import argparse
+    try:
+        from scripts.provisionar_cliente import provisionar
+    except Exception as erro:  # noqa: BLE001
+        security_logger.error(
+            "evento=provisionamento_import_falhou site_id=%s slug=%s motivo=%s",
+            site_id, slug, erro,
+        )
+        return
+
+    args = argparse.Namespace(
+        slug=slug, nome=nome, ambiente=ambiente,
+        plano=plano, dominio=[], bucket=None, skip_dashboards=False,
+    )
+    try:
+        result = provisionar(args)
+        security_logger.info(
+            "evento=provisionamento_ok site_id=%s slug=%s bucket=%s grafana_org=%s",
+            site_id, slug, result.bucket_name, result.grafana_org_id,
+        )
+    except SystemExit as erro:
+        security_logger.error(
+            "evento=provisionamento_falhou site_id=%s slug=%s motivo=%s",
+            site_id, slug, erro,
+        )
+    except Exception as erro:  # noqa: BLE001
+        security_logger.exception(
+            "evento=provisionamento_excecao site_id=%s slug=%s motivo=%s",
+            site_id, slug, erro,
+        )
+
+
 # ---------- endpoints ----------
+
+
+@cliente_auth_bp.route("/cadastro", methods=["POST"])
+def cadastro():
+    """Cria site novo + admin user + auto-login.
+
+    Payload: {email, senha, nome_site, slug}
+    - slug: 3-32 chars, [a-z0-9-], comeca/termina com alfanum (constraint Influx-friendly)
+    - bucket_name fixado em `cliente_<slug>` (bucket-per-cliente)
+    - papel do user inicial: admin
+    - retorna 201 + cookie cliente_session pra auto-login
+    """
+    if _tenants_repo is None or _clientes_users_repo is None:
+        return _erro("CADASTRO_NAO_CONFIGURADO",
+                     "tenants_repo/clientes_users_repo nao configurados", 503)
+
+    body = request.get_json(silent=True) or {}
+    email = (body.get("email") or "").strip()
+    senha = body.get("senha") or ""
+    nome_site = (body.get("nome_site") or "").strip()
+    slug = (body.get("slug") or "").strip().lower()
+
+    if not email or not senha or not nome_site or not slug:
+        return _erro("PAYLOAD_INCOMPLETO",
+                     "email, senha, nome_site e slug sao obrigatorios", 400)
+    if not _RE_EMAIL.match(email):
+        return _erro("EMAIL_INVALIDO", "formato de email invalido", 400)
+    if len(senha) < _SENHA_MIN:
+        return _erro("SENHA_CURTA", f"senha precisa ter ao menos {_SENHA_MIN} caracteres", 400)
+    if not _RE_SLUG.match(slug):
+        return _erro("SLUG_INVALIDO",
+                     "slug deve ter 3-32 chars [a-z0-9-]; comecar/terminar com alfanum", 400)
+
+    if _clientes_users_repo.obter_user_por_email(email) is not None:
+        return _erro("EMAIL_JA_CADASTRADO", "email ja existe", 409)
+    if _tenants_repo.obter_site_por_slug(slug) is not None:
+        return _erro("SLUG_JA_CADASTRADO", "slug ja existe", 409)
+
+    bucket_name = f"cliente_{slug}"
+    try:
+        site = _tenants_repo.criar_site(
+            slug=slug, nome=nome_site,
+            ambiente=os.environ.get("AMBIENTE", "production"),
+            dominios=[], plano="free", bucket_name=bucket_name,
+        )
+    except sqlite3.IntegrityError:
+        # corrida: outro cadastro pegou o slug entre o check e o insert
+        return _erro("SLUG_JA_CADASTRADO", "slug ja existe", 409)
+
+    svc = _obter_svc()
+    user = svc.criar_user(site.id, email, senha=senha, papel="admin")
+    criada = svc.criar_sessao(user.id, ip=_ip_cliente(),
+                              user_agent=request.headers.get("User-Agent"))
+    security_logger.info(
+        "evento=auth_cliente_cadastro_ok site_id=%s slug=%s user_id=%s ip=%s",
+        site.id, slug, user.id, _ip_cliente(),
+    )
+
+    # Best-effort: dispara provisionamento (bucket Influx + Grafana org +
+    # datasource + dashboards) em thread daemon. Cadastro NAO falha se isso
+    # quebrar — admin reconcilia com `provisionar_cliente.py --slug X` via cron.
+    try:
+        _provisionar_pos_cadastro(
+            slug=slug, nome=nome_site, plano="free",
+            ambiente=os.environ.get("AMBIENTE", "production"),
+            site_id=site.id,
+        )
+    except Exception as erro:  # noqa: BLE001
+        security_logger.error(
+            "evento=provisionamento_dispatch_falhou site_id=%s slug=%s motivo=%s",
+            site.id, slug, erro,
+        )
+
+    resp = make_response(jsonify({
+        "status": "success",
+        "user": {"id": user.id, "site_id": user.site_id,
+                 "email": user.email, "papel": user.papel},
+        "site": {"id": site.id, "slug": site.slug, "nome": site.nome,
+                 "bucket_name": site.bucket_name, "plano": site.plano},
+    }), 201)
+    _set_cookie(resp, criada.cookie_plaintext, max_age=svc._sessao_ttl)  # noqa: SLF001
+    return resp
 
 
 @cliente_auth_bp.route("/login", methods=["POST"])
