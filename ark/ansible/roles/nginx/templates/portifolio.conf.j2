@@ -6,8 +6,15 @@ upstream portifolio_backend {
     keepalive 32;
 }
 
+# Portfolio pessoal (React 3D — Home/Projects/About)
 upstream portifolio_frontend {
     server 127.0.0.1:3000;
+    keepalive 16;
+}
+
+# Landing comercial (Astro estatico — produto, /precos, /cliente/login, /cliente/cadastro)
+upstream portifolio_landing {
+    server 127.0.0.1:3002;
     keepalive 16;
 }
 
@@ -24,13 +31,101 @@ server {
     return 301 https://$host$request_uri;
 }
 
-# Apex + portifolio.X servem o mesmo bundle por enquanto. Split em 2 vhosts
-# quando a landing do produto for construida (apex vai pra landing; portfolio
-# pessoal fica em portifolio.X). Ver ark/nginx/portifolio.conf (espelho).
+# ============== Apex: landing comercial do produto ==============
+# dsplayground.com.br -> Astro estatico (landing + login + cadastro + precos)
+# Mais /cliente/metricas/* via auth_request (Grafana) e /api/* (backend).
 server {
     listen 443 ssl;
     listen [::]:443 ssl;
-    server_name {{ dominio }} portifolio.{{ dominio }};
+    server_name {{ dominio }};
+
+    ssl_certificate     /etc/ssl/cloudflare-origin/fullchain.pem;
+    ssl_certificate_key /etc/ssl/cloudflare-origin/privkey.pem;
+    include             /etc/nginx/snippets/ssl.conf;
+
+    client_max_body_size 1m;
+    access_log /var/log/nginx/portifolio-landing.access.log;
+    error_log  /var/log/nginx/portifolio-landing.error.log warn;
+
+    location / {
+        proxy_pass http://portifolio_landing;
+        proxy_http_version 1.1;
+        proxy_set_header Host              $host;
+        proxy_set_header X-Real-IP         $remote_addr;
+        proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+
+        proxy_read_timeout 60s;
+        proxy_send_timeout 60s;
+    }
+
+    # ================== /api/* canonico (apex) ==================
+    # Backend escuta paths SEM `/api/` (ver backend/app.py + auth/cliente_routes.py).
+    # No apex strippamos o `/api/` aqui antes do proxy_pass; no subdominio
+    # api.{{ dominio }} o vhost separado proxia direto.
+    location /api/ {
+        rewrite ^/api/(.*)$ /$1 break;
+        limit_req zone=cliente_auth burst=20 nodelay;
+        proxy_pass http://portifolio_backend;
+        proxy_http_version 1.1;
+        proxy_set_header Host              $host;
+        proxy_set_header X-Real-IP         $remote_addr;
+        proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
+    # ================== Dashboard do cliente (Grafana via auth_request) ==================
+    # Fluxo de auth (cliente humano):
+    #   1. Browser -> /cliente/metricas/...
+    #   2. nginx auth_request -> /__cliente_auth_gate -> Flask valida cookie
+    #   3. Flask retorna 200 + X-WEBAUTH-USER (= site_id)
+    #   4. nginx propaga o header e faz proxy_pass pro Grafana
+    #   5. Grafana auth.proxy confia no header e cria/mapeia o usuario
+    location /cliente/metricas/ {
+        auth_request /__cliente_auth_gate;
+        auth_request_set $cliente_user  $upstream_http_x_webauth_user;
+        auth_request_set $cliente_papel $upstream_http_x_webauth_papel;
+
+        error_page 401 = @cliente_nao_autenticado;
+
+        proxy_pass http://portifolio_grafana/;
+        proxy_http_version 1.1;
+        proxy_set_header Host              $host;
+        proxy_set_header X-Real-IP         $remote_addr;
+        proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-WEBAUTH-USER    $cliente_user;
+        proxy_set_header X-WEBAUTH-PAPEL   $cliente_papel;
+
+        proxy_set_header Upgrade           $http_upgrade;
+        proxy_set_header Connection        "upgrade";
+        proxy_read_timeout 300s;
+        proxy_send_timeout 300s;
+    }
+
+    location = /__cliente_auth_gate {
+        internal;
+        proxy_pass http://portifolio_backend/cliente/auth/gate;
+        proxy_pass_request_body off;
+        proxy_set_header Content-Length "";
+        proxy_set_header Host              $host;
+        proxy_set_header X-Real-IP         $remote_addr;
+        proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+    }
+
+    # Nao-autenticado vai pra tela de login da landing (Astro estatico).
+    location @cliente_nao_autenticado {
+        return 302 /cliente/login;
+    }
+}
+
+# ============== portifolio.X: portfolio pessoal (React 3D) ==============
+# portifolio.dsplayground.com.br -> Home/Projects/About do Daniel.
+# Nao tem rotas /cliente/* (essas vivem no apex/produto).
+server {
+    listen 443 ssl;
+    listen [::]:443 ssl;
+    server_name portifolio.{{ dominio }};
 
     ssl_certificate     /etc/ssl/cloudflare-origin/fullchain.pem;
     ssl_certificate_key /etc/ssl/cloudflare-origin/privkey.pem;
@@ -52,22 +147,10 @@ server {
         proxy_send_timeout 60s;
     }
 
-    # ================== /api/* canonico (apex) ==================
-    # Backend escuta paths SEM `/api/` (ver backend/app.py + auth/cliente_routes.py).
-    # No apex `{{ dominio }}/api/...`, strippamos o `/api/` aqui antes do
-    # proxy_pass; no subdominio `api.{{ dominio }}` o vhost separado proxia
-    # direto, sem rewrite (subdomain dedicado, paths ja chegam sem `/api/`).
-    #
-    # Fluxo de auth do dashboard (cliente humano):
-    #   1. Browser -> /cliente/metricas/...
-    #   2. nginx auth_request -> /__cliente_auth_gate -> Flask valida cookie
-    #   3. Flask retorna 200 + X-WEBAUTH-USER (= site_id)
-    #   4. nginx propaga o header e faz proxy_pass pro Grafana
-    #   5. Grafana auth.proxy confia no header e cria/mapeia o usuario
+    # Compat: o portfolio ainda chama /api/* pelo bundle Vite. Strippa o prefixo.
     location /api/ {
         rewrite ^/api/(.*)$ /$1 break;
-        # cliente_auth tem rate-limit dedicado; demais endpoints herdam o default.
-        limit_req zone=cliente_auth burst=20 nodelay;
+        limit_req zone=analytics_edge burst=40 nodelay;
         proxy_pass http://portifolio_backend;
         proxy_http_version 1.1;
         proxy_set_header Host              $host;
@@ -75,49 +158,9 @@ server {
         proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
     }
-
-    location /cliente/metricas/ {
-        auth_request /__cliente_auth_gate;
-        auth_request_set $cliente_user  $upstream_http_x_webauth_user;
-        auth_request_set $cliente_papel $upstream_http_x_webauth_papel;
-
-        error_page 401 = @cliente_nao_autenticado;
-
-        proxy_pass http://portifolio_grafana/;
-        proxy_http_version 1.1;
-        proxy_set_header Host              $host;
-        proxy_set_header X-Real-IP         $remote_addr;
-        proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-        proxy_set_header X-WEBAUTH-USER    $cliente_user;
-        proxy_set_header X-WEBAUTH-PAPEL   $cliente_papel;
-
-        # Websocket do Grafana (live dashboards)
-        proxy_set_header Upgrade           $http_upgrade;
-        proxy_set_header Connection        "upgrade";
-        proxy_read_timeout 300s;
-        proxy_send_timeout 300s;
-    }
-
-    # Internal: subrequest que o auth_request dispara contra o backend.
-    # Nao e acessivel externamente (diretiva `internal`).
-    location = /__cliente_auth_gate {
-        internal;
-        proxy_pass http://portifolio_backend/cliente/auth/gate;
-        proxy_pass_request_body off;
-        proxy_set_header Content-Length "";
-        proxy_set_header Host              $host;
-        proxy_set_header X-Real-IP         $remote_addr;
-        proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
-        # Cookie segue automatico via proxy_pass_request_headers (default on).
-    }
-
-    # Redireciona nao-autenticado para a tela de login (servida pelo frontend React).
-    location @cliente_nao_autenticado {
-        return 302 /cliente/login;
-    }
 }
 
+# ============== API: backend Flask + Socket.IO ==============
 server {
     listen 443 ssl;
     listen [::]:443 ssl;
