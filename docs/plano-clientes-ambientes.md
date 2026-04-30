@@ -130,6 +130,27 @@ Antes de virar a chave comercial, a suite precisa provar:
 - `publishable_key` que estourou a quota diaria -> `POST /auth/sdk-token` retorna 429 ate o reset da janela.
 - Handshake Socket.IO com `sdk_jwt` valido mas `Origin` fora da allowlist -> rejeitado (defesa em profundidade, nao apenas no `/auth/sdk-token`).
 
+## CORS e origens permitidas
+
+**Estado atual (2026-04-29):** CORS estatico. O backend le `CORS_ORIGINS` do `.env` (gerado pelo Ansible a partir de `cors_origins` em `group_vars/all.yml`) e passa a lista para Flask-CORS e para Socket.IO `cors_allowed_origins`. So ha entradas para os dominios da propria plataforma (`https://dsplayground.com.br`, `https://portifolio.dsplayground.com.br`). **Nao escala para clientes** — cada novo dominio assinante exige editar o vault e re-aplicar o playbook. Ver `backend/config.py:50` e `backend/app.py:99`.
+
+**Estado-alvo:** CORS dinamico por `site_id`, validado contra `sites.dominios_permitidos`:
+
+- O `.env` mantem apenas as origens da propria plataforma (apex, dashboard cliente, eventuais ferramentas internas).
+- Origens de assinantes ficam em `sites.dominios_permitidos` (array por site, ja previsto na tabela). Adicionar/remover dominio de cliente vira UPDATE no Postgres, nao redeploy.
+- Flask-CORS aceita callable em `origins` — substituir a lista estatica por uma funcao que consulta `sites.dominios_permitidos` (com cache curto) cobre o REST.
+- Socket.IO `cors_allowed_origins` tambem aceita callable — mesma estrategia para o handshake.
+- A validacao de `Origin` no `/auth/sdk-token` e no `connect` do Socket.IO (ver "Garantias testaveis" acima) ja olha `dominios_permitidos`. O CORS dinamico apenas estende a mesma fonte de verdade para o pre-flight do browser.
+
+**Workaround ate la (adicionar uma origem hoje):**
+
+1. Atualizar `cors_origins` em `ark/ansible/group_vars/all.yml` (vault — `ansible-vault edit`).
+2. Rodar `make -f ark/Makefile ansible-apply` (regenera `backend/.env`).
+3. Recriar o container backend com `docker compose up -d --force-recreate --no-deps backend` — `restart` apenas nao recarrega o `env_file`.
+4. Validar com `docker exec portifolio-backend env | grep CORS_ORIGINS`.
+
+Nao adicionar origens diretamente no `backend/.env` no host — o proximo `ansible-apply` sobrescreve. Vault e fonte de verdade.
+
 ## Modelo de isolamento de dados
 
 A definicao final sera feita junto com a estrategia de buckets. Opcoes em avaliacao:
