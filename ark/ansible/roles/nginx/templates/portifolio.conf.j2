@@ -28,8 +28,8 @@ server {
 # quando a landing do produto for construida (apex vai pra landing; portfolio
 # pessoal fica em portifolio.X). Ver ark/nginx/portifolio.conf (espelho).
 server {
-    listen 443 ssl http2;
-    listen [::]:443 ssl http2;
+    listen 443 ssl;
+    listen [::]:443 ssl;
     server_name {{ dominio }} portifolio.{{ dominio }};
 
     ssl_certificate     /etc/ssl/cloudflare-origin/fullchain.pem;
@@ -119,9 +119,11 @@ server {
 }
 
 server {
-    listen 443 ssl http2;
-    listen [::]:443 ssl http2;
+    listen 443 ssl;
+    listen [::]:443 ssl;
     server_name api.{{ dominio }};
+    # http2 desligado: nginx 1.20 (Rocky 9) nao suporta WebSocket sobre HTTP/2 (RFC 8441).
+    # socket.io abre wss://api/socket.io e o handshake Upgrade so funciona em HTTP/1.1.
 
     ssl_certificate     /etc/ssl/cloudflare-origin/fullchain.pem;
     ssl_certificate_key /etc/ssl/cloudflare-origin/privkey.pem;
