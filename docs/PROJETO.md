@@ -517,12 +517,12 @@ docker exec portifolio-influxdb influx backup /var/lib/influxdb2/backups
 - ✅ **Hostname do dashboard cliente em `app.dsplayground.com.br`** (commits `abee7da`, `69e6fd6`, `7c980a0`, deploy 2026-04-30) — cookie `cliente_session` viaja entre apex/app/api via `COOKIE_DOMAIN=dsplayground.com.br`; vhost nginx `app.X` ativo; landing redireciona pós-cadastro pra `app.X/cliente/metricas`; Grafana `GF_ROOT_URL` migrado.
 - ✅ **Apex em CF Pages** — landing comercial servida via Cloudflare Pages do repo `comercial`; nginx host removeu vhost apex (dead code). `PUBLIC_DASHBOARD_URL` configurado no painel CF Pages (2026-04-30).
 - ✅ **Hardening de conta** — PAT amplo revogado, PAT enxuto criado (`read:packages`), 2FA habilitado em GitHub e CF.
+- ✅ **Smoke test e2e** — `ark/scripts/smoke-test-arquitetura.sh` valida 20 pontos com clean-room (cria conta descartável + DELETE cascade no fim). 20/20 PASS validado em 2026-04-30. Bugs corrigidos via processo: PR #11 (`limiter.exempt(/gate)` — auth_request batia 429) + PR #12 (`proxy_pass` sem trailing `/` — Grafana sub_path causava loop 301).
 
 ### 10.2 Fila atual
 
 | Prio | Item | Bloqueia | Onde | Estimativa |
 |---|---|---|---|---|
-| 🟡 **P1** | **Smoke test e2e do cookie + redirect** com credenciais reais — confirmar que `Set-Cookie: ...; Domain=dsplayground.com.br` aparece no `/login` e que `/cliente/metricas/` em `app.X` lê o cookie + carrega Grafana | UX de signup público — fluxo de fato funcionando | manual via curl + browser | 15min (você) |
 | 🟢 **P2** | **CrowdSec nginx-bouncer task ansible** — packagecloud retorna HTML (404). `ignore_errors: true` adicionado em 2026-04-30 pra ansible-apply não abortar; firewall-bouncer (nftables) já cobre. Decidir: abandonar nginx-bouncer ou instalar `.rpm` direto | Próximos `ansible-apply` continuam verdes | `ark/ansible/roles/crowdsec/tasks/main.yml` | 30min |
 | 🟢 **P3** | **Decidir destino do `landing/` no monorepo** — hoje é espelho da canônica em CF Pages (`comercial`). Manter como fallback até Phase 4 da migração ou remover já | `deploy.yml` rebuilda landing redundante | `landing/` + `docker-compose.yml` + `deploy.yml` | 1h se decidir remover |
 | 🟡 **P1** | **Email transacional (Resend)** — sem isso magic-link em prod cai no stdout do container = "esqueci senha" totalmente quebrado | Recover password de cliente real | `group_vars/all.yml` + `email_sender.py` (já tem stub) | 0.5d |
