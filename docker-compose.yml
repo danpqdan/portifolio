@@ -100,6 +100,13 @@ services:
       context: ./backend
       dockerfile: archiver/Dockerfile
     container_name: portifolio-archiver
+    # Profile `archiver` = opt-in. `docker compose up -d` NAO sobe esse
+    # service por default. Pra ativar:
+    #   docker compose --profile archiver up -d --build archiver
+    # Motivo: archiver exige R2_* env vars; sem elas crash-loopa. Profile
+    # permite ansible-apply rodar sem se preocupar com vault de R2 vazio.
+    profiles:
+      - archiver
     depends_on:
       influxdb:
         condition: service_healthy
