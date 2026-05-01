@@ -57,6 +57,24 @@ sdk_auth_required: false
 # === Admin LGPD ===
 admin_api_token: ""  # gerar com `python -c "import secrets; print(secrets.token_urlsafe(32))"`
 
+# === Archiver Cloudflare R2 ===
+# Sidecar `analytics-archiver` exporta janelas pre-expiracao do InfluxDB
+# pra R2 (S3-compatible). Free tier R2: 10 GB storage + 1M Class A ops/mes
+# — cobre ate ~55 clientes plano medio antes de comecar a cobrar.
+#
+# Setup:
+#   1. CF dashboard → R2 → Add subscription (gratis enquanto < 10 GB).
+#   2. Create bucket `dsplayground-analytics-archive` (jurisdiction EU).
+#   3. R2 → Manage API tokens → Create Token (Read+Write no bucket).
+#   4. Cole abaixo. account_id e o subdominio do endpoint
+#      (https://<account_id>.r2.cloudflarestorage.com).
+r2_account_id: ""
+r2_access_key_id: ""
+r2_secret_access_key: ""
+r2_bucket: "dsplayground-analytics-archive"
+# false = nao roda backfill no boot do container; true = roda 1x antes do cron.
+archiver_run_on_start: "false"
+
 # === Landing comercial (apex dsplayground.com.br) ===
 # PAT GitHub com `read:packages` — baixa @danpqdan/dsplayground-analytics-sdk
 # do GitHub Packages durante o build do container `landing`. Exposto so durante
