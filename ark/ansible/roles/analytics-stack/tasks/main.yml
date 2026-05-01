@@ -148,7 +148,10 @@
     - pg_ready.rc | default(1) == 0
   community.docker.docker_container_exec:
     container: portifolio-postgres
-    command:
+    # community.docker >=5 espera `argv:` para lista; `command:` e str.
+    # Passar lista em `command` faz o modulo serializar como "[psql,...]"
+    # e o OCI falha com "executable file not found".
+    argv:
       - psql
       - -U
       - "{{ postgres_user }}"
