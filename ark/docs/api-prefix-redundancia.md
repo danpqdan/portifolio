@@ -1,6 +1,8 @@
 # API prefix redundante + bug latente do SDK
 
-> Status: **proposta** — aguarda decisao + execucao.
+> Status: **executado** — SDK v0.3.0 (Socket.IO sem `/api/`) + remocao de
+> `url_prefix` dos blueprints + nginx strippa `/api/` no apex. Em prod desde
+> 2026-04-30. Doc preservada como historico arquitetural.
 > Identificado em 2026-04-29 durante revisao de exemplo do SDK.
 
 ## Resumo do problema
