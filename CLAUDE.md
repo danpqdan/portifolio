@@ -194,14 +194,16 @@ Detalhes do plano de migracao para CORS dinamico (por `sites.dominios_permitidos
 - ✅ Certbot removido; CF Origin Cert e a unica fonte de TLS (validade ate 2041).
 - ✅ Prometheus (`9090`) e node-exporter (`9100`) bindam em `127.0.0.1` no `ark/monitoring/docker-compose.monitoring.yml`. Sem porta publica externa (firewalld so libera 22022/80/443).
 
-**A confirmar via SSH no proximo `ansible-apply`:**
-- 🔍 Logger root do Flask separado do `security_logger` em `backend/app.py` — verificar se `security.log` so recebe linhas com `evento=` (resto vai pra stdout do container).
-- 🔍 `roles/analytics-stack/` tasks com `when: not ansible_check_mode` — `make ansible-check` precisa nao quebrar.
-- 🔍 **Vault encryption:** `group_vars/all.yml` deve estar criptografado (`$ANSIBLE_VAULT;1.1;AES256` na primeira linha). Senha em `/opt/portifolio/.vault-password` (0600, `deploy:analytics`, fora do git). Usuario reportou "vault precisa garantir criptografia" em 2026-05-01 — validar antes de tratar como done.
+**Codigo pronto no repo, falta efetivar via ansible-apply:**
+- 🟡 Logger root do Flask separado do `security_logger` em `backend/app.py:91-96` (`propagate = False`, file handler exclusivo no logger nomeado `security`). `security.log` so recebe linhas com `evento=`/eventos do logger nomeado; resto vai pra stdout do container. Confirmado por leitura do repo 2026-05-01.
+- 🟡 `roles/analytics-stack/tasks/main.yml:93-94, 103-104, 113-114` ja tem `when: not ansible_check_mode` nas tasks de health (backend, landing) e retencao Influx. `make ansible-check` nao deve quebrar nessas. Confirmado por leitura do repo 2026-05-01.
 
-**Nao e mais pendencia:** instalacao do bouncer-nginx via packagecloud — bouncer (especificamente `crowdsec-firewall-bouncer-nftables`) ja vem instalado por default com a instalacao do CrowdSec via repo oficial. Tasks 25-49 de `roles/crowdsec/tasks/main.yml` que tentam instalar `crowdsec-nginx-bouncer` separado sao redundantes — remover na proxima rodada de cleanup do role.
+**A confirmar via SSH (so dah pra validar no host):**
+- 🔍 **Vault encryption:** `group_vars/all.yml` na VPS deve estar criptografado (`$ANSIBLE_VAULT;1.1;AES256` na primeira linha). Senha em `/opt/portifolio/.vault-password` (0600, `deploy:analytics`, fora do git). Usuario reportou "vault precisa garantir criptografia" em 2026-05-01. Comando de check: `head -c 30 /opt/portifolio/ark/ansible/group_vars/all.yml`.
 
-Quando todos confirmados, remover esta secao.
+**Nao e mais pendencia:** instalacao do bouncer-nginx via packagecloud — bouncer (`crowdsec-firewall-bouncer-nftables`) ja vem por default com a instalacao do CrowdSec via repo oficial. Tasks redundantes em `roles/crowdsec/tasks/main.yml` removidas em PR separado.
+
+Quando vault confirmado, remover esta secao.
 
 ## Quando em duvida
 
