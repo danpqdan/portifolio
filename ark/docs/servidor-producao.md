@@ -250,7 +250,7 @@ Tudo vem do `backend/.env` (ou `ark/monitoring/.env` para Grafana). Renderizado 
 | `TENANTS_DATABASE_URL` | sqlite:///./data/tenants.db | postgres em prod, sqlite em dev |
 | `JWT_KEYS_DIR` | ./data/keys | chaves RSA do sdk_jwt |
 | `SDK_TOKEN_TTL_SECONDS` | 300 | TTL do token publico do SDK |
-| `SDK_AUTH_REQUIRED` | false | exige sdk_jwt em todos os Socket.IO connects |
+| `SDK_AUTH_REQUIRED` | true (em prod via Ansible; dev `.env.example` mantem false) | exige sdk_jwt em todos os Socket.IO connects — sem isso o handshake retorna `code=TOKEN_MISSING` e desconecta |
 | `SESSION_REQUEST_LIMIT` | 10000 | maximo de batches por sessao Socket.IO; 0 desabilita |
 | `SESSION_IDLE_TIMEOUT` | 180 | segundos sem atividade ate sessao virar zombie (reaper limpa) |
 | `SESSION_REAPER_INTERVAL` | 30 | frequencia do reaper de zombies |
