@@ -46,6 +46,10 @@
 
   post_tasks:
     - name: Validar que o backend responde em /health/app via loopback (path canonico)
+      # Pulamos em check mode — uri nao faz HTTP real e backend_health fica
+      # sem .status, quebrando a condicional 'until'. Mesmo padrao das tasks
+      # de health da role analytics-stack apos o fix de 2026-04-22.
+      when: not ansible_check_mode
       uri:
         url: http://127.0.0.1:5000/health/app
         status_code: 200
@@ -55,6 +59,7 @@
       until: backend_health.status == 200
 
     - name: Validar que o landing comercial responde em /_health (apex)
+      when: not ansible_check_mode
       uri:
         url: http://127.0.0.1:3002/_health
         status_code: 200

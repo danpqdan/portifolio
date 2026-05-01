@@ -185,6 +185,43 @@ docker compose up -d --build --force-recreate --no-deps backend frontend
 - `INFLUXDB_TOKEN`, `SECRET_KEY`, `ADMIN_API_TOKEN`, credenciais Postgres — no `group_vars/all.yml` criptografado com Ansible Vault.
 - Nunca versionar `all.yml` em claro — `.example.yml` e o unico que entra no git.
 
+### Rotacao de `postgres_password`
+
+`POSTGRES_PASSWORD` em `docker-compose.yml` so e honrada no **initdb** do
+container Postgres (criacao do volume `portifolio_postgres_data`). Em
+volume ja existente (re-deploy normal), o role `portifolio` mantem a senha
+antiga — **rotacionar `postgres_password` no vault e rodar `ansible-apply`
+NAO rotaciona a senha real do banco**. Resultado historico: backend
+crash-loop com `FATAL: password authentication failed`, nginx 502 publico
+(incidente 2026-05-01).
+
+A role `analytics-stack` cobre isso desde 2026-05-01 com 2 tasks pos-`compose up`:
+
+1. **Aguardar Postgres pronto pra aceitar comandos administrativos** — `pg_isready` com retry 10x3s.
+2. **Rotacionar senha do role Postgres pra refletir vault atual (idempotente)** —
+   `ALTER USER "{{ postgres_user }}" WITH PASSWORD '{{ postgres_password }}';`
+   via `community.docker.docker_container_exec` com SQL no `stdin` (senha
+   nao aparece em `ps`), `no_log: true`, conectando via socket Unix dentro do
+   container (pg_hba default usa `trust` em conexoes locais).
+
+Procedimento operacional pra rotacionar:
+
+```bash
+cd /opt/portifolio/ark/ansible
+ansible-vault edit group_vars/all.yml
+# trocar postgres_password por nova
+make -f ../Makefile ansible-apply
+# A role:
+#   1. regenera backend/.env e compose .env com a nova senha
+#   2. compose up (sobe stack)
+#   3. ALTER USER no cluster pra alinhar com .env
+#   4. health backend OK
+```
+
+Restricao: `postgres_password` **nao pode conter aspa simples** — escape
+SQL nao e feito no template. Geracao recomendada e `secrets.token_urlsafe(32)`
+(safe por construcao).
+
 ## Owner:group — mapa operacional
 
 Grupo compartilhado **`analytics` GID 10001** e a ponte entre host e containers para bind-mounts funcionarem sem UID mismatch. Criado pela role `base` no host e pelos Dockerfiles do backend/frontend.
