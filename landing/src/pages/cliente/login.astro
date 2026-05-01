@@ -33,7 +33,7 @@ import Base from '~/layouts/Base.astro';
 
   <script>
     import { login } from '~/lib/api';
-    import { API_URL } from '~/config';
+    import { API_URL, DASHBOARD_URL } from '~/config';
 
     const form = document.getElementById('form-login') as HTMLFormElement | null;
     const erroBox = document.getElementById('erro')!;
@@ -69,7 +69,7 @@ import Base from '~/layouts/Base.astro';
         sdk?.enviarEvento?.('login_concluido', {
           site_id: r.user.site_id, papel: r.user.papel,
         });
-        window.location.href = '/cliente/metricas';
+        window.location.href = DASHBOARD_URL;
         return;
       }
 
