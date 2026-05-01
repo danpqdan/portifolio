@@ -6,6 +6,7 @@ upstream portifolio_backend {
     keepalive 32;
 }
 
+# Portfolio pessoal (React 3D — Home/Projects/About)
 upstream portifolio_frontend {
     server 127.0.0.1:3000;
     keepalive 16;
@@ -17,20 +18,96 @@ upstream portifolio_grafana {
     keepalive 8;
 }
 
+# Apex `{{ dominio }}` NAO esta mais aqui — DNS apontado pro Cloudflare Pages
+# (projeto `comercial`, repo separado dsplayground/comercial). Landing comercial
+# servida do edge. CF Pages nao roteia auth_request, por isso a area logada
+# (/cliente/metricas) migrou pro subdominio dedicado app.{{ dominio }} abaixo.
+# Ver ark/docs/migracao-multi-vps.md §4.4.
+
 server {
     listen 80;
     listen [::]:80;
-    server_name {{ dominio }} portifolio.{{ dominio }} api.{{ dominio }};
+    server_name app.{{ dominio }} portifolio.{{ dominio }} api.{{ dominio }};
     return 301 https://$host$request_uri;
 }
 
-# Apex + portifolio.X servem o mesmo bundle por enquanto. Split em 2 vhosts
-# quando a landing do produto for construida (apex vai pra landing; portfolio
-# pessoal fica em portifolio.X). Ver ark/nginx/portifolio.conf (espelho).
+# ============== app.{{ dominio }}: dashboard logado do cliente ==============
+# Subdominio dedicado pra area logada. Cookie `cliente_session` viaja entre
+# api.{{ dominio }} e app.{{ dominio }} porque o backend seta
+# Domain={{ cookie_domain | default(dominio) }} (var Ansible cookie_domain).
+#
+# Fluxo /cliente/metricas:
+#   1. Browser app.{{ dominio }}/cliente/metricas/...
+#   2. nginx auth_request -> /__cliente_auth_gate -> Flask valida cookie
+#   3. Flask retorna 200 + X-WEBAUTH-USER (= site_id)
+#   4. nginx propaga o header e faz proxy_pass pro Grafana
+#   5. Grafana auth.proxy confia e cria/mapeia o usuario
 server {
     listen 443 ssl;
     listen [::]:443 ssl;
-    server_name {{ dominio }} portifolio.{{ dominio }};
+    server_name app.{{ dominio }};
+
+    ssl_certificate     /etc/ssl/cloudflare-origin/fullchain.pem;
+    ssl_certificate_key /etc/ssl/cloudflare-origin/privkey.pem;
+    include             /etc/nginx/snippets/ssl.conf;
+
+    client_max_body_size 1m;
+    access_log /var/log/nginx/portifolio-app.access.log;
+    error_log  /var/log/nginx/portifolio-app.error.log warn;
+
+    # Raiz do app — placeholder ate UI propria existir.
+    # Por enquanto manda pro dashboard direto. Quando dsplayground-app entrar
+    # (Astro+React em CF Pages), trocar por proxy/redirect pra ele.
+    location = / {
+        return 302 /cliente/metricas/;
+    }
+
+    location /cliente/metricas/ {
+        auth_request /__cliente_auth_gate;
+        auth_request_set $cliente_user  $upstream_http_x_webauth_user;
+        auth_request_set $cliente_papel $upstream_http_x_webauth_papel;
+
+        error_page 401 = @cliente_nao_autenticado;
+
+        proxy_pass http://portifolio_grafana/;
+        proxy_http_version 1.1;
+        proxy_set_header Host              $host;
+        proxy_set_header X-Real-IP         $remote_addr;
+        proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-WEBAUTH-USER    $cliente_user;
+        proxy_set_header X-WEBAUTH-PAPEL   $cliente_papel;
+
+        proxy_set_header Upgrade           $http_upgrade;
+        proxy_set_header Connection        "upgrade";
+        proxy_read_timeout 300s;
+        proxy_send_timeout 300s;
+    }
+
+    location = /__cliente_auth_gate {
+        internal;
+        proxy_pass http://portifolio_backend/cliente/auth/gate;
+        proxy_pass_request_body off;
+        proxy_set_header Content-Length "";
+        proxy_set_header Host              $host;
+        proxy_set_header X-Real-IP         $remote_addr;
+        proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+    }
+
+    # Nao-autenticado vai pra tela de login da landing (em CF Pages no apex).
+    # Absoluto porque app.{{ dominio }} e apex sao hosts diferentes.
+    location @cliente_nao_autenticado {
+        return 302 https://{{ dominio }}/cliente/login;
+    }
+}
+
+# ============== portifolio.{{ dominio }}: portfolio pessoal (React 3D) ==============
+# portifolio.{{ dominio }} -> Home/Projects/About do Daniel.
+# Nao tem rotas /cliente/* (essas vivem em app.{{ dominio }}).
+server {
+    listen 443 ssl;
+    listen [::]:443 ssl;
+    server_name portifolio.{{ dominio }};
 
     ssl_certificate     /etc/ssl/cloudflare-origin/fullchain.pem;
     ssl_certificate_key /etc/ssl/cloudflare-origin/privkey.pem;
@@ -52,22 +129,10 @@ server {
         proxy_send_timeout 60s;
     }
 
-    # ================== /api/* canonico (apex) ==================
-    # Backend escuta paths SEM `/api/` (ver backend/app.py + auth/cliente_routes.py).
-    # No apex `{{ dominio }}/api/...`, strippamos o `/api/` aqui antes do
-    # proxy_pass; no subdominio `api.{{ dominio }}` o vhost separado proxia
-    # direto, sem rewrite (subdomain dedicado, paths ja chegam sem `/api/`).
-    #
-    # Fluxo de auth do dashboard (cliente humano):
-    #   1. Browser -> /cliente/metricas/...
-    #   2. nginx auth_request -> /__cliente_auth_gate -> Flask valida cookie
-    #   3. Flask retorna 200 + X-WEBAUTH-USER (= site_id)
-    #   4. nginx propaga o header e faz proxy_pass pro Grafana
-    #   5. Grafana auth.proxy confia no header e cria/mapeia o usuario
+    # Compat: o portfolio ainda chama /api/* pelo bundle Vite. Strippa o prefixo.
     location /api/ {
         rewrite ^/api/(.*)$ /$1 break;
-        # cliente_auth tem rate-limit dedicado; demais endpoints herdam o default.
-        limit_req zone=cliente_auth burst=20 nodelay;
+        limit_req zone=analytics_edge burst=40 nodelay;
         proxy_pass http://portifolio_backend;
         proxy_http_version 1.1;
         proxy_set_header Host              $host;
@@ -75,49 +140,9 @@ server {
         proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
     }
-
-    location /cliente/metricas/ {
-        auth_request /__cliente_auth_gate;
-        auth_request_set $cliente_user  $upstream_http_x_webauth_user;
-        auth_request_set $cliente_papel $upstream_http_x_webauth_papel;
-
-        error_page 401 = @cliente_nao_autenticado;
-
-        proxy_pass http://portifolio_grafana/;
-        proxy_http_version 1.1;
-        proxy_set_header Host              $host;
-        proxy_set_header X-Real-IP         $remote_addr;
-        proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-        proxy_set_header X-WEBAUTH-USER    $cliente_user;
-        proxy_set_header X-WEBAUTH-PAPEL   $cliente_papel;
-
-        # Websocket do Grafana (live dashboards)
-        proxy_set_header Upgrade           $http_upgrade;
-        proxy_set_header Connection        "upgrade";
-        proxy_read_timeout 300s;
-        proxy_send_timeout 300s;
-    }
-
-    # Internal: subrequest que o auth_request dispara contra o backend.
-    # Nao e acessivel externamente (diretiva `internal`).
-    location = /__cliente_auth_gate {
-        internal;
-        proxy_pass http://portifolio_backend/cliente/auth/gate;
-        proxy_pass_request_body off;
-        proxy_set_header Content-Length "";
-        proxy_set_header Host              $host;
-        proxy_set_header X-Real-IP         $remote_addr;
-        proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
-        # Cookie segue automatico via proxy_pass_request_headers (default on).
-    }
-
-    # Redireciona nao-autenticado para a tela de login (servida pelo frontend React).
-    location @cliente_nao_autenticado {
-        return 302 /cliente/login;
-    }
 }
 
+# ============== API: backend Flask + Socket.IO ==============
 server {
     listen 443 ssl;
     listen [::]:443 ssl;

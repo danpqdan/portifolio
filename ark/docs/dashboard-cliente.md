@@ -7,7 +7,7 @@
 > que eles precisem aprender Grafana, sem expor dados entre tenants, e
 > sem reutilizar credencial publica como credencial de leitura.
 
-## Estado de implementacao (2026-04-27)
+## Estado de implementacao (2026-04-29)
 
 **Implementado na branch `dev`:**
 
@@ -18,10 +18,15 @@
 | Service (sessao + magic-link + rate-limit) | `backend/auth/sessao_service.py` | ✅ |
 | Email sender (stdout + Resend) | `backend/auth/email_sender.py` | ✅ |
 | Flask blueprint `/cliente/auth` | `backend/auth/cliente_routes.py` | ✅ |
+| Endpoint self-service `/cliente/auth/cadastro` | `backend/auth/cliente_routes.py` + `test_cliente_cadastro.py` | ✅ 2026-04-29 |
 | Registro no app.py | `backend/app.py` | ✅ |
-| Nginx `/cliente/metricas` + `auth_request` | `ark/ansible/roles/nginx/templates/portifolio.conf.j2` + espelho | ✅ |
+| Nginx vhost split (apex landing + portifolio.X) | `ark/ansible/roles/nginx/templates/portifolio.conf.j2` + espelho | ✅ 2026-04-29 |
 | Grafana `auth.proxy` + subpath | `ark/monitoring/docker-compose.monitoring.yml` | ✅ |
-| Frontend `/cliente/login` (mobile-first) | `frontend/src/pages/ClienteLogin.jsx` + `ClienteMetricas.jsx` | ✅ |
+| Frontend `/cliente/login` (mobile-first, hoje em portifolio.X) | `frontend/src/pages/ClienteLogin.jsx` + `ClienteMetricas.jsx` | ✅ |
+| Landing comercial Astro+Tailwind no apex | `landing/` + `Dockerfile` + service no compose | ✅ 2026-04-29 |
+| Cliente HTTP tipado (cadastro/login) | `landing/src/lib/api.ts` + `api.test.ts` | ✅ 2026-04-29 |
+| Tracking de CTAs e eventos (cadastro/login/erro) | `landing/src/lib/tracking.ts` + `tracking.test.ts` | ✅ 2026-04-29 |
+| Ansible: var `node_auth_token` + landing health + canonical `/health/app` | `ark/ansible/...` | ✅ 2026-04-29 |
 | CLI admin de users | `backend/scripts/dashboard_user_admin.py` | ✅ |
 | Dashboard analytics-overview corrigido (4 paineis) | `ark/monitoring/grafana/dashboards/analytics-overview.json` | ✅ |
 | Anti-abuse com TTL + skip de IPs privados | `backend/app.py` | ✅ |
@@ -31,7 +36,7 @@
 | `SitesCache` (TTL 5min) + roteamento de ingest por bucket | `backend/auth/sites_cache.py` + `ingestao/servico_ingestao.py` | ✅ sprint 1 |
 | Validador exige `app_id` e `ambiente` no envelope | `backend/ingestao/validador.py` | ✅ sprint 1 |
 | `ip_address` e `metric_id` viraram fields (anti-cardinalidade) | `backend/influxdb_service.py` | ✅ sprint 1 |
-| Testes (45 + 7 endpoint + 13 bucket-per-cliente) | `backend/test_*.py` | ✅ |
+| Testes backend (211 verde) + landing (15 verde) | `backend/test_*.py` + `landing/src/lib/*.test.ts` | ✅ 2026-04-29 |
 
 **Hardening Grafana Viewer (sprint 1 extra, 2026-04-27):** `GF_USERS_VIEWERS_CAN_EDIT=false`, `GF_EXPLORE_ENABLED=false`, `GF_SNAPSHOTS_EXTERNAL_ENABLED=false` em `ark/monitoring/docker-compose.monitoring.yml`. Validado: `curl -H 'X-WEBAUTH-USER:<id>' /api/dashboards/home` retorna `canEdit:false canSave:false canAdmin:false`.
 
@@ -189,14 +194,15 @@ CREATE TABLE clientes_magic_links (
 
 ## 6. Endpoints (Flask blueprint `/cliente/auth`)
 
-| Metodo | Rota                          | Payload          | Resposta                                            |
-|--------|-------------------------------|------------------|-----------------------------------------------------|
-| POST   | `/magic-link/solicitar`       | `{email}`        | sempre `200 {ok:true}` (nao vaza emails existentes) |
-| GET    | `/magic-link/verificar?t=...` | —                | 302 → `/cliente/metricas` + Set-Cookie              |
-| POST   | `/login`                      | `{email,senha}`  | 200 + cookie OR 401                                 |
-| POST   | `/logout`                     | —                | revoga sessao, limpa cookie                         |
-| GET    | `/me`                         | —                | `{user_id, cliente_id, papel}` ou 401               |
-| GET    | `/gate`                       | —                | 200 + `X-WEBAUTH-USER: <cliente_id>` ou 401         |
+| Metodo | Rota                          | Payload                                  | Resposta                                            |
+|--------|-------------------------------|------------------------------------------|-----------------------------------------------------|
+| POST   | `/cadastro`                   | `{email,senha,nome_site,slug}`           | 201 + cookie OR 400/409                             |
+| POST   | `/magic-link/solicitar`       | `{email}`                                | sempre `200 {ok:true}` (nao vaza emails existentes) |
+| GET    | `/magic-link/verificar?t=...` | —                                        | 302 → `/cliente/metricas` + Set-Cookie              |
+| POST   | `/login`                      | `{email,senha}`                          | 200 + cookie OR 401                                 |
+| POST   | `/logout`                     | —                                        | revoga sessao, limpa cookie                         |
+| GET    | `/me`                         | —                                        | `{user_id, cliente_id, papel}` ou 401               |
+| GET    | `/gate`                       | —                                        | 200 + `X-WEBAUTH-USER: <cliente_id>` ou 401         |
 
 `/gate` e o endpoint do `auth_request` do nginx.
 
@@ -242,6 +248,11 @@ Formato `evento=<x> cliente_id=<id> user_id=<id> ip=<ip> ua=<ua>`:
 
 ## 11. Provisionamento de novo cliente
 
+Dois caminhos coexistem (ambos suportados):
+
+**Self-service (recomendado, default em prod desde 2026-04-29)** — cliente cadastra-se pela landing comercial em `dsplayground.com.br/cliente/cadastro`. Endpoint `POST /cliente/auth/cadastro` cria `sites` + `clientes_users` (admin) e devolve cookie de sessao no mesmo response. Fluxo detalhado em §23.
+
+**Admin/CLI (fallback, onboarding manual)**:
 1. Cliente SDK e criado (fluxo existente — Postgres `clientes`).
 2. Trigger cria 1 `clientes_users` com `papel='admin'` e email do
    contato.
@@ -545,3 +556,101 @@ backend/scripts/provisionar_cliente.py --rotate-token --site <slug>
 ```
 
 **Importante**: testar os 5 cenarios em ambiente B (Vagrant) antes de virar a chave comercial. Documentar tempos medios em SLO interno.
+
+---
+
+## 23. Landing comercial + self-service signup (2026-04-29)
+
+Decisao tomada em 2026-04-29: separar **portfolio pessoal** do **produto comercial** em hostnames distintos, e abrir self-service signup via landing.
+
+### 23.1 Split de dominios
+
+| Hostname | Conteudo | Container | Porta loopback |
+|---|---|---|---|
+| `dsplayground.com.br` (apex) | Landing comercial (Astro estatico) — produto, preços, cadastro, login | `portifolio-landing` (nginx:alpine + dist/) | 3002 |
+| `portifolio.dsplayground.com.br` | Portfolio pessoal do Daniel (React 3D — Home/Projects/About) | `portifolio-frontend` (nginx:alpine + Vite bundle) | 3000 |
+| `api.dsplayground.com.br` | Backend Flask + Socket.IO (paths canonicos sem `/api/`) | `portifolio-backend` | 5000 |
+
+Apex tambem rota `/cliente/metricas/*` (auth_request -> Grafana via X-WEBAUTH-USER) e `/api/*` (rewrite strippa o prefix antes do proxy_pass pro backend). Vhosts em `ark/ansible/roles/nginx/templates/portifolio.conf.j2` com espelho em `ark/nginx/portifolio.conf`.
+
+### 23.2 Stack do landing
+
+- **Astro 4 + Tailwind 3** em `landing/`. Build estatico — todo o SEO (meta tags, OG, Twitter card, JSON-LD `SoftwareApplication`, `sitemap.xml`, `robots.txt`) vai pro HTML; nada e SPA-rendered.
+- **vitest + happy-dom** pra unit tests do cliente HTTP (`lib/api.ts`) e do tracking de CTAs (`lib/tracking.ts`).
+- Dockerfile espelha o do frontend: stage de build (node:22) + stage de runtime (nginx:alpine servindo `dist/`).
+- Build args: `PUBLIC_SITE_URL`, `PUBLIC_API_URL`, `PUBLIC_PUBLISHABLE_KEY`, `PUBLIC_DEBUG`.
+
+### 23.3 Endpoint de cadastro
+
+`POST /cliente/auth/cadastro` (em `backend/auth/cliente_routes.py:cadastro()`):
+
+**Payload**: `{email, senha, nome_site, slug}`. Validacoes:
+- `email` regex `^[^@\s]+@[^@\s]+\.[^@\s]+$`
+- `senha` >= 8 chars
+- `slug` regex `^[a-z0-9](?:[a-z0-9\-]{1,30}[a-z0-9])$` (3-32, comeca/termina alfanumerico)
+- `nome_site` qualquer texto nao-vazio
+
+**Acoes**:
+1. Checa duplicatas (email em `clientes_users`, slug em `sites`) → 409 com `code` tipado.
+2. `tenants_repo.criar_site(slug=..., nome_site, ambiente, dominios=[], plano='free', bucket_name='cliente_<slug>')`.
+3. `sessao_service.criar_user(site.id, email, papel='admin', senha=...)` (gera senha_hash via werkzeug).
+4. `sessao_service.criar_sessao(user.id)` — cookie HttpOnly+Secure+SameSite=Strict.
+5. Retorna 201 com `{status, user, site}` e Set-Cookie.
+
+**Codes de erro**: `PAYLOAD_INCOMPLETO`, `EMAIL_INVALIDO`, `SENHA_CURTA`, `SLUG_INVALIDO`, `EMAIL_JA_CADASTRADO`, `SLUG_JA_CADASTRADO`, `CADASTRO_NAO_CONFIGURADO` (503 — repos nao injetados no boot).
+
+**Auditoria**: log `evento=auth_cliente_cadastro_ok site_id=... slug=... user_id=... ip=...` em `security.log` (CrowdSec parseia).
+
+**Testes**: `backend/test_cliente_cadastro.py` cobre happy path, bucket `cliente_<slug>`, papel admin, dup email/slug, validacao de payload completa (8 testes).
+
+### 23.4 Provisionamento pos-cadastro (gap atual)
+
+O cadastro hoje cria APENAS `sites` + `clientes_users`. **Nao cria** ainda:
+- Bucket InfluxDB `cliente_<slug>` (sec. 19) — quando o primeiro evento chega, o `SitesCache` resolve `bucket_name` mas ninguem cria o bucket no Influx.
+- Org Grafana `cliente_<slug>` (sec. 13) — `auth.proxy` continua caindo na Main Org.
+- Datasource Influx no Grafana com token escopado (sec. 13).
+- Publishable key inicial (sec. 19) — admin precisa rodar `tenant_admin.py create-key` manual.
+
+**Mitigacao curto prazo**: ate o trigger pos-cadastro existir, o admin roda manualmente:
+```bash
+docker compose exec backend python scripts/provisionar_cliente.py \
+    --slug <slug> --nome "<Nome>" --plano free
+```
+
+**Solucao permanente (proximo sprint)**: chamar `provisionar_cliente.py` como subprocess no proprio handler de `/cadastro`, ou enfileirar via threading (sem bloquear o response). Decidir entre best-effort (cadastro retorna 201 mesmo se provisionamento falhar — admin reconcilia depois) ou strict (cadastro 5xx se Influx/Grafana fora). Recomendado best-effort com reconciliacao via cron.
+
+### 23.5 Eventos do landing (dogfood)
+
+A propria landing usa o SDK pra medir conversao. Eventos emitidos:
+
+| Evento | Quando | Payload |
+|---|---|---|
+| `page_view` | Toda navegacao (auto, no Layout) | `{path, referrer}` |
+| `cta_clicado` | Click em qualquer `[data-cta]` | `{cta, path}` |
+| `cadastro_concluido` | 201 do `/cadastro` | `{site_id, plano}` |
+| `login_concluido` | 200 do `/login` | `{site_id, papel}` |
+| `formulario_erro` | 4xx/5xx de cadastro ou login | `{formulario, code, status}` |
+
+Implementacao em `landing/src/lib/tracking.ts` (testado em `tracking.test.ts`, 9 testes happy-dom). O Layout wireia `attachCtaTracking(document, sdk.enviarEvento)` apos init do SDK.
+
+**Dogfood publishable key**: emite-se uma key dedicada pra `dsplayground-landing` via `tenant_admin.py create-key` e cola-se em `landing_publishable_key` no Vault. Eventos da landing entao caem num bucket separado (`cliente_dsplayground-landing`), permitindo medir conversao sem misturar com clientes reais. Ver `landing/.env.example`.
+
+### 23.6 Operacao via Ansible
+
+Variaveis novas em `group_vars/all.yml` (espelhadas em `all.example.yml`):
+
+- `node_auth_token` — PAT GitHub com `read:packages`. Obrigatorio (assertado em `playbook.yml` pre_tasks). Usado como BuildKit secret pelos Dockerfiles do `frontend` e `landing` para baixar `@danpqdan/dsplayground-analytics-sdk` do GitHub Packages registry privado. Persistido em `${repo_dir}/.env` (mode 0640, dono `deploy:analytics`) e propagado pelo compose via `secrets.NODE_AUTH_TOKEN.environment`.
+- `landing_site_url`, `landing_api_url`, `landing_debug` — build args do Astro.
+- `landing_publishable_key` — opcional, vazio por default (eventos caem no bucket default em dev).
+
+Health checks adicionados:
+- `analytics-stack` role: `uri: http://127.0.0.1:3002/_health` apos `docker compose up`.
+- `playbook.yml` post_tasks: backend agora bate em `/health/app` (canonico) ao inves do antigo `/api/health/app`, e valida o landing em `/_health`.
+
+### 23.7 Pendencias
+
+- Trigger automatico de `provisionar_cliente.py` no handler de `/cadastro` (gap de §23.4).
+- Migrar `app_id` do payload pra ser derivado de `site.id` server-side (hoje cliente envia, mas pode mentir — backend ja valida contra `sites.id`, mas remover do payload elimina o passo).
+- E-mail de boas-vindas pos-cadastro (estrutura ja existe via Resend em §12 — falta template e trigger).
+- Dogfood: gerar a publishable key da landing apos primeiro deploy completo.
+- DNS Cloudflare: criar registro `portifolio.dsplayground.com.br` apontando pro mesmo IP da apex (proxiado, laranja). Hoje so a apex resolve.

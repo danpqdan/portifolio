@@ -1,0 +1,6 @@
+User-agent: *
+Allow: /
+Disallow: /cliente/
+Disallow: /api/
+
+Sitemap: https://dsplayground.com.br/sitemap.xml
