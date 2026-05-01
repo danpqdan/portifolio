@@ -59,7 +59,7 @@ Se contradisser código, atualize código + este doc no mesmo commit.
 | Métricas (operação) | Prometheus + node-exporter | `ark/monitoring/` |
 | Dashboards do cliente | Grafana 11 (auth.proxy) | `portifolio_grafana` |
 | Anti-abuse | CrowdSec + nginx bouncer | `ark/crowdsec/` |
-| SDK público | npm `@danpqdan/dsplayground-analytics-sdk@^0.3.0` | repo separado, GitHub Packages |
+| SDK público | npm `@danpqdan/dsplayground-analytics-sdk@^0.3.1` | repo separado, GitHub Packages |
 
 **O que funciona end-to-end:**
 - Coleta SDK → WebSocket → backend → Influx (bucket-per-cliente, validado, com quotas/cardinalidade)
@@ -115,7 +115,7 @@ Se contradisser código, atualize código + este doc no mesmo commit.
 
 ## 3. SDK de analytics
 
-**Pacote:** `@danpqdan/dsplayground-analytics-sdk@^0.3.0` (privado em GitHub Packages, repo separado).
+**Pacote:** `@danpqdan/dsplayground-analytics-sdk@^0.3.1` (privado em GitHub Packages, repo separado).
 
 ### 3.1 Inicialização
 
@@ -153,6 +153,27 @@ Tipos coletados automaticamente:
 | `custom` | `enviarEvento(nome, props)` | `nome` |
 
 **Nunca coletados sem opt-in explícito:** `innerText`, valores de inputs, querystring completa, fingerprints de browser.
+
+### 3.2.1 Modelo de página ativa (gotcha histórico)
+
+`enviarEvento()` e os callbacks de Web Vitals empilham eventos via `HeatmapUtils.empilharEventoNoAtivo`, que precisa de **uma instância de `HeatmapUtils` em estado `iniciar()`** registrada como buffer global. Sem isso, o evento seria perdido — bug que afetou produção até **v0.3.1**.
+
+A partir de v0.3.1 o SDK enfileira em `eventosPendentes` (cap 100) eventos disparados antes do primeiro `iniciar()`, drenando-os pra página ativa quando ela mounta. Preserva o early signal (LCP candidato inicial, `app_carregado` no module-load) sem mudança no consumer. **Contrato:** `enviarEvento(...)` retorna `true` quando enfileira sem página ativa (em vez de `false` como em ≤0.3.0).
+
+**Padrão recomendado para consumer novo** (Astro/Vite/HTML estático): instanciar `HeatmapUtils` logo após `iniciarAnalytics`:
+
+```ts
+import { iniciarAnalytics, enviarEvento, HeatmapUtils, WebSocketService } from '@danpqdan/dsplayground-analytics-sdk';
+
+iniciarAnalytics({...});
+const heatmap = new HeatmapUtils(document.body, null, location.pathname);
+heatmap.configurarColecaoTempoReal((d) => WebSocketService.sendAnalyticsDataImmediate(d, false), 5000);
+heatmap.iniciarColecaoTempoReal();
+heatmap.iniciar();
+WebSocketService.connect();
+```
+
+Ver `frontend/src/classe/ClasseHome.jsx` (per-rota) e `landing/src/layouts/Base.astro` (global em layout) como referências canônicas.
 
 ### 3.3 Fila offline + entrega
 
