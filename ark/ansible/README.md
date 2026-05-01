@@ -14,11 +14,14 @@ cp group_vars/all.example.yml group_vars/all.yml
 # preencha os valores reais e criptografe com ansible-vault (ver secao abaixo)
 ```
 
-Instale as collections requeridas:
+Instale as collections requeridas (versoes fixadas em `requirements.yml` —
+`community.docker` esta capada em `<5.0.0` porque a 5.x exige `ansible-core>=2.17`
+e a VPS roda Ansible 2.15):
 
 ```bash
 pip install --upgrade 'ansible>=8'
-ansible-galaxy collection install community.docker ansible.posix
+ansible-galaxy collection install -r ark/ansible/requirements.yml
+# ou: make -f ark/Makefile ansible-deps
 ```
 
 ## Rodar
