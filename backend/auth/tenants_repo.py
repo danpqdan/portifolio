@@ -78,6 +78,7 @@ class TenantsRepo(Protocol):
     def adicionar_dominio(self, site_id: str, dominio: str) -> None: ...
     def remover_dominio(self, site_id: str, dominio: str) -> None: ...
     def origin_permitido(self, site_id: str, origin: str) -> bool: ...
+    def dominio_existe(self, dominio: str) -> bool: ...
 
     # publishable
     def criar_publishable_key(self, site_id: str, ambiente: str,
@@ -230,6 +231,21 @@ class SqliteTenantsRepo:
             row = conn.execute(
                 "SELECT 1 FROM site_dominios WHERE site_id = ? AND dominio = ? LIMIT 1",
                 (site_id, origin.rstrip("/")),
+            ).fetchone()
+        return row is not None
+
+    def dominio_existe(self, dominio):
+        """Lookup global em site_dominios — qualquer site que tenha esse dominio.
+
+        Usado pelo CORS dinamico (NAO escopa por site_id, ao contrario de
+        origin_permitido). Index `idx_site_dominios_dominio` torna O(log n).
+        """
+        if not dominio:
+            return False
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT 1 FROM site_dominios WHERE dominio = ? LIMIT 1",
+                (dominio.rstrip("/"),),
             ).fetchone()
         return row is not None
 
@@ -479,6 +495,16 @@ class PostgresTenantsRepo:
             cur.execute(
                 "SELECT 1 FROM site_dominios WHERE site_id = %s AND dominio = %s LIMIT 1",
                 (site_id, origin.rstrip("/")),
+            )
+            return cur.fetchone() is not None
+
+    def dominio_existe(self, dominio):
+        if not dominio:
+            return False
+        with self._conn() as conn, conn.cursor() as cur:
+            cur.execute(
+                "SELECT 1 FROM site_dominios WHERE dominio = %s LIMIT 1",
+                (dominio.rstrip("/"),),
             )
             return cur.fetchone() is not None
 
