@@ -111,6 +111,12 @@ class ClienteConfiguracoesTests(unittest.TestCase):
 
         self.assertEqual(body["consumo"]["eventos_hoje"], 42)
 
+        # Cardinalidade: tracker zerado pra site novo, limite vem do plano
+        # 'medio' (50_000 — ver ingestao/cardinalidade.py:LIMITE_POR_PLANO).
+        self.assertIn("cardinalidade", body)
+        self.assertEqual(body["cardinalidade"]["atual"], 0)
+        self.assertEqual(body["cardinalidade"]["limite"], 50_000)
+
     def test_publishable_keys_revogadas_nao_aparecem(self):
         # criar 2a key e revogar a 1a
         keys_antes = self.tenants.listar_publishable_keys(self.site_id)
@@ -123,6 +129,28 @@ class ClienteConfiguracoesTests(unittest.TestCase):
         body = r.get_json()
         self.assertEqual(len(body["publishable_keys"]), 1)
         self.assertEqual(body["publishable_keys"][0]["nome"], "rotacionada")
+
+    def test_cardinalidade_reflete_uso_real_do_tracker(self):
+        # Injeta tracker e popula valores pro site
+        from ingestao import cardinalidade as cardmod
+        cardmod.resetar_tracker()
+        tracker = cardmod.obter_tracker()
+
+        # Adiciona 100 valores em 2 tags = 100 (page_type tem 60 distintos,
+        # device_type tem 40 distintos)
+        pares = [("page_type", f"/p{i}") for i in range(60)]
+        pares += [("device_type", f"d{i}") for i in range(40)]
+        tracker.verificar_e_registrar(self.site_id, pares, limite=50_000)
+
+        self._login()
+        r = self.client.get("/cliente/auth/configuracoes")
+        body = r.get_json()
+
+        self.assertEqual(body["cardinalidade"]["atual"], 100)
+        self.assertEqual(body["cardinalidade"]["limite"], 50_000)
+
+        # cleanup pra nao poluir outros tests
+        cardmod.resetar_tracker()
 
     def test_isolamento_site_outro_user_nao_vaza(self):
         # cria 2o site com sua propria pk + 2o user

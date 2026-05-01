@@ -129,6 +129,9 @@ export interface ConfiguracoesOk {
   publishable_keys: PublishableKeyDto[];
   quota: QuotaDto;
   consumo: { eventos_hoje: number };
+  /** Cardinalidade atual e limite do plano. atual=limite=0 quando tracker
+   *  nao disponivel (env de teste minimo). */
+  cardinalidade: { atual: number; limite: number };
 }
 
 export type Result<T, E> =
