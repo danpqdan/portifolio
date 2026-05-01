@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
-import { cadastrar, login, urlDashboard } from './api';
+import { cadastrar, listarExports, login, urlDashboard, urlDownloadExport } from './api';
 
 const API_URL = 'https://api.dsplayground.com.br';
 
@@ -135,5 +135,69 @@ describe('urlDashboard()', () => {
   test('escapa valores com URL-encode', () => {
     const out = urlDashboard(DASH, { ref: 'a b c' });
     expect(out).toContain('ref=a+b+c');
+  });
+});
+
+describe('listarExports()', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  test('GET /cliente/exportar com cookie e retorna lista de dias', async () => {
+    vi.stubGlobal('fetch', fetchMock(200, {
+      arquivos: [
+        { dia: '2026-04-30', key: 'acme/2026/04/30.lp.gz' },
+        { dia: '2026-05-01', key: 'acme/2026/05/01.lp.gz' },
+      ],
+    }));
+
+    const r = await listarExports({ apiUrl: API_URL });
+
+    expect(r.ok).toBe(true);
+    if (r.ok) {
+      expect(r.arquivos).toHaveLength(2);
+      expect(r.arquivos[0].dia).toBe('2026-04-30');
+    }
+    expect(fetch).toHaveBeenCalledWith(
+      `${API_URL}/cliente/exportar`,
+      expect.objectContaining({
+        method: 'GET',
+        credentials: 'include',
+      }),
+    );
+  });
+
+  test('mapeia 401 em NAO_AUTENTICADO', async () => {
+    vi.stubGlobal('fetch', fetchMock(401, ''));
+    const r = await listarExports({ apiUrl: API_URL });
+    expect(r.ok).toBe(false);
+    if (!r.ok) {
+      expect(r.code).toBe('NAO_AUTENTICADO');
+      expect(r.status).toBe(401);
+    }
+  });
+
+  test('mapeia falha de rede em REDE', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => { throw new Error('offline'); }));
+    const r = await listarExports({ apiUrl: API_URL });
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.code).toBe('REDE');
+  });
+
+  test('arquivos lista vazia quando bucket nao tem nada', async () => {
+    vi.stubGlobal('fetch', fetchMock(200, { arquivos: [] }));
+    const r = await listarExports({ apiUrl: API_URL });
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.arquivos).toEqual([]);
+  });
+});
+
+describe('urlDownloadExport()', () => {
+  test('constroi URL absoluta para dia ISO', () => {
+    expect(urlDownloadExport(API_URL, '2026-04-30'))
+      .toBe(`${API_URL}/cliente/exportar/2026-04-30`);
+  });
+
+  test('rejeita dia mal formado', () => {
+    expect(() => urlDownloadExport(API_URL, 'abc')).toThrow(/dia/i);
+    expect(() => urlDownloadExport(API_URL, '2026/04/30')).toThrow(/dia/i);
   });
 });
