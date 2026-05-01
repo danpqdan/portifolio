@@ -43,7 +43,7 @@ def _construir_app(tenants_repo, origins_estaticos):
         resp = make_response("", 204)
         resp.headers["Access-Control-Allow-Origin"] = origin
         resp.headers["Access-Control-Allow-Credentials"] = "true"
-        resp.headers["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS"
+        resp.headers["Access-Control-Allow-Methods"] = "GET, POST, PATCH, OPTIONS"
         resp.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization"
         resp.headers["Access-Control-Max-Age"] = "86400"
         resp.headers["Vary"] = "Origin"
@@ -97,6 +97,22 @@ class CorsDinamicoIntegracaoTest(unittest.TestCase):
         self.assertEqual(r.headers.get("Access-Control-Allow-Origin"), "https://acme.com")
         self.assertEqual(r.headers.get("Access-Control-Allow-Credentials"), "true")
         self.assertIn("Origin", r.headers.get("Vary", ""))
+
+    def test_preflight_inclui_PATCH_nos_methods(self):
+        # /cliente/auth/senha e /email usam PATCH — sem isso navegador
+        # bloqueia request com "Method PATCH is not allowed by
+        # Access-Control-Allow-Methods in preflight response".
+        self.repo.dominio_existe.return_value = True
+        r = self.client.options(
+            "/ping",
+            headers={
+                "Origin": "https://acme.com",
+                "Access-Control-Request-Method": "PATCH",
+            },
+        )
+        self.assertEqual(r.status_code, 204)
+        methods = r.headers.get("Access-Control-Allow-Methods", "")
+        self.assertIn("PATCH", methods, f"PATCH ausente em: {methods}")
 
     def test_preflight_origin_nao_registrado_sem_headers_cors(self):
         self.repo.dominio_existe.return_value = False
