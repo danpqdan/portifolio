@@ -483,6 +483,29 @@ except Exception as e:
     log_safe(security_logger, 'error', f"[ERROR] Falha ao inicializar auth do dashboard: {str(e)}")
     raise
 
+# ==================== EMBED IFRAME ====================
+# Blueprint /embed — token curto + serving de dados pra widget React em
+# embed.dsplayground.com.br. Reusa cookie cliente_session pra emitir,
+# Bearer token RS256 pra ler dados. Ver ark/docs/embed-iframe.md.
+try:
+    from auth.embed_jwt_service import EmbedJwtService  # noqa: E402
+    from embed_routes import configurar as _configurar_embed  # noqa: E402
+    from embed_routes import embed_bp as _embed_bp  # noqa: E402
+
+    _embed_jwt_service = EmbedJwtService(keys_dir=app.config['JWT_KEYS_DIR'])
+    _configurar_embed(
+        embed_jwt_service=_embed_jwt_service,
+        sessao_service=_sessao_service,
+        tenants_repo=_tenants_repo_singleton,
+        influx_service=influxdb_service,
+        graficos_permitidos=("eventos_por_minuto",),
+    )
+    app.register_blueprint(_embed_bp)
+    log_safe(security_logger, 'info', "[SUCCESS] Embed iframe inicializado")
+except Exception as e:
+    log_safe(security_logger, 'error', f"[ERROR] Falha ao inicializar embed: {str(e)}")
+    raise
+
 # ==================== EXPORTACAO DE ARQUIVOS R2 (cliente) ====================
 # Blueprint `/cliente/exportar` — listagem + download via signed URL R2.
 # Best-effort: se R2 nao estiver configurado (env vazio), bp nao registra.
