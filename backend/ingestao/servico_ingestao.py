@@ -28,6 +28,24 @@ from ingestao.idempotencia import (
     obter_sequenciador,
 )
 from ingestao.logs import emitir_log
+
+
+# Metrics Prometheus: best-effort. Em ambiente de teste sem prometheus_client
+# instalado, ou se metrics nao foi inicializado, vira no-op.
+def _registrar_metric_evento_recebido(tipo: str) -> None:
+    try:
+        from metrics import obter_metrics
+        obter_metrics().eventos_recebidos(tipo=tipo)
+    except Exception:
+        pass
+
+
+def _registrar_metric_evento_rejeitado(code: str) -> None:
+    try:
+        from metrics import obter_metrics
+        obter_metrics().eventos_rejeitados(code=code)
+    except Exception:
+        pass
 from ingestao.validador import validar_payload
 
 logger = logging.getLogger('analytics.ingestao')
@@ -247,6 +265,7 @@ class ServicoIngestao:
         if self._quota_excedida(site_id):
             emitir_log(logger, logging.WARNING, 'rejeitado_quota_excedida',
                        session_id=session_id, id_registro=id_registro, site_id=site_id)
+            _registrar_metric_evento_rejeitado("QUOTA_EXCEDIDA")
             return ResumoIngestao(
                 status='error',
                 id_registro=id_registro,
@@ -431,6 +450,7 @@ class ServicoIngestao:
                    session_id=session_id, id_registro=id_registro,
                    site_id=site_id, plano=plano, limite=limite,
                    total=total, tag_dominante=tag_dominante)
+        _registrar_metric_evento_rejeitado("CARDINALIDADE_EXCEDIDA")
         return ResumoIngestao(
             status='error',
             id_registro=id_registro,
@@ -541,6 +561,7 @@ class ServicoIngestao:
             )
             for metrica in metricas:
                 self.influxdb_service.write_temporal_metrics_async(metrica, **kw)
+                _registrar_metric_evento_recebido("page_analytics")
                 emitir_log(logger, logging.INFO, 'persistido_temporal',
                            session_id=session_id, id_registro=id_registro, app_id=app_id,
                            page_type=metrica.page_type, bucket=bucket)
@@ -554,6 +575,7 @@ class ServicoIngestao:
             )
             for vital in vitals:
                 self.influxdb_service.write_web_vital_async(vital, **kw)
+                _registrar_metric_evento_recebido("web_vital")
                 emitir_log(logger, logging.INFO, 'persistido_webvital',
                            session_id=session_id, id_registro=id_registro, app_id=app_id,
                            nome=vital.nome, valor=vital.valor, bucket=bucket)
@@ -567,6 +589,7 @@ class ServicoIngestao:
             )
             for custom in customizados:
                 self.influxdb_service.write_custom_event_async(custom, **kw)
+                _registrar_metric_evento_recebido("custom_event")
                 emitir_log(logger, logging.INFO, 'persistido_customevent',
                            session_id=session_id, id_registro=id_registro, app_id=app_id,
                            nome=custom.nome, bucket=bucket)
