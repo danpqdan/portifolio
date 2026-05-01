@@ -11,6 +11,7 @@ Nao cobre Postgres (mesma interface — validacao futura via teste-ambiente-B).
 
 from __future__ import annotations
 
+import os
 import sys
 import tempfile
 import time
@@ -487,6 +488,99 @@ class ClienteAuthEndpointsTests(unittest.TestCase):
         # 2a vez falha
         r = self.client.get(f"/cliente/auth/magic-link/verificar?t={token}")
         self.assertEqual(r.status_code, 400)
+
+
+class CookieDomainTests(unittest.TestCase):
+    """COOKIE_DOMAIN env controla atributo Domain= no Set-Cookie.
+
+    Sem isso, cookie e host-only — setado por api.X nao chega em app.X.
+    Com Domain=dsplayground.com.br, cookie viaja entre subdominios same-site.
+    """
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory(ignore_cleanup_errors=True)
+        _, self.repo, self.site_id = _preparar_db(Path(self._tmp.name))
+        self.svc = SessaoService(self.repo, sessao_ttl_segundos=3600)
+        self.sender = _EmailRecorder()
+        self.svc.criar_user(self.site_id, "dan@acme.com", senha="secret-123", papel="admin")
+        self._env_original = os.environ.get("COOKIE_DOMAIN")
+
+    def tearDown(self):
+        if self._env_original is None:
+            os.environ.pop("COOKIE_DOMAIN", None)
+        else:
+            os.environ["COOKIE_DOMAIN"] = self._env_original
+        self._tmp.cleanup()
+
+    def _post_login(self):
+        app = _criar_app_cliente(self.repo, self.svc, self.sender)
+        client = app.test_client()
+        return client.post("/cliente/auth/login",
+                           json={"email": "dan@acme.com", "senha": "secret-123"})
+
+    def test_set_cookie_sem_env_nao_inclui_domain(self):
+        os.environ.pop("COOKIE_DOMAIN", None)
+        r = self._post_login()
+        self.assertEqual(r.status_code, 200)
+        set_cookie = r.headers.get("Set-Cookie", "")
+        self.assertIn("cliente_session=", set_cookie)
+        # Sem env -> sem atributo Domain (host-only, comportamento legado)
+        self.assertNotIn("Domain=", set_cookie)
+
+    def test_set_cookie_com_env_inclui_domain(self):
+        os.environ["COOKIE_DOMAIN"] = "dsplayground.com.br"
+        r = self._post_login()
+        self.assertEqual(r.status_code, 200)
+        set_cookie = r.headers.get("Set-Cookie", "")
+        self.assertIn("Domain=dsplayground.com.br", set_cookie)
+
+    def test_clear_cookie_usa_mesmo_domain(self):
+        """Logout precisa setar Domain igual pra browser limpar o cookie."""
+        os.environ["COOKIE_DOMAIN"] = "dsplayground.com.br"
+        app = _criar_app_cliente(self.repo, self.svc, self.sender)
+        client = app.test_client()
+        client.post("/cliente/auth/login",
+                    json={"email": "dan@acme.com", "senha": "secret-123"})
+        r = client.post("/cliente/auth/logout")
+        self.assertEqual(r.status_code, 200)
+        set_cookie = r.headers.get("Set-Cookie", "")
+        # delete_cookie do Flask emite Set-Cookie com Max-Age=0 ou Expires no passado
+        self.assertIn("cliente_session=", set_cookie)
+        self.assertIn("Domain=dsplayground.com.br", set_cookie)
+
+    def test_cadastro_tambem_usa_domain(self):
+        """Cookie do /cadastro tambem precisa do Domain pra funcionar em app.X."""
+        os.environ["COOKIE_DOMAIN"] = "dsplayground.com.br"
+        from auth import cliente_routes as mod
+        from auth.tenants_repo import SqliteTenantsRepo as TR
+        from auth.clientes_users_repo import SqliteClientesUsersRepo as CR
+        tmp = tempfile.TemporaryDirectory(ignore_cleanup_errors=True)
+        db_path = str(Path(tmp.name) / "tenants2.db")
+        tenants = TR(db_path)
+        users = CR(db_path)
+        svc = SessaoService(users, sessao_ttl_segundos=3600)
+        mod._svc_instance = svc
+        mod._tenants_repo = tenants
+        mod._clientes_users_repo = users
+        # No-op no provisionamento pra nao tentar importar Postgres em test
+        original_prov = mod._provisionar_pos_cadastro
+        mod._provisionar_pos_cadastro = lambda **kw: None
+        os.environ["COOKIE_SECURE"] = "false"
+
+        try:
+            from flask import Flask
+            app = Flask(__name__)
+            app.register_blueprint(mod.cliente_auth_bp)
+            client = app.test_client()
+            r = client.post("/cliente/auth/cadastro", json={
+                "email": "novo@x.com", "senha": "secret-456",
+                "nome_site": "Novo", "slug": "novo-cookie-domain",
+            })
+            self.assertEqual(r.status_code, 201)
+            self.assertIn("Domain=dsplayground.com.br", r.headers.get("Set-Cookie", ""))
+        finally:
+            mod._provisionar_pos_cadastro = original_prov
+            tmp.cleanup()
 
 
 if __name__ == "__main__":
