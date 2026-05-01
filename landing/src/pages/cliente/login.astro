@@ -36,7 +36,7 @@ import Section from '~/components/ui/Section.astro';
   <script>
     import { login } from '~/lib/api';
     import { resolverDestinoPosLogin } from '~/lib/redirect';
-    import { API_URL, DASHBOARD_URL } from '~/config';
+    import { API_URL, POS_LOGIN_URL } from '~/config';
 
     const form = document.getElementById('form-login') as HTMLFormElement | null;
     const erroBox = document.getElementById('erro')!;
@@ -74,7 +74,7 @@ import Section from '~/components/ui/Section.astro';
         });
         const destino = resolverDestinoPosLogin(
           new URL(window.location.href).searchParams,
-          DASHBOARD_URL,
+          POS_LOGIN_URL,
         );
         window.location.href = destino;
         return;
