@@ -187,24 +187,20 @@ Detalhes do plano de migracao para CORS dinamico (por `sites.dominios_permitidos
 - Grafana: `https://grafana.dsplayground.com.br` (via Nginx) — admin user/senha via `ark/monitoring/.env`.
 - Prometheus: `http://<host>:9090` (ainda publico, **TODO**) — retencao 15 dias (`--storage.tsdb.retention.time=15d`).
 
-## Mudancas pendentes de aplicar em producao (fixes 2026-04-22)
+## Estado dos fixes 2026-04-22 (revisado 2026-05-01)
 
-Todas as 7 pendencias P2/P3 foram corrigidas no repo em 2026-04-22, mas **ainda nao efetivaram em prod**. Ate rodar o deploy, o comportamento em produção e o antigo.
+**Aplicados em prod (confirmados):**
+- ✅ Backend `gunicorn --worker-class eventlet -w 1` rodando.
+- ✅ Certbot removido; CF Origin Cert e a unica fonte de TLS (validade ate 2041).
+- ✅ Prometheus (`9090`) e node-exporter (`9100`) bindam em `127.0.0.1` no `ark/monitoring/docker-compose.monitoring.yml`. Sem porta publica externa (firewalld so libera 22022/80/443).
 
-**Via CD automatico (proximo push em `main`):**
-- Backend migrado para `gunicorn --worker-class eventlet -w 1` (`backend/Dockerfile`). `requirements.txt` ganhou `gunicorn==23.0.0`.
-- Logger root do Flask separado do `security_logger` (`backend/app.py`) — `security.log` so recebe eventos do logger nomeado `security`, `propagate=False`. Reduz ruido de linhas unparsed no CrowdSec.
+**A confirmar via SSH no proximo `ansible-apply`:**
+- 🔍 Logger root do Flask separado do `security_logger` em `backend/app.py` — verificar se `security.log` so recebe linhas com `evento=` (resto vai pra stdout do container).
+- 🔍 `roles/crowdsec/` packagecloud bouncer-nginx — pacote pode nao existir no repo; check de `firewall-bouncer` cobre o equivalente.
+- 🔍 `roles/analytics-stack/` tasks com `when: not ansible_check_mode` — `make ansible-check` precisa nao quebrar.
+- 🔍 **Vault encryption:** `group_vars/all.yml` deve estar criptografado (`$ANSIBLE_VAULT;1.1;AES256` na primeira linha). Senha em `/opt/portifolio/.vault-password` (0600, `deploy:analytics`, fora do git). Usuario reportou "vault precisa garantir criptografia" em 2026-05-01 — validar antes de tratar como done.
 
-**Via `make -f ark/Makefile ansible-apply` manual:**
-- `roles/nginx/`: removidos certbot + python3-certbot-nginx do `dnf`, task `certbot --nginx` e timer. CF Origin Cert e a unica fonte de TLS.
-- `roles/crowdsec/`: adicionada task que instala o repo packagecloud `crowdsecurity/crowdsec-bouncers-nginx` (onde o pacote realmente vive). `ignore_errors` removido da instalacao do bouncer.
-- `roles/analytics-stack/`: tasks de health e retencao ganharam `when: not ansible_check_mode` — `make ansible-check` volta a rodar sem quebrar.
-- Secrets em `group_vars/all.yml` agora criptografados com **ansible-vault**. Senha em `/opt/portifolio/.vault-password` (0600, dono `deploy:analytics`, fora do git). `ark/ansible/ansible.cfg` novo aponta `vault_password_file` automaticamente.
-
-**Via `make -f ark/Makefile monitoring-down && monitoring-up` manual:**
-- Prometheus (`9090`) e node-exporter (`9100`) agora bindam em `127.0.0.1` (ver `ark/monitoring/docker-compose.monitoring.yml`). Re-criar containers para o bind novo valer.
-
-Depois que aplicar tudo, remover esta secao do CLAUDE.md. Historico em memoria `project_deploy_state.md`.
+Quando todos confirmados, remover esta secao.
 
 ## Quando em duvida
 
