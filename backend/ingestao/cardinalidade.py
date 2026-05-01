@@ -45,13 +45,25 @@ def limite_para_plano(plano: Optional[str]) -> int:
 
 
 class TrackerCardinalidade:
-    """Mantem `site_id -> tag_name -> set(values)` thread-safe."""
+    """Mantem `site_id -> tag_name -> set(values)` thread-safe.
+
+    Alerta progressivo: quando cardinalidade atinge 80% e 95% do limite,
+    `alerta_pendente()` retorna o nivel uma unica vez. Permite log/email
+    proativo antes do bloqueio em 100%.
+    """
+
+    # Niveis de alerta (porcentagens). Ordem importa: maiores primeiro pra
+    # consumir antes em alerta_pendente.
+    _NIVEIS_ALERTA = (95, 80)
 
     def __init__(self):
         self._lock = threading.RLock()
         self._stores: Dict[str, Dict[str, Set[str]]] = defaultdict(
             lambda: defaultdict(set)
         )
+        # Para cada site, niveis ja emitidos (anti-spam — alerta de 80 emite
+        # uma unica vez; reseta em invalidar_site).
+        self._alertas_emitidos: Dict[str, Set[int]] = defaultdict(set)
 
     def verificar_e_registrar(
         self,
@@ -116,6 +128,25 @@ class TrackerCardinalidade:
         with self._lock:
             return sum(len(s) for s in self._stores.get(site_id, {}).values())
 
+    def alerta_pendente(self, site_id: str, limite: int) -> Optional[int]:
+        """Retorna 80 ou 95 se cardinalidade cruzou esse threshold e ainda
+        nao foi alertado. Marca como emitido pra nao repetir.
+
+        Niveis sao consumidos um por chamada (95 antes de 80). Retorna None
+        quando nada novo a alertar.
+        """
+        if not site_id or limite <= 0:
+            return None
+        with self._lock:
+            total = sum(len(s) for s in self._stores.get(site_id, {}).values())
+            pct = (total / limite) * 100
+            ja_emitidos = self._alertas_emitidos[site_id]
+            for nivel in self._NIVEIS_ALERTA:
+                if pct >= nivel and nivel not in ja_emitidos:
+                    ja_emitidos.add(nivel)
+                    return nivel
+        return None
+
     def por_tag(self, site_id: str) -> Dict[str, int]:
         """Snapshot de |set| por tag. Util para diagnostico e tests."""
         with self._lock:
@@ -125,10 +156,12 @@ class TrackerCardinalidade:
     def invalidar_site(self, site_id: str) -> None:
         with self._lock:
             self._stores.pop(site_id, None)
+            self._alertas_emitidos.pop(site_id, None)
 
     def limpar(self) -> None:
         with self._lock:
             self._stores.clear()
+            self._alertas_emitidos.clear()
 
 
 _tracker_global: Optional[TrackerCardinalidade] = None
