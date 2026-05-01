@@ -1,7 +1,8 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import {
   cadastrar, listarExports, login,
-  obterConfiguracoes, urlDashboard, urlDownloadExport,
+  obterConfiguracoes, solicitarMagicLink,
+  urlDashboard, urlDownloadExport,
 } from './api';
 
 const API_URL = 'https://api.dsplayground.com.br';
@@ -244,5 +245,51 @@ describe('obterConfiguracoes()', () => {
     const r = await obterConfiguracoes({ apiUrl: API_URL });
     expect(r.ok).toBe(false);
     if (!r.ok) expect(r.code).toBe('NAO_AUTENTICADO');
+  });
+});
+
+describe('solicitarMagicLink()', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  test('POST /cliente/auth/magic-link/solicitar com email retorna ok', async () => {
+    vi.stubGlobal('fetch', fetchMock(200, { status: 'success', ok: true }));
+
+    const r = await solicitarMagicLink({ email: 'd@x.com' }, { apiUrl: API_URL });
+
+    expect(r.ok).toBe(true);
+    expect(fetch).toHaveBeenCalledWith(
+      `${API_URL}/cliente/auth/magic-link/solicitar`,
+      expect.objectContaining({
+        method: 'POST',
+        credentials: 'include',
+        body: JSON.stringify({ email: 'd@x.com' }),
+      }),
+    );
+  });
+
+  test('200 mesmo pra email-fantasma (anti-enum) — caller nao distingue', async () => {
+    vi.stubGlobal('fetch', fetchMock(200, { status: 'success', ok: true }));
+    const r = await solicitarMagicLink({ email: 'nao-existe@x.com' }, { apiUrl: API_URL });
+    expect(r.ok).toBe(true);
+  });
+
+  test('429 vira RATE_LIMIT_EXCEDIDO', async () => {
+    vi.stubGlobal('fetch', fetchMock(429, {
+      status: 'error', code: 'RATE_LIMIT_EXCEDIDO',
+      message: 'muitas solicitacoes — tente novamente em 15min',
+    }));
+    const r = await solicitarMagicLink({ email: 'd@x.com' }, { apiUrl: API_URL });
+    expect(r.ok).toBe(false);
+    if (!r.ok) {
+      expect(r.code).toBe('RATE_LIMIT_EXCEDIDO');
+      expect(r.status).toBe(429);
+    }
+  });
+
+  test('falha de rede vira REDE', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => { throw new Error('offline'); }));
+    const r = await solicitarMagicLink({ email: 'd@x.com' }, { apiUrl: API_URL });
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.code).toBe('REDE');
   });
 });
