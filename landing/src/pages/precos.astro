@@ -46,7 +46,10 @@ const planos = [
       'Suporte 24/7',
       'Documentação de LGPD e auditoria',
     ],
-    cta: { href: 'mailto:contato@dsplayground.com.br?subject=Plano Business', label: 'Falar com vendas' },
+    // CF Email Routing pra `contato@` ainda nao configurado (P1 PROJETO.md
+    // §10). Enquanto isso, GitHub issue e a forma confiavel — abre tracker
+    // publico, evita email volta como undelivered.
+    cta: { href: 'https://github.com/danpqdan/portifolio/issues/new?title=Interesse+plano+Business&labels=comercial', label: 'Falar com vendas' },
   },
 ];
 ---
@@ -88,6 +91,8 @@ const planos = [
           <a
             href={plano.cta.href}
             data-cta={`plano-${plano.nome.toLowerCase()}`}
+            target={plano.cta.href.startsWith('http') && !plano.cta.href.startsWith('https://dsplayground.com.br') ? '_blank' : undefined}
+            rel={plano.cta.href.startsWith('http') ? 'noopener' : undefined}
             class:list={['mt-8', plano.destaque ? 'btn-primary' : 'btn-secondary']}
           >
             {plano.cta.label}
