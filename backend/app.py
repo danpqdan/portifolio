@@ -108,7 +108,7 @@ CORS(app,
      allow_headers=['Content-Type', 'Authorization', 'X-Session-Token',
                     'X-Forwarded-For', 'X-Forwarded-Proto',
                     'X-SDK-Schema-Version'],
-     methods=['GET', 'POST', 'OPTIONS']
+     methods=['GET', 'POST', 'PATCH', 'OPTIONS']
 )
 
 # Singleton populado apos `_tenants_repo_singleton` ser criado. Hooks abaixo
@@ -395,7 +395,7 @@ def cors_dinamico_preflight():
     resp = make_response('', 204)
     resp.headers['Access-Control-Allow-Origin'] = origin
     resp.headers['Access-Control-Allow-Credentials'] = 'true'
-    resp.headers['Access-Control-Allow-Methods'] = 'GET, POST, OPTIONS'
+    resp.headers['Access-Control-Allow-Methods'] = 'GET, POST, PATCH, OPTIONS'
     resp.headers['Access-Control-Allow-Headers'] = (
         'Content-Type, Authorization, X-Session-Token, '
         'X-Forwarded-For, X-Forwarded-Proto, X-SDK-Schema-Version'
