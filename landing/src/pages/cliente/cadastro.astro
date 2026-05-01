@@ -46,7 +46,7 @@ import Section from '~/components/ui/Section.astro';
   <script>
     import { cadastrar, urlDashboard } from '~/lib/api';
     import { resolverDestinoPosLogin } from '~/lib/redirect';
-    import { API_URL, DASHBOARD_URL } from '~/config';
+    import { API_URL, POS_LOGIN_URL } from '~/config';
 
     const form = document.getElementById('form-cadastro') as HTMLFormElement | null;
     const erroBox = document.getElementById('erro')!;
@@ -97,10 +97,12 @@ import Section from '~/components/ui/Section.astro';
           site_id: r.user.site_id, plano: r.site.plano,
         });
         // Respeita ?next= se valido (cliente veio de pagina protegida).
-        // Fallback e DASHBOARD_URL com ?welcome=true pra onboarding inicial.
+        // Fallback e POS_LOGIN_URL com ?welcome=true pra onboarding inicial
+        // (default = /cliente/configuracoes/, mostra publishable_key + plano
+        // antes de levar pro Painel analitico).
         const dest = resolverDestinoPosLogin(
           new URL(window.location.href).searchParams,
-          urlDashboard(DASHBOARD_URL, { welcome: 'true' }),
+          urlDashboard(POS_LOGIN_URL, { welcome: 'true' }),
         );
         window.location.href = dest;
         return;
