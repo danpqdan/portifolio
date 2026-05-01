@@ -494,7 +494,7 @@ docker exec portifolio-influxdb influx backup /var/lib/influxdb2/backups
 - ✅ **Trigger automático de provisionamento pós-cadastro** (commit `e9beb96`) — thread daemon best-effort chama `scripts.provisionar_cliente`; 5 testes
 - ✅ **Quota enforcement** — já estava implementado (sprint anterior); 6 testes verde validados em 2026-04-30
 - ✅ **Hostname do dashboard cliente em `app.dsplayground.com.br`** (commits `abee7da`, `69e6fd6`, `7c980a0`, deploy 2026-04-30) — cookie `cliente_session` viaja entre apex/app/api via `COOKIE_DOMAIN=dsplayground.com.br`; vhost nginx `app.X` ativo; landing redireciona pós-cadastro pra `app.X/cliente/metricas`; Grafana `GF_ROOT_URL` migrado.
-- ✅ **Apex em CF Pages** — landing comercial servida via Cloudflare Pages do repo `comercial`; nginx host removeu vhost apex (dead code).
+- ✅ **Apex em CF Pages** — landing comercial servida via Cloudflare Pages do repo `comercial`; nginx host removeu vhost apex (dead code). `PUBLIC_DASHBOARD_URL` configurado no painel CF Pages (2026-04-30).
 - ✅ **Hardening de conta** — PAT amplo revogado, PAT enxuto criado (`read:packages`), 2FA habilitado em GitHub e CF.
 
 ### 10.2 Fila atual
@@ -502,7 +502,6 @@ docker exec portifolio-influxdb influx backup /var/lib/influxdb2/backups
 | Prio | Item | Bloqueia | Onde | Estimativa |
 |---|---|---|---|---|
 | 🟡 **P1** | **Smoke test e2e do cookie + redirect** com credenciais reais — confirmar que `Set-Cookie: ...; Domain=dsplayground.com.br` aparece no `/login` e que `/cliente/metricas/` em `app.X` lê o cookie + carrega Grafana | UX de signup público — fluxo de fato funcionando | manual via curl + browser | 15min (você) |
-| 🟡 **P1** | **`PUBLIC_DASHBOARD_URL` no CF Pages do `comercial`** — formaliza var no painel CF, retry deploy. Hoje funciona via default da `config.ts` mas não está explícito | Configuração rastreável quando dev local divergir do prod | painel CF Pages | 2 min |
 | 🟢 **P2** | **CrowdSec nginx-bouncer task ansible** — packagecloud retorna HTML (404). `ignore_errors: true` adicionado em 2026-04-30 pra ansible-apply não abortar; firewall-bouncer (nftables) já cobre. Decidir: abandonar nginx-bouncer ou instalar `.rpm` direto | Próximos `ansible-apply` continuam verdes | `ark/ansible/roles/crowdsec/tasks/main.yml` | 30min |
 | 🟢 **P3** | **Decidir destino do `landing/` no monorepo** — hoje é espelho da canônica em CF Pages (`comercial`). Manter como fallback até Phase 4 da migração ou remover já | `deploy.yml` rebuilda landing redundante | `landing/` + `docker-compose.yml` + `deploy.yml` | 1h se decidir remover |
 | 🟡 **P1** | **Email transacional (Resend)** — sem isso magic-link em prod cai no stdout do container = "esqueci senha" totalmente quebrado | Recover password de cliente real | `group_vars/all.yml` + `email_sender.py` (já tem stub) | 0.5d |
