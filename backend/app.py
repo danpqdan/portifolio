@@ -350,6 +350,13 @@ try:
         clientes_users_repo=_clientes_users_repo,
     )
     app.register_blueprint(_cliente_routes_mod.cliente_auth_bp)
+    # /cliente/auth/gate e endpoint interno chamado pelo nginx auth_request
+    # a cada request de Grafana embed (assets, datasources, etc). Sob default
+    # rate limit (50/hour), bate 429 em segundos quando user navega no
+    # dashboard — e nginx auth_request interpreta 429 como erro de servidor,
+    # devolvendo 500 pro browser. Como /gate so e alcancavel via nginx interno
+    # (location internal), nao da pra abusar de fora; isentar do limiter.
+    limiter.exempt(_cliente_routes_mod.gate)
     if _grafana_sync_service:
         log_safe(security_logger, 'info', "[SUCCESS] Grafana org sync ativo")
     log_safe(security_logger, 'info', "[SUCCESS] Auth do dashboard inicializado")
