@@ -1,4 +1,4 @@
-from flask import Blueprint, Flask, jsonify, request, session
+from flask import Blueprint, Flask, jsonify, make_response, request, session
 from flask_cors import CORS
 from flask_socketio import SocketIO, emit, disconnect
 from flask_limiter import Limiter
@@ -97,7 +97,11 @@ security_logger.propagate = False
 
 # ✅ CORS configurado por ambiente
 cors_origins = app.config.get("CORS_ORIGINS", ["http://localhost:5173"])
+_cors_origins_set = frozenset(o.rstrip("/") for o in cors_origins if o)
 
+# Lista estatica cobre subdominios proprios (api.X, app.X, portifolio.X) +
+# landing CF Pages. Origins de SDKs em sites de clientes vem do Postgres
+# em runtime via `_origins_dinamicos` (instanciado abaixo, apos tenants_repo).
 CORS(app,
      origins=cors_origins,
      supports_credentials=True,
@@ -107,9 +111,33 @@ CORS(app,
      methods=['GET', 'POST', 'OPTIONS']
 )
 
+# Singleton populado apos `_tenants_repo_singleton` ser criado. Hooks abaixo
+# (cors_dinamico_preflight + cors_dinamico_resposta) checam se ele existe
+# antes de usar — defensivo pra caso o boot falhe.
+_origins_dinamicos = None  # type: ignore[assignment]
+
+
+def _origin_socketio_permitido(origin):
+    """Callable pra `cors_allowed_origins` do python-socketio.
+
+    Resolvido em runtime: estatico passa direto; dinamico consulta
+    OriginsDinamicos quando disponivel.
+    """
+    if not origin:
+        return False
+    normalizado = origin.rstrip("/")
+    if normalizado in _cors_origins_set:
+        return True
+    if _origins_dinamicos is None:
+        return False  # antes do boot completo, so estatico
+    return _origins_dinamicos.permitido(normalizado)
+
+
 # ✅ SOCKETIO COM SUPORTE A PROXY REVERSO
+# cors_allowed_origins aceita callable em python-socketio — usa o mesmo
+# validador dinamico do HTTP.
 socketio_config = {
-    'cors_allowed_origins': cors_origins,
+    'cors_allowed_origins': _origin_socketio_permitido,
     'logger': False,
     'engineio_logger': False,
     'ping_timeout': 60,
@@ -323,10 +351,80 @@ try:
     servico_ingestao.sites_cache = SitesCache(_tenants_repo_singleton)
     servico_ingestao.tenants_repo = _tenants_repo_singleton
     servico_ingestao.cardinalidade_tracker = obter_cardinalidade_tracker()
+
+    # CORS dinamico: ativa lookup em site_dominios pra Origins fora da lista
+    # estatica. Necessario pra SDKs em sites de clientes recem-cadastrados
+    # funcionarem sem exigir edit de vault + ansible-apply.
+    from auth.origins_dinamicos import OriginsDinamicos  # noqa: E402
+    _origins_dinamicos = OriginsDinamicos(
+        origins_estaticos=cors_origins,
+        tenants_repo=_tenants_repo_singleton,
+        ttl_segundos=int(os.environ.get("CORS_DINAMICO_TTL_SEGUNDOS", "60")),
+    )
+
     log_safe(security_logger, 'info', "[SUCCESS] Auth multi-tenant inicializado")
 except Exception as e:
     log_safe(security_logger, 'error', f"[ERROR] Falha ao inicializar auth: {str(e)}")
     raise
+
+
+# ==================== CORS dinamico (hooks Flask) ====================
+# Hooks rodam por requisicao. flask-cors ja cobre static origins (subdominios
+# proprios + landing CF). Quando origin nao bate static, consultamos
+# OriginsDinamicos pra ver se eh cliente registrado em site_dominios.
+
+@app.before_request
+def cors_dinamico_preflight():
+    """Responde OPTIONS preflight pra origins dinamicos.
+
+    flask-cors so responde preflight pra origins na lista estatica. Pra cliente
+    registrado mas fora da lista, manualmente devolve 204 com headers CORS.
+    """
+    if request.method != 'OPTIONS':
+        return None
+    origin = request.headers.get('Origin')
+    if not origin:
+        return None
+    normalizado = origin.rstrip('/')
+    if normalizado in _cors_origins_set:
+        return None  # flask-cors handles
+    if _origins_dinamicos is None or not _origins_dinamicos.permitido(normalizado):
+        return None  # nao permitido — flask-cors decidira (sem headers)
+
+    # Permitido dinamico: monta resposta de preflight manualmente
+    resp = make_response('', 204)
+    resp.headers['Access-Control-Allow-Origin'] = origin
+    resp.headers['Access-Control-Allow-Credentials'] = 'true'
+    resp.headers['Access-Control-Allow-Methods'] = 'GET, POST, OPTIONS'
+    resp.headers['Access-Control-Allow-Headers'] = (
+        'Content-Type, Authorization, X-Session-Token, '
+        'X-Forwarded-For, X-Forwarded-Proto, X-SDK-Schema-Version'
+    )
+    resp.headers['Access-Control-Max-Age'] = '86400'
+    resp.headers['Vary'] = 'Origin'
+    return resp
+
+
+@app.after_request
+def cors_dinamico_resposta(resp):
+    """Adiciona headers CORS pra response de origin dinamico, quando flask-cors
+    nao cobriu (origin fora da lista estatica)."""
+    if resp.headers.get('Access-Control-Allow-Origin'):
+        return resp  # flask-cors ja setou (origin estatico)
+    origin = request.headers.get('Origin')
+    if not origin:
+        return resp
+    normalizado = origin.rstrip('/')
+    if normalizado in _cors_origins_set:
+        return resp  # estatico — flask-cors devia ter setado, nao mexe
+    if _origins_dinamicos is None or not _origins_dinamicos.permitido(normalizado):
+        return resp  # nao permitido — sem headers, browser bloqueia
+    resp.headers['Access-Control-Allow-Origin'] = origin
+    resp.headers['Access-Control-Allow-Credentials'] = 'true'
+    vary_atual = resp.headers.get('Vary', '')
+    resp.headers['Vary'] = ('Origin, ' + vary_atual) if vary_atual else 'Origin'
+    return resp
+
 
 app.register_blueprint(auth_bp, url_prefix='/auth')
 
