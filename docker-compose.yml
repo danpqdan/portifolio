@@ -95,6 +95,26 @@ services:
       - "127.0.0.1:3000:80"
     restart: unless-stopped
 
+  archiver:
+    build:
+      context: ./backend
+      dockerfile: archiver/Dockerfile
+    container_name: portifolio-archiver
+    depends_on:
+      influxdb:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    # Sidecar — nao expoe portas. APScheduler com cron diario 03:00 UTC.
+    # Reusa backend/.env (compartilha INFLUXDB_*, TENANTS_DATABASE_URL).
+    env_file:
+      - ./backend/.env
+    # Bind do codigo igual o backend pra hot-reload em dev. Em prod o codigo
+    # vem da imagem (COPY no Dockerfile).
+    volumes:
+      - ./backend:/app
+    restart: unless-stopped
+
   landing:
     build:
       context: ./landing

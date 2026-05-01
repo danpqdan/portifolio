@@ -371,6 +371,37 @@ except Exception as e:
     log_safe(security_logger, 'error', f"[ERROR] Falha ao inicializar auth do dashboard: {str(e)}")
     raise
 
+# ==================== EXPORTACAO DE ARQUIVOS R2 (cliente) ====================
+# Blueprint `/cliente/exportar` — listagem + download via signed URL R2.
+# Best-effort: se R2 nao estiver configurado (env vazio), bp nao registra.
+try:
+    _r2_account_id = (os.environ.get('R2_ACCOUNT_ID') or '').strip()
+    _r2_access_key = (os.environ.get('R2_ACCESS_KEY_ID') or '').strip()
+    _r2_secret_key = (os.environ.get('R2_SECRET_ACCESS_KEY') or '').strip()
+    _r2_bucket = (os.environ.get('R2_BUCKET') or '').strip()
+    if all([_r2_account_id, _r2_access_key, _r2_secret_key, _r2_bucket]):
+        from archiver.r2_client import R2Client  # noqa: E402
+        from archiver import routes as _archiver_routes_mod  # noqa: E402
+        _r2_client_singleton = R2Client(
+            access_key_id=_r2_access_key,
+            secret_access_key=_r2_secret_key,
+            bucket=_r2_bucket,
+            endpoint_url=R2Client.endpoint_padrao_r2(_r2_account_id),
+        )
+        _archiver_routes_mod.configurar(
+            svc=_sessao_service,
+            tenants_repo=_tenants_repo_singleton,
+            r2_client=_r2_client_singleton,
+        )
+        app.register_blueprint(_archiver_routes_mod.cliente_export_bp)
+        log_safe(security_logger, 'info', "[SUCCESS] Exportacao R2 inicializada")
+    else:
+        log_safe(security_logger, 'info',
+                 "[INFO] R2 nao configurado (env vazio), /cliente/exportar desabilitado")
+except Exception as e:
+    log_safe(security_logger, 'warning',
+             f"[WARNING] Falha ao inicializar exportacao R2: {str(e)}")
+
 # ==================== ROTAS COM BLUEPRINT ====================
 
 @api_bp.route("/", methods=["GET"])

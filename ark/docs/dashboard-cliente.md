@@ -436,44 +436,57 @@ Backend rejeita pontos no momento do ingest (NAO no momento da query — query l
 
 InfluxDB OSS nao exporta automaticamente dados que vao expirar. Sidecar dedicado.
 
-**Container `analytics-archiver`** (novo, no compose):
+**Container `analytics-archiver`** (em `backend/archiver/`, compose service `archiver`):
 
 ```yaml
-analytics-archiver:
-  image: portifolio-archiver
-  build: ./backend/archiver
-  environment:
-    INFLUXDB_URL: http://influxdb:8086
-    INFLUXDB_TOKEN: ${INFLUXDB_ADMIN_TOKEN}
-    BACKUP_PATH: /var/backups/analytics
-  volumes:
-    - analytics_backups:/var/backups/analytics
-  # cron interno: 03:00 UTC diario
+archiver:
+  build:
+    context: ./backend
+    dockerfile: archiver/Dockerfile
+  env_file: ./backend/.env  # reusa INFLUXDB_*, R2_*, TENANTS_DATABASE_URL
+  depends_on: [influxdb, postgres]
 ```
 
-**Algoritmo:**
+Codigo: `backend/archiver/`
+- `service.py` — `ArchiverService.export_window(slug, start, end)` retorna gzip de line protocol.
+- `r2_client.py` — `R2Client.upload(slug, dia, body)` + `signed_url_para_download(key, ttl)`.
+- `scheduler.py` — `executar_rodada_diaria(sites, archiver, r2, agora_utc)` itera e arquiva.
+- `sites_source.py` — combina `TenantsRepo.listar_sites` + `obter_quota` em `SiteArquivavel`.
+- `routes.py` — blueprint `/cliente/exportar` (listar + download via 302 signed URL).
+- `main.py` — entrypoint APScheduler com cron diario.
+
+**Algoritmo (implementado em `scheduler.py`):**
 
 ```
-para cada site com plano != free:
-  retencao = sites.retention_days  (7/30/90/365)
-  janela_inicio = now() - retencao - 1 dia
-  janela_fim    = now() - retencao
-  exportar dados em [janela_inicio, janela_fim] do bucket cliente_<slug>
-  formato: line protocol comprimido (.lp.gz)
-  destino: /var/backups/analytics/<site_slug>/YYYY-MM-DD.lp.gz
-  retencao do backup: 1m/6m/12m conforme tier
+para cada site com status='ativo' e plano != 'free':
+  retencao = quotas.retencao_dias  (default 30)
+  dia_a_exportar = now_utc.date() - retencao
+  start = midnight(dia_a_exportar) UTC
+  end   = start + 1 dia
+  payload = ArchiverService.export_window(slug, start, end)
+  if payload nao-vazio:
+    R2Client.upload(slug, dia_a_exportar, payload)
+    -> r2://dsplayground-analytics-archive/<slug>/YYYY/MM/DD.lp.gz
 ```
 
-**Endpoint pro cliente baixar:**
+Falhas em um site nao param os outros (try/except + contador `ResumoRodada.falhas`).
+Payload vazio (bucket sem dados na janela) pula upload pra nao poluir R2.
+
+**Storage R2 (Cloudflare):**
+- Bucket unico `dsplayground-analytics-archive` (jurisdiction EU, free tier 10 GB).
+- Key prefix por slug: `<slug>/<YYYY>/<MM>/<DD>.lp.gz` — list anti-IDOR via `Prefix=<slug>/`.
+- Free tier cobre ~55 clientes plano medio (180 MB/cliente steady-state) ou 3 plano grande.
+- Acima: $0.015/GB/mes — 100 GB = $1.35/mes.
+
+**Endpoint pro cliente baixar (`backend/archiver/routes.py`):**
 
 ```
-GET /cliente/exportar?inicio=YYYY-MM-DD&fim=YYYY-MM-DD
-  -> 302 + signed URL local (filesystem -> nginx X-Accel-Redirect)
+GET /cliente/exportar           — JSON com lista de dias arquivados do slug do user
+GET /cliente/exportar/<YYYY-MM-DD> — 302 + signed URL R2 (TTL 5min)
 ```
 
-**Quando migrar pra S3** (tradeoff documentado):
-- Local na VPS hoje: gratuito, simples, mas se VPS morre os backups vao junto.
-- S3-compatible (Backblaze B2 ~US$5/TB, Wasabi, Cloudflare R2): durabilidade 11-9s, custo baixo. Migrar quando o volume de backup local passar de ~50 GB ou quando primeiro cliente pago entrar.
+Auth via cookie `cliente_session` (mesmo do `/cliente/auth/me`). Anti-IDOR: key R2
+sempre derivada do `user.site_id -> tenants_repo.obter_site(...).slug`, nunca do path.
 
 **Free tier nao tem backup** — quando dado expira em 7d, sumiu mesmo. Documentar **explicitamente** no signup.
 
