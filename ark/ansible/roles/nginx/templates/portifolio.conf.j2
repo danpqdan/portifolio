@@ -134,6 +134,13 @@ server {
         proxy_send_timeout 60s;
     }
 
+    # Bloqueio publico de /api/metrics — mesmo motivo do api.X (Prometheus
+    # scrape interno via rede docker, nao via nginx).
+    location = /api/metrics {
+        deny all;
+        return 404;
+    }
+
     # Compat: o portfolio ainda chama /api/* pelo bundle Vite. Strippa o prefixo.
     location /api/ {
         rewrite ^/api/(.*)$ /$1 break;
@@ -162,6 +169,14 @@ server {
     client_max_body_size 1m;
     access_log /var/log/nginx/portifolio-api.access.log;
     error_log  /var/log/nginx/portifolio-api.error.log warn;
+
+    # Bloqueio publico de /metrics — Prometheus scrape acontece DENTRO da rede
+    # docker (backend:5000/metrics), nao via nginx. Externamente vaza
+    # contadores operacionais (volume por cliente, erros, etc.).
+    location = /metrics {
+        deny all;
+        return 404;
+    }
 
     location / {
         limit_req zone=analytics_edge burst=40 nodelay;
