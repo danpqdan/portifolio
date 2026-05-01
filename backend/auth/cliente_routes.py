@@ -11,8 +11,11 @@ Endpoints:
 
 Cookie:
   - Nome:  cliente_session
-  - Flags: HttpOnly, Secure (configuravel via env), SameSite=Strict
+  - Flags: HttpOnly, Secure (env COOKIE_SECURE; default true), SameSite=Strict
   - Path:  /
+  - Domain: env COOKIE_DOMAIN (default vazio = host-only). Em prod com
+            landing/api/app em subdominios distintos do mesmo eTLD+1, setar
+            COOKIE_DOMAIN=dsplayground.com.br pra cookie viajar entre eles.
   - TTL:   vem de SessaoService.sessao_ttl_segundos
 
 Todos os eventos sao logados em `security` (CrowdSec parseia):
@@ -109,16 +112,30 @@ def _ip_cliente() -> Optional[str]:
     return request.environ.get("REMOTE_ADDR")
 
 
+def _cookie_domain() -> Optional[str]:
+    """Devolve o atributo Domain= do cookie ou None (host-only).
+
+    Necessario quando landing/api/dashboard ficam em subdominios diferentes
+    do mesmo eTLD+1 (ex: api.X seta cookie pra app.X ler). Sem env definida,
+    cookie continua host-only (comportamento legado em apex unico).
+    """
+    valor = os.environ.get("COOKIE_DOMAIN", "").strip()
+    return valor or None
+
+
 def _set_cookie(response, cookie_plaintext: str, *, max_age: int) -> None:
     secure = os.environ.get("COOKIE_SECURE", "true").lower() != "false"
     response.set_cookie(
         COOKIE_NAME, cookie_plaintext,
-        max_age=max_age, httponly=True, secure=secure, samesite="Strict", path="/",
+        max_age=max_age, httponly=True, secure=secure, samesite="Strict",
+        path="/", domain=_cookie_domain(),
     )
 
 
 def _clear_cookie(response) -> None:
-    response.delete_cookie(COOKIE_NAME, path="/")
+    # delete_cookie precisa do mesmo Domain= que foi setado, senao o browser
+    # nao limpa (atributos diferentes = cookies diferentes).
+    response.delete_cookie(COOKIE_NAME, path="/", domain=_cookie_domain())
 
 
 def _erro(code: str, message: str, status: int):
