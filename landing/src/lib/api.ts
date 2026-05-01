@@ -133,3 +133,21 @@ export function login(
     opts.fetchImpl ?? fetch,
   );
 }
+
+/**
+ * Constroi URL absoluta pro dashboard logado (subdominio app.X em prod).
+ * Necessario porque, depois do cutover do apex pro CF Pages, redirect
+ * relativo `/cliente/metricas` cai numa pagina estatica que nao existe.
+ *
+ * @param dashboardUrl base (ex: https://app.dsplayground.com.br/cliente/metricas)
+ * @param query params opcionais (ex: { welcome: 'true' })
+ */
+export function urlDashboard(
+  dashboardUrl: string,
+  query?: Record<string, string>,
+): string {
+  if (!query || Object.keys(query).length === 0) return dashboardUrl;
+  const sep = dashboardUrl.includes('?') ? '&' : '?';
+  const qs = new URLSearchParams(query).toString();
+  return `${dashboardUrl}${sep}${qs}`;
+}
