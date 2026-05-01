@@ -53,6 +53,20 @@ export type LoginErrorCode =
   | 'REDE'
   | 'INESPERADO';
 
+export type ListarExportsErrorCode =
+  | 'NAO_AUTENTICADO'
+  | 'REDE'
+  | 'INESPERADO';
+
+export interface ExportItem {
+  dia: string;       // 'YYYY-MM-DD'
+  key: string;       // '<slug>/YYYY/MM/DD.lp.gz'
+}
+
+export interface ListarExportsOk {
+  arquivos: ExportItem[];
+}
+
 export type Result<T, E> =
   | { ok: true } & T
   | { ok: false; code: E; message: string; status: number };
@@ -132,6 +146,74 @@ export function login(
     payload,
     opts.fetchImpl ?? fetch,
   );
+}
+
+async function getJson<TOk, TErr extends string>(
+  url: string,
+  fetchImpl: typeof fetch,
+  codeMap: Partial<Record<number, TErr>>,
+): Promise<Result<TOk, TErr>> {
+  let resp: Response;
+  try {
+    resp = await fetchImpl(url, {
+      method: 'GET',
+      credentials: 'include',
+    });
+  } catch {
+    return { ok: false, code: 'REDE' as TErr, message: 'falha de rede', status: 0 };
+  }
+
+  if (resp.ok) {
+    let data: any;
+    try { data = await resp.json(); }
+    catch {
+      return {
+        ok: false,
+        code: 'INESPERADO' as TErr,
+        message: `resposta nao-JSON (status ${resp.status})`,
+        status: resp.status,
+      };
+    }
+    return { ok: true, ...(data as TOk) };
+  }
+
+  const code = codeMap[resp.status] ?? ('INESPERADO' as TErr);
+  return {
+    ok: false,
+    code,
+    message: `erro ${resp.status}`,
+    status: resp.status,
+  };
+}
+
+/**
+ * Lista arquivos arquivados disponiveis pra download (auth via cookie cliente_session).
+ *
+ * O backend retorna 401 se cookie ausente/invalido. 200 com `{arquivos: []}` se
+ * R2 esta configurado mas nao tem nada do cliente atual ou se R2 nao esta
+ * configurado (blueprint nao registrado vira 404 — tratado como INESPERADO).
+ */
+export function listarExports(
+  opts: ApiOptions,
+): Promise<Result<ListarExportsOk, ListarExportsErrorCode>> {
+  return getJson<ListarExportsOk, ListarExportsErrorCode>(
+    `${opts.apiUrl}/cliente/exportar`,
+    opts.fetchImpl ?? fetch,
+    { 401: 'NAO_AUTENTICADO' },
+  );
+}
+
+const RE_DIA_ISO = /^\d{4}-\d{2}-\d{2}$/;
+
+/**
+ * URL absoluta pra GET /cliente/exportar/<dia> — backend retorna 302 com
+ * signed URL R2 (TTL 5min). `<a href={url}>` deixa o browser seguir o redirect.
+ */
+export function urlDownloadExport(apiUrl: string, dia: string): string {
+  if (!RE_DIA_ISO.test(dia)) {
+    throw new Error(`dia invalido: ${dia} (esperado YYYY-MM-DD)`);
+  }
+  return `${apiUrl}/cliente/exportar/${dia}`;
 }
 
 /**
