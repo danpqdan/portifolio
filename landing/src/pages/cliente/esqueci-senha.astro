@@ -1,13 +1,18 @@
 ---
 import Base from '~/layouts/Base.astro';
+import Button from '~/components/ui/Button.astro';
+import Card from '~/components/ui/Card.astro';
+import FormError from '~/components/ui/FormError.astro';
+import Input from '~/components/ui/Input.astro';
+import Section from '~/components/ui/Section.astro';
 ---
 <Base
   title="Recuperar acesso"
   description="Receba um link mágico no seu email pra entrar sem senha."
   noindex={true}
 >
-  <section class="mx-auto flex min-h-[70vh] max-w-md flex-col justify-center px-4 py-16 sm:px-6">
-    <div class="card">
+  <Section narrow class="flex min-h-[70vh] flex-col justify-center">
+    <Card>
       <h1 class="text-2xl font-bold text-white">Recuperar acesso</h1>
       <p class="mt-1 text-sm text-slate-400">
         Digite o email da sua conta. Você vai receber um link que entra
@@ -15,23 +20,23 @@ import Base from '~/layouts/Base.astro';
       </p>
 
       <form id="form-magic-link" class="mt-6 space-y-4" novalidate>
-        <div>
-          <label for="email" class="input-label">Email</label>
-          <input id="email" name="email" type="email" autocomplete="email" required class="input-field" placeholder="voce@empresa.com" />
-        </div>
+        <Input id="email" type="email" label="Email" autocomplete="email" required placeholder="voce@empresa.com" />
 
-        <div id="erro" role="alert" class="hidden rounded-md border border-red-500/40 bg-red-500/10 px-3 py-2 text-sm text-red-200"></div>
+        <FormError id="erro" />
 
-        <button id="submit" type="submit" class="btn-primary w-full" data-cta="form-esqueci-senha">Enviar link de acesso</button>
+        <Button type="submit" id="submit" fullWidth data-cta="form-esqueci-senha">Enviar link de acesso</Button>
 
         <p class="text-center text-sm text-slate-400">
           Lembrou da senha? <a href="/cliente/login" class="text-brand-300 hover:text-brand-200">Entrar</a>
+        </p>
+        <p class="text-center text-sm text-slate-400">
+          Sem conta? <a href="/cliente/cadastro" class="text-brand-300 hover:text-brand-200">Criar conta grátis</a>
         </p>
       </form>
 
       <!-- Mensagem de sucesso (substitui o form). Anti-enum: mesma copia
            pra email-valido ou fantasma. -->
-      <div id="sucesso" class="mt-6 hidden rounded-md border border-emerald-500/40 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-100">
+      <FormError id="sucesso" variant="success" class="mt-6">
         <p class="font-semibold">Link enviado.</p>
         <p class="mt-1">
           Se o email estiver cadastrado, você vai receber um link em alguns
@@ -40,9 +45,9 @@ import Base from '~/layouts/Base.astro';
         <p class="mt-3 text-xs text-emerald-200/80">
           O link expira em 15 minutos e só pode ser usado uma vez.
         </p>
-      </div>
-    </div>
-  </section>
+      </FormError>
+    </Card>
+  </Section>
 
   <script>
     import { solicitarMagicLink } from '~/lib/api';
