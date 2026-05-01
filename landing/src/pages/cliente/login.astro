@@ -1,29 +1,28 @@
 ---
 import Base from '~/layouts/Base.astro';
+import Button from '~/components/ui/Button.astro';
+import Card from '~/components/ui/Card.astro';
+import FormError from '~/components/ui/FormError.astro';
+import Input from '~/components/ui/Input.astro';
+import Section from '~/components/ui/Section.astro';
 ---
 <Base
   title="Entrar"
   description="Entre na sua conta e veja seu painel de visitas e desempenho."
   noindex={true}
 >
-  <section class="mx-auto flex min-h-[70vh] max-w-md flex-col justify-center px-4 py-16 sm:px-6">
-    <div class="card">
+  <Section narrow class="flex min-h-[70vh] flex-col justify-center">
+    <Card>
       <h1 class="text-2xl font-bold text-white">Entrar</h1>
       <p class="mt-1 text-sm text-slate-400">Use o email da sua conta.</p>
 
       <form id="form-login" class="mt-6 space-y-4" novalidate>
-        <div>
-          <label for="email" class="input-label">Email</label>
-          <input id="email" name="email" type="email" autocomplete="email" required class="input-field" placeholder="voce@empresa.com" />
-        </div>
-        <div>
-          <label for="senha" class="input-label">Senha</label>
-          <input id="senha" name="senha" type="password" autocomplete="current-password" required class="input-field" />
-        </div>
+        <Input id="email" type="email" label="Email" autocomplete="email" required placeholder="voce@empresa.com" />
+        <Input id="senha" type="password" label="Senha" autocomplete="current-password" required />
 
-        <div id="erro" role="alert" class="hidden rounded-md border border-red-500/40 bg-red-500/10 px-3 py-2 text-sm text-red-200"></div>
+        <FormError id="erro" />
 
-        <button id="submit" type="submit" class="btn-primary w-full" data-cta="form-login">Entrar</button>
+        <Button type="submit" id="submit" fullWidth data-cta="form-login">Entrar</Button>
         <p class="text-center text-sm text-slate-400">
           Sem conta? <a href="/cliente/cadastro" class="text-brand-300 hover:text-brand-200">Criar conta grátis</a>
         </p>
@@ -31,8 +30,8 @@ import Base from '~/layouts/Base.astro';
           <a href="/cliente/esqueci-senha" class="text-brand-300 hover:text-brand-200" data-cta="link-esqueci-senha">Esqueci minha senha</a>
         </p>
       </form>
-    </div>
-  </section>
+    </Card>
+  </Section>
 
   <script>
     import { login } from '~/lib/api';
