@@ -57,6 +57,22 @@ sdk_auth_required: false
 # === Admin LGPD ===
 admin_api_token: ""  # gerar com `python -c "import secrets; print(secrets.token_urlsafe(32))"`
 
+# === Email transacional (Resend) ===
+# Sem RESEND_API_KEY, magic-link cai no stdout do container — `docker logs
+# portifolio-backend | grep evento=email_stdout` pra ver. OK pra dev,
+# inviavel pra prod (ninguem ve o link).
+#
+# Setup:
+#   1. resend.com → cria conta (free 3k emails/mes)
+#   2. Add Domain → digita `dsplayground.com.br` → CF DNS records (4 SPF/DKIM/DMARC)
+#   3. Aguarda verificacao (5min em geral)
+#   4. API Keys → cria sending key, escopo dominio
+#   5. Cole abaixo
+#
+# EMAIL_FROM precisa ter dominio verificado.
+resend_api_key: ""
+email_from: "no-reply@dsplayground.com.br"
+
 # === Archiver Cloudflare R2 ===
 # Sidecar `analytics-archiver` exporta janelas pre-expiracao do InfluxDB
 # pra R2 (S3-compatible). Free tier R2: 10 GB storage + 1M Class A ops/mes
