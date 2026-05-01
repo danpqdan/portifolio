@@ -456,6 +456,17 @@ def configuracoes():
 
     consumo_hoje = _tenants_repo.consumo_hoje(user.site_id)
 
+    # Cardinalidade: tracker em memoria (in-process). Limite vem do plano
+    # via LIMITE_POR_PLANO. Best-effort: se import falhar (test env minimo),
+    # responde 0/0 em vez de quebrar o endpoint.
+    try:
+        from ingestao.cardinalidade import limite_para_plano, obter_tracker
+        tracker = obter_tracker()
+        cardinalidade_atual = tracker.total_para_site(user.site_id)
+        cardinalidade_limite = limite_para_plano(site.plano)
+    except Exception:
+        cardinalidade_atual, cardinalidade_limite = 0, 0
+
     return jsonify({
         "user": {
             "id": user.id,
@@ -474,6 +485,10 @@ def configuracoes():
         "quota": quota_dict,
         "consumo": {
             "eventos_hoje": consumo_hoje,
+        },
+        "cardinalidade": {
+            "atual": cardinalidade_atual,
+            "limite": cardinalidade_limite,
         },
     })
 

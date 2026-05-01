@@ -52,6 +52,30 @@ import Base from '~/layouts/Base.astro';
           </dl>
         </section>
 
+        <!-- Cardinalidade -->
+        <section>
+          <h2 class="text-sm font-semibold uppercase tracking-wide text-slate-300">Cardinalidade de tags</h2>
+          <p class="mt-1 text-xs text-slate-500">
+            Quantos valores únicos suas tags têm. Eventos são bloqueados ao
+            atingir o limite — usar IDs como tag (user_id, request_id) é o
+            jeito mais comum de explodir.
+          </p>
+          <div class="mt-3">
+            <div class="flex items-baseline justify-between text-sm">
+              <span id="cardinalidade-texto" class="text-slate-100"></span>
+              <span id="cardinalidade-pct" class="text-xs text-slate-400"></span>
+            </div>
+            <div class="mt-1.5 h-2 overflow-hidden rounded-full bg-slate-800">
+              <div
+                id="cardinalidade-bar"
+                class="h-full rounded-full bg-emerald-500 transition-all"
+                style="width: 0%"
+              ></div>
+            </div>
+            <p id="cardinalidade-aviso" class="mt-1.5 hidden text-xs"></p>
+          </div>
+        </section>
+
         <!-- Trocar email -->
         <section>
           <h2 class="text-sm font-semibold uppercase tracking-wide text-slate-300">Trocar email</h2>
@@ -147,6 +171,46 @@ import Base from '~/layouts/Base.astro';
       }
     }
 
+    function renderCardinalidade(atual: number, limite: number) {
+      const texto = document.getElementById('cardinalidade-texto')!;
+      const pct = document.getElementById('cardinalidade-pct')!;
+      const bar = document.getElementById('cardinalidade-bar')!;
+      const aviso = document.getElementById('cardinalidade-aviso')!;
+
+      texto.textContent = `${fmtNumero(atual)} / ${fmtNumero(limite)} valores`;
+
+      if (limite <= 0) {
+        // tracker indisponivel — esconde a barra
+        pct.textContent = '';
+        bar.style.width = '0%';
+        aviso.classList.add('hidden');
+        return;
+      }
+
+      const percentual = Math.min(100, (atual / limite) * 100);
+      pct.textContent = `${percentual.toFixed(1)}%`;
+      bar.style.width = `${percentual}%`;
+
+      // Cores progressivas: verde <80%, amarelo 80-95%, vermelho >=95%
+      bar.classList.remove('bg-emerald-500', 'bg-amber-500', 'bg-red-500');
+      aviso.classList.remove('text-amber-300', 'text-red-300');
+
+      if (percentual >= 95) {
+        bar.classList.add('bg-red-500');
+        aviso.textContent = 'Crítico — eventos podem começar a ser bloqueados em breve.';
+        aviso.classList.add('text-red-300');
+        aviso.classList.remove('hidden');
+      } else if (percentual >= 80) {
+        bar.classList.add('bg-amber-500');
+        aviso.textContent = 'Atenção — você está perto do limite. Revise tags com muitos valores únicos.';
+        aviso.classList.add('text-amber-300');
+        aviso.classList.remove('hidden');
+      } else {
+        bar.classList.add('bg-emerald-500');
+        aviso.classList.add('hidden');
+      }
+    }
+
     async function carregar() {
       const r = await obterConfiguracoes({ apiUrl: API_URL });
 
@@ -176,6 +240,8 @@ import Base from '~/layouts/Base.astro';
       document.getElementById('quota-dia')!.textContent = fmtNumero(r.quota.eventos_por_dia);
       document.getElementById('quota-minuto')!.textContent = fmtNumero(r.quota.eventos_por_minuto);
       document.getElementById('quota-retencao')!.textContent = `${r.quota.retencao_dias} dias`;
+
+      renderCardinalidade(r.cardinalidade.atual, r.cardinalidade.limite);
 
       conteudo.classList.remove('hidden');
     }
