@@ -79,26 +79,28 @@ Se contradisser código, atualize código + este doc no mesmo commit.
 ```
                         Internet (Cloudflare proxy, Full strict, Origin Cert 2041)
                                           │
-                              Nginx host (80/443)
-                          ┌───────────────┼───────────────┐
-                          ▼               ▼               ▼
-                 dsplayground.com.br   portifolio.X   api.dsplayground.com.br
-                 (apex — landing)      (portfolio    (backend canonical
-                                       pessoal)     paths sem /api/)
-                          │               │               │
-                          │               │               ▼
-                          │               │         portifolio-backend (Flask)
-                          │               │               │
-                          ▼               ▼               ▼
-                  portifolio-landing  portifolio-frontend  influxdb + postgres
-                   (Astro static)     (React 3D Vite)      (volumes persistentes)
-                          
-                   /api/* (rewrite)        /api/* (rewrite)
-                   /cliente/metricas/      ↓                 backend Flask
-                   ↓                       backend Flask
-                   auth_request /cliente/auth/gate
-                   ↓ 200 + X-WEBAUTH-USER
-                   Grafana (auth.proxy confia)
+                          ┌───────────────┴────────────────┐
+                          ▼                                ▼
+                  Cloudflare Pages                   Nginx host (80/443)
+                  (repo `comercial`)            ┌─────────┼─────────┐
+                  dsplayground.com.br (apex)    ▼         ▼         ▼
+                  • landing comercial Astro    app.X  portifolio.X api.X
+                                                │         │         │
+                                                ▼         ▼         ▼
+                                   /cliente/metricas → React 3D    backend Flask
+                                   auth_request →     (portfolio    + Socket.IO
+                                   Grafana (3001)     pessoal)
+                                          │
+                                          ▼
+                                  portifolio-grafana
+                                  (auth.proxy via X-WEBAUTH-USER)
+                                          │
+                                          ▼
+                                  influxdb (bucket-per-cliente)
+                                  + postgres (auth multi-tenant)
+
+   Cookie cliente_session: HttpOnly + Secure + SameSite=Strict + Domain=dsplayground.com.br
+   (var COOKIE_DOMAIN no Ansible) — viaja entre apex (landing), app.X (dashboard) e api.X.
 ```
 
 **Princípios de segurança:**
