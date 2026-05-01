@@ -69,7 +69,12 @@ server {
 
         error_page 401 = @cliente_nao_autenticado;
 
-        proxy_pass http://portifolio_grafana/;
+        # IMPORTANTE: proxy_pass SEM trailing `/` — preserva o path original
+        # `/cliente/metricas/...` quando passa pro Grafana. Com trailing `/`
+        # o nginx strippa o prefixo, Grafana recebe `/`, e como
+        # GF_SERVER_SERVE_FROM_SUB_PATH=true + root_url=app.X/cliente/metricas/,
+        # ele redireciona 301 pro root_url completo — loop infinito.
+        proxy_pass http://portifolio_grafana;
         proxy_http_version 1.1;
         proxy_set_header Host              $host;
         proxy_set_header X-Real-IP         $remote_addr;
