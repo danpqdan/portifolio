@@ -36,7 +36,7 @@ services:
       # Ver ark/docs/dashboard-cliente.md. Grafana serve sob subpath
       # /cliente/metricas/ e confia no header X-WEBAUTH-USER injetado
       # pelo nginx apos validacao do cookie pelo backend Flask.
-      GF_SERVER_ROOT_URL: ${GF_ROOT_URL:-https://dsplayground.com.br/cliente/metricas/}
+      GF_SERVER_ROOT_URL: ${GF_ROOT_URL:-https://app.dsplayground.com.br/cliente/metricas/}
       GF_SERVER_SERVE_FROM_SUB_PATH: "true"
       GF_AUTH_PROXY_ENABLED: "true"
       GF_AUTH_PROXY_HEADER_NAME: X-WEBAUTH-USER

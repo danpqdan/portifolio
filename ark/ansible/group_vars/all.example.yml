@@ -12,8 +12,24 @@ repo_branch: main
 # === Aplicacao ===
 flask_secret_key: trocar-em-producao
 cors_origins:
-  - https://dsplayground.com.br
-  - https://portifolio.dsplayground.com.br
+  - https://dsplayground.com.br             # apex (CF Pages — landing comercial)
+  - https://app.dsplayground.com.br         # subdominio do dashboard logado
+  - https://portifolio.dsplayground.com.br  # portfolio pessoal
+
+# Cookie cliente_session — Domain compartilhado entre apex/app/api (same-site).
+# Sem isso, cookie setado por api.X nao chega ao app.X. Em dev local pode
+# ficar vazio (host-only).
+cookie_domain: dsplayground.com.br
+
+# Magic-link e redirect pos-login. Hoje magic-link em prod ainda nao envia
+# email real (P1 — RESEND_API_KEY pendente), mas a URL precisa estar correta
+# pro dia que ligar.
+dashboard_base_url: https://api.dsplayground.com.br
+dashboard_redirect: https://app.dsplayground.com.br/cliente/metricas
+
+# Grafana root URL — usado em links internos (export, share). Hardcoded
+# antes apontava pro apex; agora tem que ser app.X.
+grafana_root_url: https://app.dsplayground.com.br/cliente/metricas/
 
 # === InfluxDB ===
 influxdb_url: http://influxdb:8086

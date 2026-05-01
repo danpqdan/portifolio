@@ -48,13 +48,16 @@ Volumes persistentes (nao apagar sem checar):
 ## Arquitetura de trafego
 
 ```
-Internet → Cloudflare (laranja, Full strict, Origin Cert)
-              └→ Nginx host (80/443, TLS CF Origin Cert ate 2041)
-                    ├─ dsplayground.com.br + portifolio.X  → 127.0.0.1:3000 (frontend nginx:alpine → dist/)
-                    │    ├─ /api/*                 → 127.0.0.1:5000 (nginx strippa /api/, paths backend canonicos)
-                    │    └─ /cliente/metricas/*     → auth_request → 127.0.0.1:3001 (Grafana c/ auth.proxy)
-                    │    Apex e portifolio.X compartilham o vhost; split planejado quando landing
-                    │    do produto for separada do portfolio pessoal.
+Internet → Cloudflare (laranja, Full strict, Origin Cert wildcard ate 2041)
+              ├→ dsplayground.com.br (apex)  → CF Pages (repo `comercial`)
+              │   • landing comercial Astro estatica — fora do nginx host
+              │
+              └→ Nginx host (80/443, TLS CF Origin Cert)
+                    ├─ app.dsplayground.com.br      → 127.0.0.1:3001 (Grafana c/ auth.proxy)
+                    │    └─ /cliente/metricas/*  → auth_request /__cliente_auth_gate
+                    │       (Flask valida cookie → X-WEBAUTH-USER → Grafana)
+                    ├─ portifolio.dsplayground.com.br → 127.0.0.1:3000 (portfolio React 3D)
+                    │    └─ /api/*  → 127.0.0.1:5000 (nginx strippa /api/, paths canonicos)
                     ├─ api.dsplayground.com.br      → 127.0.0.1:5000 (backend Flask, paths canonicos sem /api/)
                     │                                  WS em /socket.io/, REST em /auth/sdk-token, /cliente/auth/*
                     ├─ grafana.dsplayground.com.br  → 127.0.0.1:3001 (Grafana — admin direto)
@@ -64,12 +67,17 @@ Backend → influxdb:8086, postgres:5432 (rede portifolio_default)
 CrowdSec le /var/log/nginx + backend/security.log → aplica decisoes via bouncer
 Prometheus scrape backend:5000/metrics (quando existir) + node-exporter
 
+Cookie cliente_session: HttpOnly+Secure+SameSite=Strict+Domain=dsplayground.com.br
+(env COOKIE_DOMAIN no backend) — viaja entre apex (landing CF Pages), app.X
+(dashboard) e api.X same-site.
+
 Dashboard do cliente (detalhes em ark/docs/dashboard-cliente.md):
-  Browser → /cliente/metricas/* → nginx auth_request /__cliente_auth_gate
-        → Flask /cliente/auth/gate (valida cookie cliente_session)
+  Browser → app.dsplayground.com.br/cliente/metricas/* → nginx auth_request /__cliente_auth_gate
+        → Flask /cliente/auth/gate (valida cookie cliente_session — funciona porque Domain=eTLD+1)
         → 200 + header X-WEBAUTH-USER=<site_id>
         → nginx propaga pro Grafana
         → Grafana auth.proxy confia no header e mapeia user
+        → 401 → redirect 302 pra https://dsplayground.com.br/cliente/login (landing CF Pages)
 ```
 
 Detalhes completos em `/opt/portifolio/ark/docs/servidor-producao.md`.

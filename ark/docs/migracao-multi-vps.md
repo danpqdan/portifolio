@@ -89,6 +89,8 @@ Migrar de **1 VPS HostGator** (1 vCPU / 1.7 GB / SPOF) pra **5 VMs especializada
                   │    (portfolio React) │   │  • health check 5s     │
                   └──────────────────────┘   │  • drain on deploy     │
                                              │  • api.dsplayground.X  │
+                                             │  • app.dsplayground.X  │
+                                             │    (dashboard logado)  │
                                              └─────┬──────┬───────────┘
                                                    │      │
                                        rede privada│      │rede privada
