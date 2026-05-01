@@ -51,8 +51,11 @@ postgres_password: trocar-em-producao
 jwt_audience: api.dsplayground.com.br
 sdk_token_ttl_seconds: 300
 sdk_token_rate_limit_per_key: 5
-# Quando o SDK em producao ja envia publishable_key, virar true para bloquear sockets nao-autenticados.
-sdk_auth_required: false
+# Bloqueia sockets sem `publishable_key` -> JWT exchange. Default `true` desde
+# 2026-05-01 (todos os consumers em prod ja mandam publishable_key — landing CF
+# Pages, portifolio Vite, frontend admin). Manter `false` so em dev local sem
+# auth-aware SDK ou durante migracao de consumer legado.
+sdk_auth_required: true
 
 # === Admin LGPD ===
 admin_api_token: ""  # gerar com `python -c "import secrets; print(secrets.token_urlsafe(32))"`

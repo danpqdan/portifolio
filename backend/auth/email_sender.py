@@ -67,6 +67,10 @@ class ResendEmailSender:
             headers={
                 "Authorization": f"Bearer {self._api_key}",
                 "Content-Type": "application/json",
+                # CF na frente da api.resend.com bane User-Agent generico
+                # do urllib (Python-urllib/3.X) com error 1010. Identificacao
+                # explicita evita o bloqueio.
+                "User-Agent": "dsplayground-backend/1.0 (+https://dsplayground.com.br)",
             },
             method="POST",
         )
