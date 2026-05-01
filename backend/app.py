@@ -428,6 +428,20 @@ def cors_dinamico_resposta(resp):
 
 app.register_blueprint(auth_bp, url_prefix='/auth')
 
+
+# ==================== METRICS PROMETHEUS ====================
+# Endpoint /metrics consumido pelo Prometheus (job 'portifolio-backend' em
+# ark/monitoring/prometheus/prometheus.yml). Sem auth — Prometheus scrape de
+# dentro da rede docker (backend:5000); externamente nginx nao expoe /metrics.
+from metrics import obter_metrics, registrar_endpoint as _registrar_metrics_endpoint  # noqa: E402
+
+_metrics_service = obter_metrics()
+_registrar_metrics_endpoint(app, _metrics_service)
+# /metrics nao precisa rate-limit — Prometheus scrape em intervalo fixo
+limiter.exempt(app.view_functions['prometheus_metrics'])
+log_safe(security_logger, 'info', "[SUCCESS] Metrics Prometheus em /metrics")
+
+
 # /auth/sdk-token chamado por todo browser que carrega landing publica —
 # default flask-limiter (50/h) bate em segundos com handful de page loads.
 # Protecao real ja existe via quotas.emissoes_jwt_por_minuto (Postgres,
