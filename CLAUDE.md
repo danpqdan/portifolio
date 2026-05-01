@@ -196,9 +196,10 @@ Detalhes do plano de migracao para CORS dinamico (por `sites.dominios_permitidos
 
 **A confirmar via SSH no proximo `ansible-apply`:**
 - 🔍 Logger root do Flask separado do `security_logger` em `backend/app.py` — verificar se `security.log` so recebe linhas com `evento=` (resto vai pra stdout do container).
-- 🔍 `roles/crowdsec/` packagecloud bouncer-nginx — pacote pode nao existir no repo; check de `firewall-bouncer` cobre o equivalente.
 - 🔍 `roles/analytics-stack/` tasks com `when: not ansible_check_mode` — `make ansible-check` precisa nao quebrar.
 - 🔍 **Vault encryption:** `group_vars/all.yml` deve estar criptografado (`$ANSIBLE_VAULT;1.1;AES256` na primeira linha). Senha em `/opt/portifolio/.vault-password` (0600, `deploy:analytics`, fora do git). Usuario reportou "vault precisa garantir criptografia" em 2026-05-01 — validar antes de tratar como done.
+
+**Nao e mais pendencia:** instalacao do bouncer-nginx via packagecloud — bouncer (especificamente `crowdsec-firewall-bouncer-nftables`) ja vem instalado por default com a instalacao do CrowdSec via repo oficial. Tasks 25-49 de `roles/crowdsec/tasks/main.yml` que tentam instalar `crowdsec-nginx-bouncer` separado sao redundantes — remover na proxima rodada de cleanup do role.
 
 Quando todos confirmados, remover esta secao.
 
