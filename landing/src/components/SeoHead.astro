@@ -13,7 +13,10 @@ const {
   title,
   description,
   canonical,
-  ogImage = '/og-default.png',
+  // SVG decent pros principais crawlers (Twitter/X, Facebook, LinkedIn aceita
+  // SVG desde 2023). PNG gerado a partir do SVG fica como upgrade futuro
+  // quando tivermos pipeline de imagem (sharp/satori).
+  ogImage = '/og-default.svg',
   noindex = false,
 } = Astro.props;
 
