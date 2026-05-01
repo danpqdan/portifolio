@@ -1,44 +1,47 @@
 ---
 import Base from '~/layouts/Base.astro';
+import Button from '~/components/ui/Button.astro';
+import Card from '~/components/ui/Card.astro';
+import FormError from '~/components/ui/FormError.astro';
+import Input from '~/components/ui/Input.astro';
+import Section from '~/components/ui/Section.astro';
 ---
 <Base
   title="Criar conta"
   description="Crie sua conta grátis e comece a entender seu site em minutos. Sem cartão de crédito."
   noindex={false}
 >
-  <section class="mx-auto flex min-h-[70vh] max-w-md flex-col justify-center px-4 py-16 sm:px-6">
-    <div class="card">
+  <Section narrow class="flex min-h-[70vh] flex-col justify-center">
+    <Card>
       <h1 class="text-2xl font-bold text-white">Criar conta</h1>
       <p class="mt-1 text-sm text-slate-400">É grátis. Sem cartão de crédito.</p>
 
       <form id="form-cadastro" class="mt-6 space-y-4" novalidate>
-        <div>
-          <label for="nome_site" class="input-label">Nome do seu site ou negócio</label>
-          <input id="nome_site" name="nome_site" type="text" autocomplete="organization" required class="input-field" placeholder="Minha Loja de Tênis" />
-        </div>
-        <div>
-          <label for="slug" class="input-label">Apelido do site</label>
-          <input id="slug" name="slug" type="text" autocomplete="off" required pattern="[a-z0-9](?:[a-z0-9\-]{1,30}[a-z0-9])" minlength="3" maxlength="32" class="input-field" placeholder="minha-loja" />
-          <p class="mt-1 text-xs text-slate-500">Vai aparecer na URL do seu painel. Use letras minúsculas, números e hífen.</p>
-        </div>
-        <div>
-          <label for="email" class="input-label">Email</label>
-          <input id="email" name="email" type="email" autocomplete="email" required class="input-field" placeholder="voce@suaempresa.com.br" />
-        </div>
-        <div>
-          <label for="senha" class="input-label">Senha</label>
-          <input id="senha" name="senha" type="password" autocomplete="new-password" required minlength="8" class="input-field" placeholder="pelo menos 8 caracteres" />
-        </div>
+        <Input id="nome_site" type="text" label="Nome do seu site ou negócio" autocomplete="organization" required placeholder="Minha Loja de Tênis" />
+        <Input
+          id="slug"
+          type="text"
+          label="Apelido do site"
+          autocomplete="off"
+          required
+          pattern="[a-z0-9](?:[a-z0-9\-]{1,30}[a-z0-9])"
+          minlength={3}
+          maxlength={32}
+          placeholder="minha-loja"
+          hint="Vai aparecer na URL do seu painel. Use letras minúsculas, números e hífen."
+        />
+        <Input id="email" type="email" label="Email" autocomplete="email" required placeholder="voce@suaempresa.com.br" />
+        <Input id="senha" type="password" label="Senha" autocomplete="new-password" required minlength={8} placeholder="pelo menos 8 caracteres" />
 
-        <div id="erro" role="alert" class="hidden rounded-md border border-red-500/40 bg-red-500/10 px-3 py-2 text-sm text-red-200"></div>
+        <FormError id="erro" />
 
-        <button id="submit" type="submit" class="btn-primary w-full" data-cta="form-cadastro">Criar conta</button>
+        <Button type="submit" id="submit" fullWidth data-cta="form-cadastro">Criar conta</Button>
         <p class="text-center text-sm text-slate-400">
           Já tem conta? <a href="/cliente/login" class="text-brand-300 hover:text-brand-200">Entrar</a>
         </p>
       </form>
-    </div>
-  </section>
+    </Card>
+  </Section>
 
   <script>
     import { cadastrar, urlDashboard } from '~/lib/api';
