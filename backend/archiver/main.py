@@ -26,7 +26,7 @@ from influxdb_client import InfluxDBClient
 # Caminho relativo pra reusar auth/tenants_repo do backend principal.
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from auth.tenants_repo import TenantsRepoPostgres  # noqa: E402
+from auth.tenants_repo import PostgresTenantsRepo  # noqa: E402
 
 from archiver.r2_client import R2Client
 from archiver.scheduler import executar_rodada_diaria
@@ -69,7 +69,7 @@ def _construir_dependencias():
         endpoint_url=R2Client.endpoint_padrao_r2(_env_obrigatoria('R2_ACCOUNT_ID')),
     )
 
-    tenants_repo = TenantsRepoPostgres(_env_obrigatoria('TENANTS_DATABASE_URL'))
+    tenants_repo = PostgresTenantsRepo(_env_obrigatoria('TENANTS_DATABASE_URL'))
     return archiver, r2, tenants_repo
 
 
