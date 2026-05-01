@@ -62,6 +62,17 @@ server {
         return 302 /cliente/metricas/;
     }
 
+    # Fallback `/cliente/*` que NAO seja `/cliente/metricas/`: redireciona pro
+    # apex (CF Pages tem login/cadastro/configuracoes/exportar). Sem isso,
+    # `app.X/cliente/configuracoes` retorna 404 — cliente clica em link
+    # relativo dentro do dashboard ou faz bookmark errado e fica perdido.
+    #
+    # Specificity: `/cliente/metricas/` (mais longo) ganha pra paths que
+    # comecam com ele; demais `/cliente/*` caem aqui.
+    location /cliente/ {
+        return 302 https://{{ dominio }}$request_uri;
+    }
+
     location /cliente/metricas/ {
         auth_request /__cliente_auth_gate;
         auth_request_set $cliente_user  $upstream_http_x_webauth_user;
