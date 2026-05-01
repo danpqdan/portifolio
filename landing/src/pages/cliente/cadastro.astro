@@ -42,6 +42,7 @@ import Base from '~/layouts/Base.astro';
 
   <script>
     import { cadastrar, urlDashboard } from '~/lib/api';
+    import { resolverDestinoPosLogin } from '~/lib/redirect';
     import { API_URL, DASHBOARD_URL } from '~/config';
 
     const form = document.getElementById('form-cadastro') as HTMLFormElement | null;
@@ -92,7 +93,13 @@ import Base from '~/layouts/Base.astro';
         sdk?.enviarEvento?.('cadastro_concluido', {
           site_id: r.user.site_id, plano: r.site.plano,
         });
-        window.location.href = urlDashboard(DASHBOARD_URL, { welcome: 'true' });
+        // Respeita ?next= se valido (cliente veio de pagina protegida).
+        // Fallback e DASHBOARD_URL com ?welcome=true pra onboarding inicial.
+        const dest = resolverDestinoPosLogin(
+          new URL(window.location.href).searchParams,
+          urlDashboard(DASHBOARD_URL, { welcome: 'true' }),
+        );
+        window.location.href = dest;
         return;
       }
 
