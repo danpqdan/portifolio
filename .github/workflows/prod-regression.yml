@@ -146,3 +146,33 @@ jobs:
             echo "::error::Asset ${asset} retornou HTTP $code (esperado 200)."
             exit 1
           fi
+
+  metrics-leak:
+    name: /metrics nao vaza publicamente
+    runs-on: ubuntu-latest
+    env:
+      API: https://api.dsplayground.com.br
+      PORTFOLIO: https://portifolio.dsplayground.com.br
+    steps:
+      - name: api.X /metrics deve ser bloqueado (nginx deny)
+        run: |
+          # /metrics tem que ser scraped do Prometheus DENTRO da rede docker.
+          # Externamente vaza contadores operacionais (volume por cliente,
+          # rejeicoes, conexoes WS) — info que ataca nao deve ter.
+          code=$(curl -sk -o /dev/null -w '%{http_code}' "${API}/metrics")
+          echo "HTTP ${code} em ${API}/metrics"
+          if [ "$code" = "200" ]; then
+            echo "::error::REGRESSAO: api.X/metrics esta acessivel publicamente. nginx precisa de location = /metrics { deny all; }"
+            exit 1
+          fi
+          echo "OK: api.X/metrics bloqueado (HTTP ${code})"
+
+      - name: portifolio.X /api/metrics deve ser bloqueado
+        run: |
+          code=$(curl -sk -o /dev/null -w '%{http_code}' "${PORTFOLIO}/api/metrics")
+          echo "HTTP ${code} em ${PORTFOLIO}/api/metrics"
+          if [ "$code" = "200" ]; then
+            echo "::error::REGRESSAO: portifolio.X/api/metrics esta acessivel publicamente."
+            exit 1
+          fi
+          echo "OK: portifolio.X/api/metrics bloqueado (HTTP ${code})"
