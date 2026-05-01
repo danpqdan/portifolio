@@ -419,6 +419,13 @@ class ServicoIngestao:
             site_id, pares, limite,
         )
         if ok:
+            # Aceitou: checa se cruzou threshold de alerta (80/95). Cada nivel
+            # emite UMA UNICA VEZ por restart (estado interno do tracker).
+            nivel = self.cardinalidade_tracker.alerta_pendente(site_id, limite)
+            if nivel is not None:
+                emitir_log(logger, logging.WARNING, 'cardinalidade_alerta',
+                           site_id=site_id, plano=plano, limite=limite,
+                           nivel_pct=nivel, total=total)
             return None
         emitir_log(logger, logging.WARNING, 'rejeitado_cardinalidade_excedida',
                    session_id=session_id, id_registro=id_registro,
