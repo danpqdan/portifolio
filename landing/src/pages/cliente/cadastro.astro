@@ -41,8 +41,8 @@ import Base from '~/layouts/Base.astro';
   </section>
 
   <script>
-    import { cadastrar } from '~/lib/api';
-    import { API_URL } from '~/config';
+    import { cadastrar, urlDashboard } from '~/lib/api';
+    import { API_URL, DASHBOARD_URL } from '~/config';
 
     const form = document.getElementById('form-cadastro') as HTMLFormElement | null;
     const erroBox = document.getElementById('erro')!;
@@ -92,7 +92,7 @@ import Base from '~/layouts/Base.astro';
         sdk?.enviarEvento?.('cadastro_concluido', {
           site_id: r.user.site_id, plano: r.site.plano,
         });
-        window.location.href = '/cliente/metricas';
+        window.location.href = urlDashboard(DASHBOARD_URL, { welcome: 'true' });
         return;
       }
 

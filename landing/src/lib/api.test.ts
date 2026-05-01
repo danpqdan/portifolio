@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
-import { cadastrar, login } from './api';
+import { cadastrar, login, urlDashboard } from './api';
 
 const API_URL = 'https://api.dsplayground.com.br';
 
@@ -108,5 +108,32 @@ describe('login()', () => {
     const r = await login({ email: 'd@x.com', senha: 'errada' }, { apiUrl: API_URL });
     expect(r.ok).toBe(false);
     if (!r.ok) expect(r.code).toBe('CREDENCIAIS_INVALIDAS');
+  });
+});
+
+
+describe('urlDashboard()', () => {
+  const DASH = 'https://app.dsplayground.com.br/cliente/metricas';
+
+  test('sem query devolve a URL base inalterada', () => {
+    expect(urlDashboard(DASH)).toBe(DASH);
+  });
+
+  test('com query vazia devolve a URL base inalterada', () => {
+    expect(urlDashboard(DASH, {})).toBe(DASH);
+  });
+
+  test('adiciona query string com ? quando URL nao tem', () => {
+    expect(urlDashboard(DASH, { welcome: 'true' })).toBe(`${DASH}?welcome=true`);
+  });
+
+  test('usa & quando URL ja tem query', () => {
+    const url = `${DASH}?ref=signup`;
+    expect(urlDashboard(url, { plano: 'free' })).toBe(`${url}&plano=free`);
+  });
+
+  test('escapa valores com URL-encode', () => {
+    const out = urlDashboard(DASH, { ref: 'a b c' });
+    expect(out).toContain('ref=a+b+c');
   });
 });
