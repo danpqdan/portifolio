@@ -222,6 +222,7 @@ describe('obterConfiguracoes()', () => {
       quota: { eventos_por_minuto: 5000, eventos_por_dia: 1_000_000,
                emissoes_jwt_por_minuto: 5, retencao_dias: 90 },
       consumo: { eventos_hoje: 42 },
+      cardinalidade: { atual: 1234, limite: 50_000 },
     }));
 
     const r = await obterConfiguracoes({ apiUrl: API_URL });
@@ -234,6 +235,8 @@ describe('obterConfiguracoes()', () => {
       expect(r.publishable_keys[0].valor).toBe('pk_production_abc');
       expect(r.quota.retencao_dias).toBe(90);
       expect(r.consumo.eventos_hoje).toBe(42);
+      expect(r.cardinalidade.atual).toBe(1234);
+      expect(r.cardinalidade.limite).toBe(50_000);
     }
     expect(fetch).toHaveBeenCalledWith(
       `${API_URL}/cliente/auth/configuracoes`,
