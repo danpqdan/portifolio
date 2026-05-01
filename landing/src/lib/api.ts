@@ -67,6 +67,38 @@ export interface ListarExportsOk {
   arquivos: ExportItem[];
 }
 
+export type ConfiguracoesErrorCode =
+  | 'NAO_AUTENTICADO'
+  | 'SITE_NAO_ENCONTRADO'
+  | 'BACKEND_INCOMPLETO'
+  | 'REDE'
+  | 'INESPERADO';
+
+export interface PublishableKeyDto {
+  key_id: string;
+  valor: string;
+  nome: string | null;
+  ambiente: string;
+}
+
+export interface QuotaDto {
+  eventos_por_minuto: number;
+  eventos_por_dia: number;
+  emissoes_jwt_por_minuto: number;
+  retencao_dias: number;
+}
+
+export interface ConfiguracoesOk {
+  user: { id: string; email: string; papel: string };
+  site: {
+    id: string; slug: string; nome: string; ambiente: string;
+    plano: string; bucket_name: string | null;
+  };
+  publishable_keys: PublishableKeyDto[];
+  quota: QuotaDto;
+  consumo: { eventos_hoje: number };
+}
+
 export type Result<T, E> =
   | { ok: true } & T
   | { ok: false; code: E; message: string; status: number };
@@ -184,6 +216,20 @@ async function getJson<TOk, TErr extends string>(
     message: `erro ${resp.status}`,
     status: resp.status,
   };
+}
+
+/**
+ * Settings do cliente — user + site + publishable_keys ativas + quota + consumo.
+ * Auth via cookie cliente_session.
+ */
+export function obterConfiguracoes(
+  opts: ApiOptions,
+): Promise<Result<ConfiguracoesOk, ConfiguracoesErrorCode>> {
+  return getJson<ConfiguracoesOk, ConfiguracoesErrorCode>(
+    `${opts.apiUrl}/cliente/auth/configuracoes`,
+    opts.fetchImpl ?? fetch,
+    { 401: 'NAO_AUTENTICADO', 404: 'SITE_NAO_ENCONTRADO', 500: 'BACKEND_INCOMPLETO' },
+  );
 }
 
 /**

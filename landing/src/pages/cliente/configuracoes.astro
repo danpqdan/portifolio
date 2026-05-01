@@ -1,0 +1,156 @@
+---
+import Base from '~/layouts/Base.astro';
+---
+<Base
+  title="Configurações"
+  description="Sua publishable key, plano e consumo do dia."
+  noindex={true}
+>
+  <section class="mx-auto flex min-h-[70vh] max-w-2xl flex-col px-4 py-16 sm:px-6">
+    <div class="card">
+      <h1 class="text-2xl font-bold text-white">Configurações</h1>
+      <p class="mt-1 text-sm text-slate-400">
+        Use sua <em>publishable key</em> no SDK pra que os eventos cheguem no
+        seu painel. Veja o consumo do dia e detalhes do plano.
+      </p>
+
+      <div id="estado" class="mt-6 text-sm text-slate-400">Carregando…</div>
+      <div id="erro" role="alert" class="mt-4 hidden rounded-md border border-red-500/40 bg-red-500/10 px-3 py-2 text-sm text-red-200"></div>
+
+      <div id="conteudo" class="mt-6 hidden space-y-6">
+
+        <!-- Publishable keys -->
+        <section>
+          <h2 class="text-sm font-semibold uppercase tracking-wide text-slate-300">Publishable keys</h2>
+          <ul id="keys-lista" class="mt-2 space-y-3"></ul>
+          <p class="mt-2 text-xs text-slate-500">
+            Cole essa key em <code class="rounded bg-slate-800 px-1 py-0.5">publishableKey</code>
+            quando chamar <code class="rounded bg-slate-800 px-1 py-0.5">iniciarAnalytics()</code>
+            no SDK. Trate como senha — sai pro browser, mas restringe quem pode emitir tokens em nome do seu site.
+          </p>
+        </section>
+
+        <!-- Site / plano -->
+        <section>
+          <h2 class="text-sm font-semibold uppercase tracking-wide text-slate-300">Site</h2>
+          <dl class="mt-2 grid grid-cols-2 gap-3 text-sm">
+            <dt class="text-slate-400">Apelido (slug)</dt><dd id="site-slug" class="text-slate-100"></dd>
+            <dt class="text-slate-400">Nome</dt><dd id="site-nome" class="text-slate-100"></dd>
+            <dt class="text-slate-400">Plano</dt><dd id="site-plano" class="text-slate-100"></dd>
+            <dt class="text-slate-400">Ambiente</dt><dd id="site-ambiente" class="text-slate-100"></dd>
+          </dl>
+        </section>
+
+        <!-- Quota / consumo -->
+        <section>
+          <h2 class="text-sm font-semibold uppercase tracking-wide text-slate-300">Consumo & limites</h2>
+          <dl class="mt-2 grid grid-cols-2 gap-3 text-sm">
+            <dt class="text-slate-400">Eventos hoje</dt><dd id="consumo-hoje" class="text-slate-100"></dd>
+            <dt class="text-slate-400">Limite por dia</dt><dd id="quota-dia" class="text-slate-100"></dd>
+            <dt class="text-slate-400">Limite por minuto</dt><dd id="quota-minuto" class="text-slate-100"></dd>
+            <dt class="text-slate-400">Retenção</dt><dd id="quota-retencao" class="text-slate-100"></dd>
+          </dl>
+        </section>
+
+        <p class="text-xs text-slate-500">
+          Outras opções (trocar email/senha, cancelar conta) chegam em breve.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <script>
+    import { obterConfiguracoes } from '~/lib/api';
+    import { API_URL } from '~/config';
+
+    const estadoBox = document.getElementById('estado')!;
+    const erroBox = document.getElementById('erro')!;
+    const conteudo = document.getElementById('conteudo')!;
+
+    function mostrarErro(msg: string) {
+      estadoBox.classList.add('hidden');
+      conteudo.classList.add('hidden');
+      erroBox.textContent = msg;
+      erroBox.classList.remove('hidden');
+    }
+
+    function fmtNumero(n: number): string {
+      return new Intl.NumberFormat('pt-BR').format(n);
+    }
+
+    function renderKeys(keys: { key_id: string; valor: string; nome: string | null; ambiente: string }[]) {
+      const ul = document.getElementById('keys-lista')!;
+      ul.innerHTML = '';
+      for (const k of keys) {
+        const li = document.createElement('li');
+        li.className = 'rounded-md border border-slate-700/60 bg-slate-900/40 p-3';
+
+        const linha1 = document.createElement('div');
+        linha1.className = 'flex items-center justify-between gap-2';
+        const labelNome = document.createElement('span');
+        labelNome.className = 'text-xs font-medium uppercase tracking-wide text-slate-400';
+        labelNome.textContent = `${k.nome ?? 'sem nome'} · ${k.ambiente}`;
+        const btnCopiar = document.createElement('button');
+        btnCopiar.type = 'button';
+        btnCopiar.className = 'btn-secondary text-xs';
+        btnCopiar.setAttribute('data-cta', 'copiar-publishable-key');
+        btnCopiar.textContent = 'Copiar';
+        btnCopiar.addEventListener('click', async () => {
+          try {
+            await navigator.clipboard.writeText(k.valor);
+            btnCopiar.textContent = 'Copiado!';
+            setTimeout(() => { btnCopiar.textContent = 'Copiar'; }, 1500);
+          } catch {
+            btnCopiar.textContent = 'Falhou';
+          }
+        });
+        linha1.append(labelNome, btnCopiar);
+
+        const valorBox = document.createElement('code');
+        valorBox.className = 'mt-2 block break-all rounded bg-slate-950 px-2 py-1 text-xs text-slate-200';
+        valorBox.textContent = k.valor;
+
+        li.append(linha1, valorBox);
+        ul.append(li);
+      }
+    }
+
+    async function carregar() {
+      const r = await obterConfiguracoes({ apiUrl: API_URL });
+
+      if (!r.ok) {
+        if (r.code === 'NAO_AUTENTICADO') {
+          window.location.href = '/cliente/login?next=/cliente/configuracoes';
+          return;
+        }
+        if (r.code === 'REDE') {
+          mostrarErro('Sem internet agora. Tenta de novo em uns segundos.');
+          return;
+        }
+        mostrarErro('Não deu pra carregar agora. Tenta atualizar a página.');
+        return;
+      }
+
+      estadoBox.classList.add('hidden');
+
+      renderKeys(r.publishable_keys);
+
+      document.getElementById('site-slug')!.textContent = r.site.slug;
+      document.getElementById('site-nome')!.textContent = r.site.nome;
+      document.getElementById('site-plano')!.textContent = r.site.plano;
+      document.getElementById('site-ambiente')!.textContent = r.site.ambiente;
+
+      document.getElementById('consumo-hoje')!.textContent = fmtNumero(r.consumo.eventos_hoje);
+      document.getElementById('quota-dia')!.textContent = fmtNumero(r.quota.eventos_por_dia);
+      document.getElementById('quota-minuto')!.textContent = fmtNumero(r.quota.eventos_por_minuto);
+      document.getElementById('quota-retencao')!.textContent = `${r.quota.retencao_dias} dias`;
+
+      conteudo.classList.remove('hidden');
+    }
+
+    carregar().catch((e) => {
+      console.error(e);
+      mostrarErro('Erro inesperado. Tenta atualizar a página.');
+    });
+  </script>
+</Base>

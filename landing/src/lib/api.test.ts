@@ -1,5 +1,8 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
-import { cadastrar, listarExports, login, urlDashboard, urlDownloadExport } from './api';
+import {
+  cadastrar, listarExports, login,
+  obterConfiguracoes, urlDashboard, urlDownloadExport,
+} from './api';
 
 const API_URL = 'https://api.dsplayground.com.br';
 
@@ -199,5 +202,47 @@ describe('urlDownloadExport()', () => {
   test('rejeita dia mal formado', () => {
     expect(() => urlDownloadExport(API_URL, 'abc')).toThrow(/dia/i);
     expect(() => urlDownloadExport(API_URL, '2026/04/30')).toThrow(/dia/i);
+  });
+});
+
+describe('obterConfiguracoes()', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  test('GET /cliente/auth/configuracoes retorna shape completo', async () => {
+    vi.stubGlobal('fetch', fetchMock(200, {
+      user: { id: 'u1', email: 'd@x.com', papel: 'admin' },
+      site: { id: 's1', slug: 'acme', nome: 'ACME', ambiente: 'production',
+              plano: 'medio', bucket_name: 'cliente_acme' },
+      publishable_keys: [
+        { key_id: 'k1', valor: 'pk_production_abc', nome: 'principal',
+          ambiente: 'production' },
+      ],
+      quota: { eventos_por_minuto: 5000, eventos_por_dia: 1_000_000,
+               emissoes_jwt_por_minuto: 5, retencao_dias: 90 },
+      consumo: { eventos_hoje: 42 },
+    }));
+
+    const r = await obterConfiguracoes({ apiUrl: API_URL });
+
+    expect(r.ok).toBe(true);
+    if (r.ok) {
+      expect(r.user.email).toBe('d@x.com');
+      expect(r.site.slug).toBe('acme');
+      expect(r.publishable_keys).toHaveLength(1);
+      expect(r.publishable_keys[0].valor).toBe('pk_production_abc');
+      expect(r.quota.retencao_dias).toBe(90);
+      expect(r.consumo.eventos_hoje).toBe(42);
+    }
+    expect(fetch).toHaveBeenCalledWith(
+      `${API_URL}/cliente/auth/configuracoes`,
+      expect.objectContaining({ method: 'GET', credentials: 'include' }),
+    );
+  });
+
+  test('mapeia 401 em NAO_AUTENTICADO', async () => {
+    vi.stubGlobal('fetch', fetchMock(401, ''));
+    const r = await obterConfiguracoes({ apiUrl: API_URL });
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.code).toBe('NAO_AUTENTICADO');
   });
 });
