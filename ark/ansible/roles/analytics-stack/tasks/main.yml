@@ -113,6 +113,60 @@
     build: always
   become_user: "{{ deploy_user }}"
 
+# ---- Rotacao de credenciais Postgres ----
+#
+# POSTGRES_PASSWORD do compose so e honrada no initdb (criacao do volume
+# portifolio_postgres_data). Em volume ja existente (re-deploy normal), o
+# role do banco mantem a senha antiga. Quando o vault rotaciona
+# `postgres_password`, o template re-gera backend/.env com a senha NOVA,
+# mas o cluster ainda autentica a ANTIGA — backend entra em crash-loop com
+# `FATAL: password authentication failed for user "portifolio"` e nginx
+# devolve 502 publicamente. Incidente real em 2026-05-01.
+#
+# Fix idempotente: apos compose up, executar ALTER USER dentro do container
+# Postgres pra alinhar a senha do role com a do .env. Conecta via socket
+# Unix interno (pg_hba default da imagem usa trust em conexoes locais —
+# dispensa senha pra atravessar o paradoxo do "preciso da senha pra trocar
+# a senha"). SQL passa via stdin pra evitar a senha aparecer em `ps`.
+
+- name: Aguardar Postgres pronto pra aceitar comandos administrativos
+  when: not ansible_check_mode
+  ansible.builtin.shell: |
+    docker exec portifolio-postgres pg_isready -U "{{ postgres_user }}" -d "{{ postgres_db }}" -q
+  register: pg_ready
+  retries: 10
+  delay: 3
+  until: pg_ready.rc == 0
+  changed_when: false
+  # Se nao ficar pronto em 30s, falha com mensagem clara em vez de tentar
+  # ALTER USER em container morto.
+  failed_when: pg_ready.rc != 0 and pg_ready.attempts | default(1) >= 10
+
+- name: Rotacionar senha do role Postgres pra refletir vault atual (idempotente)
+  when:
+    - not ansible_check_mode
+    - pg_ready.rc | default(1) == 0
+  community.docker.docker_container_exec:
+    container: portifolio-postgres
+    command:
+      - psql
+      - -U
+      - "{{ postgres_user }}"
+      - -d
+      - "{{ postgres_db }}"
+      - -v
+      - ON_ERROR_STOP=1
+      - -X
+      - -q
+    stdin: |
+      ALTER USER "{{ postgres_user }}" WITH PASSWORD '{{ postgres_password }}';
+  no_log: true
+  # ALTER USER nao tem feedback fiel de "mudou ou nao" — sempre executa.
+  # Marcar changed_when:false evita poluir o diff de runs (rotacao normal
+  # de senha gera changed=true em todo apply, confunde quem le).
+  changed_when: false
+  become_user: "{{ deploy_user }}"
+
 - name: Aguardar backend responder health (path canonico, sem /api/)
   when: not ansible_check_mode
   uri:

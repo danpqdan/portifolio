@@ -156,6 +156,7 @@ Grupo compartilhado **`analytics` GID 10001** e a ponte host↔container. Nao mu
 - **Nao rodar `docker compose down -v`** em nenhum dos tres composes — apaga volumes com series do InfluxDB, auth do Postgres, chaves RSA do backend, decisoes do CrowdSec e dashboards Grafana.
 - **Nao editar configs direto no host** — sempre ajustar no repo e re-aplicar via Ansible/Compose. Mudanca manual se perde no proximo `ansible-apply`.
 - **Nao versionar segredos**: `INFLUXDB_TOKEN`, `SECRET_KEY`, `ADMIN_API_TOKEN`, `POSTGRES_PASSWORD`, senha Grafana vivem em `group_vars/all.yml` (deveria estar em Ansible Vault — hoje em cleartext, ver pendencias) ou `.env` local (gitignored).
+- **Rotacao de `postgres_password` exige rotacionar tambem o role no cluster** — coberto pela role `analytics-stack` (task `Rotacionar senha do role Postgres ...`) desde 2026-05-01 apos incidente de 502 publico. `POSTGRES_PASSWORD` em compose so e honrada no initdb. Detalhes em `ark/docs/servidor-producao.md` -> "Rotacao de postgres_password".
 - **Nao usar `--no-verify`, `push --force`, `reset --hard`** sem autorizacao explicita.
 - **DNS proxiado**: se algum subdominio estiver cinza (DNS only) na Cloudflare, o TLS quebra — o CF Origin Cert so vale quando o trafego passa pela laranja.
 
