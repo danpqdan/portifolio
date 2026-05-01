@@ -77,6 +77,15 @@ landing_site_url: "https://dsplayground.com.br"
 landing_api_url: "https://api.dsplayground.com.br"
 landing_debug: "false"
 
+# Publishable key do site `portifolio` (portfolio pessoal Vite, em portifolio.X).
+# Gerada por scripts/provisionar_cliente.py --slug portifolio. Sem isso, eventos
+# do SDK do portfolio caem no bucket default em vez de cliente_portifolio.
+# Capturar com:
+#   docker exec portifolio-postgres psql -U portifolio -d portifolio_auth -t -c \
+#     "SELECT valor FROM publishable_keys k JOIN sites s ON s.id=k.site_id \
+#      WHERE s.slug='portifolio' AND revogado_em IS NULL;"
+vite_publishable_key: ""
+
 # === Tunables do backend (analytics temporal) ===
 # Opcionais: o template aplica defaults via jinja `default()` se nao definidos.
 # temporal_realtime_interval: "5000"    # ms entre pushes de metricas em tempo real
