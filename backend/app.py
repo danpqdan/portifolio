@@ -330,6 +330,13 @@ except Exception as e:
 
 app.register_blueprint(auth_bp, url_prefix='/auth')
 
+# /auth/sdk-token chamado por todo browser que carrega landing publica —
+# default flask-limiter (50/h) bate em segundos com handful de page loads.
+# Protecao real ja existe via quotas.emissoes_jwt_por_minuto (Postgres,
+# per-publishable_key). Isentar do limiter global IP-based.
+from auth.routes import emitir_sdk_token  # noqa: E402
+limiter.exempt(emitir_sdk_token)
+
 # ==================== AUTH DO DASHBOARD DO CLIENTE ====================
 # Blueprint `/api/cliente/auth` com login humano (cookie HttpOnly) para
 # acessar o dashboard de metricas em /cliente/metricas/*.
