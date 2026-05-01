@@ -70,7 +70,7 @@ Se contradisser código, atualize código + este doc no mesmo commit.
 - Deploy via Ansible + GitHub Actions self-hosted runner (CD em `main`)
 - 211 testes backend verde + 15 testes landing verde
 
-**Pendências relevantes:** ver §10. Em uma frase: trigger de provisionamento Influx/Grafana pós-cadastro, Onda 2/3 do contrato SDK↔Backend (backpressure dinâmico), Prometheus `/metrics` no backend, archiver de retenção, multi-cliente CORS dinâmico.
+**Pendências relevantes:** ver §10. Em uma frase: trigger de provisionamento Influx/Grafana pós-cadastro, Onda 2/3 do contrato SDK↔Backend (backpressure dinâmico), Prometheus `/metrics` no backend, multi-cliente CORS dinâmico.
 
 ---
 
@@ -531,8 +531,8 @@ docker exec portifolio-influxdb influx backup /var/lib/influxdb2/backups
 | 🟡 **P1** | **Recover password UX** (`/cliente/esqueci-senha` page) — magic-link já tem endpoint, falta tela | Cliente esquece senha, perde acesso | `comercial` repo | 0.5d (depende de Resend) |
 | 🟡 **P1** | **Conta empresa/CNPJ** (PJ MEI/ME/SLU + contador) | Emitir NF pro primeiro cliente pago | externo | varia |
 | 🟡 **P1** | Cardinalidade enforcement runtime + alert em 80%/95% | Cliente pode detonar bucket InfluxDB | `backend/ingestao/validador.py` | 2-3d |
-| 🟡 **P1** | Container `analytics-archiver` — cron diário exporta retenção em `.lp.gz` | Free tier sem backup; clientes pagos sem export | novo: `backend/archiver/` | 2d |
-| 🟡 **P1** | Endpoint `GET /cliente/exportar?inicio=&fim=` com signed URL | Compliance LGPD pra cliente pagante | `backend/auth/cliente_routes.py` + nginx | 1d |
+| ✅ ~~**P1**~~ | ~~Container `analytics-archiver`~~ — **feito 2026-05-01**, sidecar com APScheduler cron 03:00 UTC, exporta line protocol gzip pra Cloudflare R2 (`backend/archiver/`) | — | — | — |
+| ✅ ~~**P1**~~ | ~~Endpoint `GET /cliente/exportar`~~ — **feito 2026-05-01**, listagem JSON + download via 302 signed URL R2 (TTL 5min), auth via cookie cliente_session, anti-IDOR via slug derivado do site_id | — | — | — |
 | 🟡 **P1** | Email diário com counts agregados de rejeições | UX: cliente não sabe que está rejeitando | novo: `backend/scripts/email_diario.py` + cron | 1-2d |
 | 🟡 **P1** | Backup offline de credenciais (1Password ou age key + pen drive): vault Ansible, recovery codes, age key dos backups | Recovery em catástrofe | externo + processo | 1-2h |
 | 🟢 **P2** | **Upgrade de plano** (billing Stripe ou MercadoPago — webhook → atualiza `sites.plano` + quotas) | Cliente Pro/Business sem caminho de pagamento | new `backend/billing/` | 5-7d |
@@ -546,7 +546,7 @@ docker exec portifolio-influxdb influx backup /var/lib/influxdb2/backups
 | 🟢 **P3** | DNS Cloudflare: criar `portifolio.dsplayground.com.br` CNAME proxiado | Subdomínio portfolio pessoal não resolve | painel CF | 5min |
 | 🟢 **P3** | Validação E2E nos 5 cenários de recovery em `ark/teste-ambiente-{a,b}` | SLO interno antes de virar chave comercial | `ark/teste-ambiente-*/` | 1-2d cada |
 | 🟢 **P3** | 2FA TOTP no dashboard do cliente | v2 — não MVP | `sessao_service.py` + `clientes_users.totp_secret` | 3-5d |
-| 🟢 **P3** | Migração backup local → S3-compatible (R2/B2/Wasabi) | Quando volume > 50 GB ou primeiro Pro contratado | `analytics-archiver` + creds | 1d |
+| ✅ ~~**P3**~~ | ~~Migração backup → S3-compatible~~ — **feito 2026-05-01 direto**, R2 desde dia 1 (free tier 10 GB cobre ~55 clientes plano medio). Pulou fase intermediaria de backup local. | — | — | — |
 
 ---
 
