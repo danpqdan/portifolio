@@ -9,7 +9,7 @@ COMPOSE_CROWDSEC      := docker compose -f ark/crowdsec/docker-compose.crowdsec.
         sdk-build sdk-smoke \
         monitoring-up monitoring-down monitoring-logs \
         crowdsec-up crowdsec-down crowdsec-logs \
-        ansible-check ansible-apply \
+        ansible-deps ansible-check ansible-apply \
         retencao-aplicar
 
 help:
@@ -29,6 +29,7 @@ help:
 	@echo "  monitoring-down  para stack de monitoring"
 	@echo "  crowdsec-up      sobe CrowdSec agent"
 	@echo "  crowdsec-down    para CrowdSec"
+	@echo "  ansible-deps     instala collections fixadas em requirements.yml"
 	@echo "  ansible-check    playbook em dry-run"
 	@echo "  ansible-apply    aplica playbook no inventario"
 	@echo "  retencao-aplicar configura retencao do bucket (use DIAS=90)"
@@ -82,6 +83,9 @@ crowdsec-down:
 
 crowdsec-logs:
 	$(COMPOSE_CROWDSEC) logs -f
+
+ansible-deps:
+	ansible-galaxy collection install -r ark/ansible/requirements.yml
 
 ansible-check:
 	cd ark/ansible && ansible-playbook -i inventory.ini playbook.yml --check
