@@ -17,7 +17,44 @@
   "fiscalYearStartMonth": 0,
   "graphTooltip": 0,
   "id": null,
-  "links": [],
+  "links": [
+    {
+      "title": "Configurações",
+      "url": "https://dsplayground.com.br/cliente/configuracoes/",
+      "type": "link",
+      "icon": "cog",
+      "tooltip": "Trocar email/senha, publishable key, plano, consumo",
+      "targetBlank": true,
+      "asDropdown": false,
+      "includeVars": false,
+      "keepTime": false,
+      "tags": []
+    },
+    {
+      "title": "Exportar dados",
+      "url": "https://dsplayground.com.br/cliente/exportar/",
+      "type": "link",
+      "icon": "cloud",
+      "tooltip": "Baixar arquivos arquivados (LGPD)",
+      "targetBlank": true,
+      "asDropdown": false,
+      "includeVars": false,
+      "keepTime": false,
+      "tags": []
+    },
+    {
+      "title": "Voltar ao site",
+      "url": "https://dsplayground.com.br/",
+      "type": "link",
+      "icon": "external link",
+      "tooltip": "Página inicial DS Playground",
+      "targetBlank": false,
+      "asDropdown": false,
+      "includeVars": false,
+      "keepTime": false,
+      "tags": []
+    }
+  ],
   "panels": [
     {
       "title": "LCP p75 (24h)",
