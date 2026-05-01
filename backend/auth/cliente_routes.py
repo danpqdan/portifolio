@@ -353,6 +353,58 @@ def _ambiente_de_pk(valor: str) -> str:
     return partes[1] if len(partes) >= 3 and partes[0] == "pk" else "unknown"
 
 
+@cliente_auth_bp.route("/senha", methods=["PATCH"])
+def alterar_senha():
+    """Troca senha do user logado. Body: {senha_atual, nova_senha}.
+    Codigos: SENHA_INVALIDA (403), SENHA_CURTA (400), NAO_AUTENTICADO (401).
+    """
+    cookie = request.cookies.get(COOKIE_NAME, "")
+    user = _obter_svc().validar_cookie(cookie)
+    if user is None:
+        return _erro("NAO_AUTENTICADO", "sessao ausente ou invalida", 401)
+    body = request.get_json(silent=True) or {}
+    senha_atual = body.get("senha_atual") or ""
+    nova_senha = body.get("nova_senha") or ""
+    if not nova_senha or len(nova_senha) < 8:
+        return _erro("SENHA_CURTA", "nova senha deve ter no minimo 8 caracteres", 400)
+    ok = _obter_svc().alterar_senha(user.id, senha_atual, nova_senha)
+    if not ok:
+        security_logger.info(
+            "evento=auth_cliente_alterar_senha_negado user_id=%s ip=%s", user.id, _ip_cliente(),
+        )
+        return _erro("SENHA_INVALIDA", "senha atual incorreta", 403)
+    security_logger.info(
+        "evento=auth_cliente_senha_alterada user_id=%s ip=%s", user.id, _ip_cliente(),
+    )
+    return jsonify({"status": "success", "ok": True})
+
+
+@cliente_auth_bp.route("/email", methods=["PATCH"])
+def alterar_email():
+    """Troca email do user logado. Body: {senha_atual, novo_email}.
+    Codigos: SENHA_INVALIDA (403), EMAIL_INVALIDO (400), EMAIL_JA_CADASTRADO (409).
+    """
+    cookie = request.cookies.get(COOKIE_NAME, "")
+    user = _obter_svc().validar_cookie(cookie)
+    if user is None:
+        return _erro("NAO_AUTENTICADO", "sessao ausente ou invalida", 401)
+    body = request.get_json(silent=True) or {}
+    senha_atual = body.get("senha_atual") or ""
+    novo_email = body.get("novo_email") or ""
+    codigo = _obter_svc().alterar_email(user.id, senha_atual, novo_email)
+    if codigo is None:
+        security_logger.info(
+            "evento=auth_cliente_email_alterado user_id=%s ip=%s", user.id, _ip_cliente(),
+        )
+        return jsonify({"status": "success", "ok": True})
+    status = {"SENHA_INVALIDA": 403, "EMAIL_INVALIDO": 400, "EMAIL_JA_CADASTRADO": 409}[codigo]
+    security_logger.info(
+        "evento=auth_cliente_alterar_email_negado user_id=%s code=%s ip=%s",
+        user.id, codigo, _ip_cliente(),
+    )
+    return _erro(codigo, codigo.lower().replace("_", " "), status)
+
+
 @cliente_auth_bp.route("/configuracoes", methods=["GET"])
 def configuracoes():
     """Settings do cliente: user + site + publishable_keys ativas + quota + consumo.

@@ -86,6 +86,8 @@ class ClientesUsersRepo(Protocol):
     def obter_user_por_email(self, email: str) -> Optional[ClienteUser]: ...
     def registrar_login(self, user_id: str) -> None: ...
     def desativar_user(self, user_id: str) -> None: ...
+    def atualizar_senha_hash(self, user_id: str, senha_hash: str) -> None: ...
+    def atualizar_email(self, user_id: str, novo_email: str) -> None: ...
 
     # sessoes
     def criar_sessao(self, user_id: str, token_hash: str, *,
@@ -168,6 +170,18 @@ class SqliteClientesUsersRepo:
     def desativar_user(self, user_id):
         with self._lock, self._connect() as conn:
             conn.execute("UPDATE clientes_users SET ativo = 0 WHERE id = ?", (user_id,))
+
+    def atualizar_senha_hash(self, user_id, senha_hash):
+        with self._lock, self._connect() as conn:
+            conn.execute("UPDATE clientes_users SET senha_hash = ? WHERE id = ?",
+                         (senha_hash, user_id))
+
+    def atualizar_email(self, user_id, novo_email):
+        # UNIQUE(email) sobe IntegrityError se conflitar — caller decide se converte em codigo de erro.
+        email_norm = normalizar_email(novo_email)
+        with self._lock, self._connect() as conn:
+            conn.execute("UPDATE clientes_users SET email = ? WHERE id = ?",
+                         (email_norm, user_id))
 
     # sessoes
     def criar_sessao(self, user_id, token_hash, *, expira_em, ip=None, user_agent=None):
@@ -367,6 +381,17 @@ class PostgresClientesUsersRepo:
     def desativar_user(self, user_id):
         with self._conn() as conn, conn.cursor() as cur:
             cur.execute("UPDATE clientes_users SET ativo = false WHERE id = %s", (user_id,))
+
+    def atualizar_senha_hash(self, user_id, senha_hash):
+        with self._conn() as conn, conn.cursor() as cur:
+            cur.execute("UPDATE clientes_users SET senha_hash = %s WHERE id = %s",
+                        (senha_hash, user_id))
+
+    def atualizar_email(self, user_id, novo_email):
+        email_norm = normalizar_email(novo_email)
+        with self._conn() as conn, conn.cursor() as cur:
+            cur.execute("UPDATE clientes_users SET email = %s WHERE id = %s",
+                        (email_norm, user_id))
 
     # sessoes
     def criar_sessao(self, user_id, token_hash, *, expira_em, ip=None, user_agent=None):

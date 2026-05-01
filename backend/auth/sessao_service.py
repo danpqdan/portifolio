@@ -14,6 +14,7 @@ Referencia: ark/docs/dashboard-cliente.md (secoes 7, 8, 9).
 
 from __future__ import annotations
 
+import re
 import secrets
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
@@ -83,6 +84,46 @@ class SessaoService:
             return None
         self._repo.registrar_login(user.id)
         return user
+
+    # ---------- alterar credenciais ----------
+
+    _SENHA_MIN = 8
+    _RE_EMAIL = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+
+    def alterar_senha(self, user_id: str, senha_atual: str, nova_senha: str) -> bool:
+        """Verifica senha atual e atualiza pra nova. Retorna True se OK."""
+        user = self._repo.obter_user(user_id)
+        if user is None or user.senha_hash is None:
+            return False
+        if not check_password_hash(user.senha_hash, senha_atual):
+            return False
+        if not nova_senha or len(nova_senha) < self._SENHA_MIN:
+            return False
+        novo_hash = generate_password_hash(nova_senha)
+        self._repo.atualizar_senha_hash(user_id, novo_hash)
+        return True
+
+    def alterar_email(self, user_id: str, senha_atual: str, novo_email: str) -> Optional[str]:
+        """Verifica senha + atualiza email. Retorna None se OK ou codigo de erro.
+
+        Codigos: SENHA_INVALIDA, EMAIL_INVALIDO, EMAIL_JA_CADASTRADO.
+        """
+        user = self._repo.obter_user(user_id)
+        if user is None or user.senha_hash is None:
+            return "SENHA_INVALIDA"
+        if not check_password_hash(user.senha_hash, senha_atual):
+            return "SENHA_INVALIDA"
+        if not novo_email or not self._RE_EMAIL.match(novo_email):
+            return "EMAIL_INVALIDO"
+        existente = self._repo.obter_user_por_email(novo_email)
+        if existente is not None and existente.id != user_id:
+            return "EMAIL_JA_CADASTRADO"
+        try:
+            self._repo.atualizar_email(user_id, novo_email)
+        except Exception:
+            # IntegrityError em corrida de unique — trata como ja cadastrado.
+            return "EMAIL_JA_CADASTRADO"
+        return None
 
     # ---------- sessoes ----------
 
