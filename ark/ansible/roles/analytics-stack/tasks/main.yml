@@ -22,13 +22,36 @@
   # ja tinham +x preservados). Sem isso, `mode: "0750"` com recurse marca
   # *todos* os arquivos como executaveis — quebra `.vault-password` (Ansible
   # tenta executar como script e da "Erro no formato exec").
+  #
+  # `o=rX` (em vez de `o=` que era restrito demais): permite leitura por
+  # processos fora do grupo `analytics` que precisam acessar o repo
+  # (ex: nginx do host servindo arquivos estaticos, certificados que
+  # outros usuarios checam, etc.). Resultado:
+  #   - dirs: 0755
+  #   - arquivos: 0644
+  # SEGREDOS dentro do repo_dir (`backend/.env`, `compose .env`,
+  # `.vault-password`) sao re-protegidos pelas tasks abaixo com modo
+  # explicito mais restritivo.
   file:
     path: "{{ repo_dir }}"
     state: directory
     owner: "{{ deploy_user }}"
     group: analytics
-    mode: "u=rwX,g=rX,o="
+    mode: "u=rwX,g=rX,o=rX"
     recurse: true
+
+- name: Re-proteger .vault-password apos chown recursivo (NUNCA world-readable)
+  # `.vault-password` mora dentro do repo_dir (ver ark/ansible/README.md).
+  # O chown recursivo acima aplica `o=r` -> 0644 no arquivo, o que vazaria
+  # o segredo do vault. Re-fechamos aqui para 0600.
+  file:
+    path: "{{ repo_dir }}/.vault-password"
+    owner: "{{ deploy_user }}"
+    group: analytics
+    mode: "0600"
+  # ignore_errors: arquivo pode nao existir em primeiro deploy ou em
+  # ambiente que nao usa vault. Nao bloqueia ansible-apply.
+  ignore_errors: true
 
 - name: SGID no diretorio backend para novos arquivos herdarem grupo analytics
   file:
