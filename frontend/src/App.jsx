@@ -7,6 +7,7 @@ import Projects from './pages/Projects';
 import About from './pages/About';
 import ClienteLogin from './pages/ClienteLogin';
 import ClienteMetricas from './pages/ClienteMetricas';
+import EmbedWidget from './pages/EmbedWidget';
 import { iniciarAnalytics, enviarEvento } from '@danpqdan/dsplayground-analytics-sdk';
 import { WEBSOCKET_URL, DEBUG_ENABLED, NODE_ENV, PUBLISHABLE_KEY } from './config.js';
 
@@ -79,6 +80,7 @@ export default function App() {
     <Routes>
       <Route path="/cliente/login" element={<ClienteLogin />} />
       <Route path="/cliente/metricas/*" element={<ClienteMetricas />} />
+      <Route path="/widget/:siteId/:graficoId" element={<EmbedWidget />} />
       <Route path="*" element={<Portfolio />} />
     </Routes>
   );
