@@ -53,6 +53,19 @@ export type LoginErrorCode =
   | 'REDE'
   | 'INESPERADO';
 
+export type MagicLinkErrorCode =
+  | 'RATE_LIMIT_EXCEDIDO'
+  | 'REDE'
+  | 'INESPERADO';
+
+export interface SolicitarMagicLinkPayload {
+  email: string;
+}
+
+export interface MagicLinkOk {
+  ok: boolean;
+}
+
 export type ListarExportsErrorCode =
   | 'NAO_AUTENTICADO'
   | 'REDE'
@@ -175,6 +188,24 @@ export function login(
 ): Promise<Result<LoginOk, LoginErrorCode>> {
   return postJson<LoginOk, LoginErrorCode>(
     `${opts.apiUrl}/cliente/auth/login`,
+    payload,
+    opts.fetchImpl ?? fetch,
+  );
+}
+
+/**
+ * Solicita magic-link por email. O backend responde 200 anti-enum (mesma
+ * resposta pra email valido ou fantasma) — caller nao deve diferenciar
+ * sucesso de "email nao existe" pra nao vazar info.
+ *
+ * 429 = rate limit (10 req/h por IP, 3/h por user).
+ */
+export function solicitarMagicLink(
+  payload: SolicitarMagicLinkPayload,
+  opts: ApiOptions,
+): Promise<Result<MagicLinkOk, MagicLinkErrorCode>> {
+  return postJson<MagicLinkOk, MagicLinkErrorCode>(
+    `${opts.apiUrl}/cliente/auth/magic-link/solicitar`,
     payload,
     opts.fetchImpl ?? fetch,
   );
