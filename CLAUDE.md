@@ -187,24 +187,23 @@ Detalhes do plano de migracao para CORS dinamico (por `sites.dominios_permitidos
 - Grafana: `https://grafana.dsplayground.com.br` (via Nginx) — admin user/senha via `ark/monitoring/.env`.
 - Prometheus: `http://<host>:9090` (ainda publico, **TODO**) — retencao 15 dias (`--storage.tsdb.retention.time=15d`).
 
-## Mudancas pendentes de aplicar em producao (fixes 2026-04-22)
+## Estado dos fixes 2026-04-22 (revisado 2026-05-01)
 
-Todas as 7 pendencias P2/P3 foram corrigidas no repo em 2026-04-22, mas **ainda nao efetivaram em prod**. Ate rodar o deploy, o comportamento em produção e o antigo.
+**Aplicados em prod (confirmados):**
+- ✅ Backend `gunicorn --worker-class eventlet -w 1` rodando.
+- ✅ Certbot removido; CF Origin Cert e a unica fonte de TLS (validade ate 2041).
+- ✅ Prometheus (`9090`) e node-exporter (`9100`) bindam em `127.0.0.1` no `ark/monitoring/docker-compose.monitoring.yml`. Sem porta publica externa (firewalld so libera 22022/80/443).
 
-**Via CD automatico (proximo push em `main`):**
-- Backend migrado para `gunicorn --worker-class eventlet -w 1` (`backend/Dockerfile`). `requirements.txt` ganhou `gunicorn==23.0.0`.
-- Logger root do Flask separado do `security_logger` (`backend/app.py`) — `security.log` so recebe eventos do logger nomeado `security`, `propagate=False`. Reduz ruido de linhas unparsed no CrowdSec.
+**Codigo pronto no repo, falta efetivar via ansible-apply:**
+- 🟡 Logger root do Flask separado do `security_logger` em `backend/app.py:91-96` (`propagate = False`, file handler exclusivo no logger nomeado `security`). `security.log` so recebe linhas com `evento=`/eventos do logger nomeado; resto vai pra stdout do container. Confirmado por leitura do repo 2026-05-01.
+- 🟡 `roles/analytics-stack/tasks/main.yml:93-94, 103-104, 113-114` ja tem `when: not ansible_check_mode` nas tasks de health (backend, landing) e retencao Influx. `make ansible-check` nao deve quebrar nessas. Confirmado por leitura do repo 2026-05-01.
 
-**Via `make -f ark/Makefile ansible-apply` manual:**
-- `roles/nginx/`: removidos certbot + python3-certbot-nginx do `dnf`, task `certbot --nginx` e timer. CF Origin Cert e a unica fonte de TLS.
-- `roles/crowdsec/`: adicionada task que instala o repo packagecloud `crowdsecurity/crowdsec-bouncers-nginx` (onde o pacote realmente vive). `ignore_errors` removido da instalacao do bouncer.
-- `roles/analytics-stack/`: tasks de health e retencao ganharam `when: not ansible_check_mode` — `make ansible-check` volta a rodar sem quebrar.
-- Secrets em `group_vars/all.yml` agora criptografados com **ansible-vault**. Senha em `/opt/portifolio/.vault-password` (0600, dono `deploy:analytics`, fora do git). `ark/ansible/ansible.cfg` novo aponta `vault_password_file` automaticamente.
+**A confirmar via SSH (so dah pra validar no host):**
+- 🔍 **Vault encryption:** `group_vars/all.yml` na VPS deve estar criptografado (`$ANSIBLE_VAULT;1.1;AES256` na primeira linha). Senha em `/opt/portifolio/.vault-password` (0600, `deploy:analytics`, fora do git). Usuario reportou "vault precisa garantir criptografia" em 2026-05-01. Comando de check: `head -c 30 /opt/portifolio/ark/ansible/group_vars/all.yml`.
 
-**Via `make -f ark/Makefile monitoring-down && monitoring-up` manual:**
-- Prometheus (`9090`) e node-exporter (`9100`) agora bindam em `127.0.0.1` (ver `ark/monitoring/docker-compose.monitoring.yml`). Re-criar containers para o bind novo valer.
+**Nao e mais pendencia:** instalacao do bouncer-nginx via packagecloud — bouncer (`crowdsec-firewall-bouncer-nftables`) ja vem por default com a instalacao do CrowdSec via repo oficial. Tasks redundantes em `roles/crowdsec/tasks/main.yml` removidas em PR separado.
 
-Depois que aplicar tudo, remover esta secao do CLAUDE.md. Historico em memoria `project_deploy_state.md`.
+Quando vault confirmado, remover esta secao.
 
 ## Quando em duvida
 
