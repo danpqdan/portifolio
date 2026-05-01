@@ -1,0 +1,99 @@
+---
+import Base from '~/layouts/Base.astro';
+
+const planos = [
+  {
+    nome: 'Free',
+    publico: 'Pra começar e validar o básico.',
+    preco: 'R$ 0',
+    sufixo: '/mês',
+    destaque: false,
+    features: [
+      'Até 100 mil visitas por dia',
+      'Seus dados isolados',
+      'Painel pronto pra usar',
+      'Histórico de 1 semana',
+      'Suporte por e-mail',
+    ],
+    cta: { href: '/cliente/cadastro', label: 'Começar grátis' },
+  },
+  {
+    nome: 'Pro',
+    publico: 'Pra sites que cresceram e precisam de mais.',
+    preco: 'R$ 99',
+    sufixo: '/mês',
+    destaque: true,
+    features: [
+      'Até 5 milhões de visitas por dia',
+      'Seus dados isolados',
+      'Painéis personalizados',
+      'Histórico de 3 meses',
+      'Suporte prioritário',
+      'Limite que cresce com seus picos',
+    ],
+    cta: { href: '/cliente/cadastro?plano=pro', label: 'Assinar Pro' },
+  },
+  {
+    nome: 'Business',
+    publico: 'Pra quem precisa de tudo customizado e suporte direto.',
+    preco: 'Sob consulta',
+    sufixo: '',
+    destaque: false,
+    features: [
+      'Volume sob medida',
+      'Disponibilidade garantida em contrato',
+      'Pode rodar dentro da sua infra',
+      'Suporte 24/7',
+      'Documentação de LGPD e auditoria',
+    ],
+    cta: { href: 'mailto:contato@dsplayground.com.br?subject=Plano Business', label: 'Falar com vendas' },
+  },
+];
+---
+<Base
+  title="Preços"
+  description="Comece grátis com até 100 mil visitas por dia. Mude de plano quando seu site crescer. Sem pegadinha."
+>
+  <section class="mx-auto max-w-6xl px-4 py-16 sm:px-6">
+    <h1 class="text-4xl font-bold tracking-tight text-white sm:text-5xl">Planos simples, sem letras miúdas</h1>
+    <p class="mt-3 max-w-2xl text-slate-300">Pague pelo tamanho do seu site. Mude de plano quando quiser, sem multa.</p>
+
+    <div class="mt-12 grid gap-6 lg:grid-cols-3">
+      {planos.map((plano) => (
+        <article class:list={[
+          'card flex flex-col',
+          plano.destaque ? 'border-brand-400 ring-2 ring-brand-500/40' : '',
+        ]}>
+          {plano.destaque && (
+            <span class="self-start rounded-full bg-brand-500 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-white">
+              Mais popular
+            </span>
+          )}
+          <h2 class="mt-3 text-2xl font-semibold text-white">{plano.nome}</h2>
+          <p class="mt-1 text-sm text-slate-400">{plano.publico}</p>
+          <p class="mt-3 flex items-baseline gap-1">
+            <span class="text-4xl font-bold text-white">{plano.preco}</span>
+            <span class="text-slate-400">{plano.sufixo}</span>
+          </p>
+          <ul class="mt-6 space-y-2 text-sm text-slate-300">
+            {plano.features.map((f) => (
+              <li class="flex items-start gap-2">
+                <svg class="mt-0.5 size-4 flex-shrink-0 text-brand-400" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                  <path fill-rule="evenodd" d="M16.704 5.29a1 1 0 010 1.42l-7.5 7.5a1 1 0 01-1.42 0l-3.5-3.5a1 1 0 111.42-1.42l2.79 2.79 6.79-6.79a1 1 0 011.42 0z" clip-rule="evenodd" />
+                </svg>
+                {f}
+              </li>
+            ))}
+          </ul>
+          <a
+            href={plano.cta.href}
+            data-cta={`plano-${plano.nome.toLowerCase()}`}
+            class:list={['mt-8', plano.destaque ? 'btn-primary' : 'btn-secondary']}
+          >
+            {plano.cta.label}
+          </a>
+        </article>
+      ))}
+    </div>
+  </section>
+</Base>

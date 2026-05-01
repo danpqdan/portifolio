@@ -239,8 +239,13 @@ class InfluxDBService:
         inicio: str = "-24h",
         fim: str = "now()",
         limit: int = 100,
+        bucket: Optional[str] = None,
     ) -> List[Dict[str, Any]]:
-        """Soma contadores de `page_analytics` por pagina/periodo."""
+        """Soma contadores de `page_analytics` por pagina/periodo.
+
+        `bucket` (opcional): se informado, sobrescreve o default `self.bucket`.
+        Usado pelo endpoint REST autenticado pra forcar bucket-per-cliente.
+        """
         if not self.enabled:
             return []
 
@@ -259,8 +264,9 @@ class InfluxDBService:
         ]
         filtro_campos = ' or '.join([f'r._field == "{c}"' for c in campos_numericos])
 
+        bucket_alvo = bucket or self.bucket
         query = f'''
-        from(bucket: "{self.bucket}")
+        from(bucket: "{bucket_alvo}")
           |> range(start: {inicio}, stop: {fim})
           |> filter(fn: (r) => {filtro_str})
           |> filter(fn: (r) => {filtro_campos})
@@ -292,8 +298,9 @@ class InfluxDBService:
         inicio: str = "-24h",
         fim: str = "now()",
         limit: int = 500,
+        bucket: Optional[str] = None,
     ) -> List[Dict[str, Any]]:
-        """Lista pontos de Web Vitals com filtros. Inclui percentis agregados por nome."""
+        """Lista pontos de Web Vitals com filtros. `bucket` sobrescreve default."""
         if not self.enabled:
             return []
 
@@ -306,8 +313,9 @@ class InfluxDBService:
             filtros.append(f'r.nome == "{nome}"')
         filtro_str = ' and '.join(filtros)
 
+        bucket_alvo = bucket or self.bucket
         query = f'''
-        from(bucket: "{self.bucket}")
+        from(bucket: "{bucket_alvo}")
           |> range(start: {inicio}, stop: {fim})
           |> filter(fn: (r) => {filtro_str})
           |> limit(n: {int(limit)})
@@ -337,8 +345,9 @@ class InfluxDBService:
         inicio: str = "-24h",
         fim: str = "now()",
         limit: int = 100,
+        bucket: Optional[str] = None,
     ) -> List[Dict[str, Any]]:
-        """Soma ocorrencias de eventos customizados por nome e pagina."""
+        """Soma ocorrencias de eventos customizados. `bucket` sobrescreve default."""
         if not self.enabled:
             return []
 
@@ -351,8 +360,9 @@ class InfluxDBService:
             filtros.append(f'r.page_type == "{page_type}"')
         filtro_str = ' and '.join(filtros)
 
+        bucket_alvo = bucket or self.bucket
         query = f'''
-        from(bucket: "{self.bucket}")
+        from(bucket: "{bucket_alvo}")
           |> range(start: {inicio}, stop: {fim})
           |> filter(fn: (r) => {filtro_str})
           |> group(columns: ["nome", "page_type"])
