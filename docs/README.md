@@ -1,22 +1,21 @@
-﻿# Documentacao
+# Documentação
 
-Esta pasta centraliza a documentacao tecnica do projeto. Novos arquivos `.md` devem ser adicionados aqui, exceto `README.md` e `AGENTS.md` na raiz.
+Estado canônico do projeto: **[`PROJETO.md`](./PROJETO.md)**.
 
-## Indice
+`PROJETO.md` consolida tudo que estava nos 16 arquivos anteriores desta pasta
+(estado em 2026-04-29). Para detalhes profundos:
 
-- `levantamento-sdk-analytics.md`: estado atual da camada de analytics do frontend e requisitos antes do SDK publico.
-- `plano-clientes-ambientes.md`: plano futuro de clientes, separacao de ambientes, buckets e consulta.
-- `INTEGRACAO_INFLUXDB_COMPLETA.md`: visao da integracao com InfluxDB.
-- `MIGRAÇÃO_INFLUXDB_2.7.md`: notas de migracao para InfluxDB 2.7.
-- `CORRECAO_COLETA_TEMPORAL.md`: historico de ajustes na coleta temporal.
-- `CORRECAO_DUPLICACAO_TEMPORAL.md`: historico de correcao de duplicacao temporal.
-- `CORRECAO_FINAL_DUPLICACAO.md`: consolidacao da correcao de duplicacao.
-- `backend/DEPLOY-GUIDE.md`: deploy do backend.
-- `backend/INFLUXDB_SCHEMA.md`: schema temporal no InfluxDB.
-- `backend/README_TEMPORAL.md`: detalhes da coleta temporal no backend.
-- `frontend/COLETA_TEMPORAL_README.md`: detalhes da coleta temporal no frontend.
-- `frontend/README.md`: README original do template frontend.
+- **`CLAUDE.md`** (raiz) — comandos operacionais, regras pra agentes, estado da VPS
+- **`AGENTS.md`** (raiz) — padrões de código + fluxo de PR
+- **`ark/docs/dashboard-cliente.md`** — design do produto multi-tenant + recovery runbook
+- **`ark/docs/servidor-producao.md`** — arquitetura VPS, TLS, hardening
+- **`ark/docs/api-prefix-redundancia.md`** — histórico do refactor canonical sem `/api/`
 
-## Manutencao
+## Manutenção
 
-Ao alterar arquitetura, variaveis de ambiente, schema de dados ou fluxo de deploy, atualize o documento especifico e reflita o fluxo principal no `README.md` da raiz.
+Ao alterar arquitetura, schema, contrato de eventos ou fluxo de deploy:
+
+1. Atualize o **código** primeiro.
+2. Atualize **`PROJETO.md`** com o novo estado/pendência.
+3. Se afeta comandos operacionais, atualize **`CLAUDE.md`**.
+4. Commit único com código + doc.

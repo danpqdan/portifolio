@@ -18,12 +18,16 @@
   tags: [git-clone]
 
 - name: Reforcar owner:group apos git clone (arquivos herdam primary group do deploy)
+  # Modo simbolico `X` (maiusculo) so aplica +x em diretorios (ou arquivos que
+  # ja tinham +x preservados). Sem isso, `mode: "0750"` com recurse marca
+  # *todos* os arquivos como executaveis — quebra `.vault-password` (Ansible
+  # tenta executar como script e da "Erro no formato exec").
   file:
     path: "{{ repo_dir }}"
     state: directory
     owner: "{{ deploy_user }}"
     group: analytics
-    mode: "0750"
+    mode: "u=rwX,g=rX,o="
     recurse: true
 
 - name: SGID no diretorio backend para novos arquivos herdarem grupo analytics
@@ -77,21 +81,34 @@
   changed_when: false
 
 - name: Subir stack com docker compose
+  # NODE_AUTH_TOKEN vem do .env gerado acima — compose le e propaga via
+  # `secrets.NODE_AUTH_TOKEN.environment` em docker-compose.yml para os
+  # builds de `frontend` e `landing`. Nao precisa setar env no shell aqui.
   community.docker.docker_compose_v2:
     project_src: "{{ repo_dir }}"
     state: present
     build: always
   become_user: "{{ deploy_user }}"
 
-- name: Aguardar backend responder health
+- name: Aguardar backend responder health (path canonico, sem /api/)
   when: not ansible_check_mode
   uri:
-    url: http://127.0.0.1:5000/api/health/app
+    url: http://127.0.0.1:5000/health/app
     status_code: 200
   retries: 40
   delay: 3
   register: backend_ok
   until: backend_ok.status == 200
+
+- name: Aguardar landing responder health
+  when: not ansible_check_mode
+  uri:
+    url: http://127.0.0.1:3002/_health
+    status_code: 200
+  retries: 20
+  delay: 3
+  register: landing_ok
+  until: landing_ok.status == 200
 
 - name: Aplicar retencao do bucket no InfluxDB
   when: not ansible_check_mode

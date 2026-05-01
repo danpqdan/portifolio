@@ -1,0 +1,90 @@
+---
+import Base from '~/layouts/Base.astro';
+---
+<Base
+  title="Entrar"
+  description="Entre na sua conta e veja seu painel de visitas e desempenho."
+  noindex={true}
+>
+  <section class="mx-auto flex min-h-[70vh] max-w-md flex-col justify-center px-4 py-16 sm:px-6">
+    <div class="card">
+      <h1 class="text-2xl font-bold text-white">Entrar</h1>
+      <p class="mt-1 text-sm text-slate-400">Use o email da sua conta.</p>
+
+      <form id="form-login" class="mt-6 space-y-4" novalidate>
+        <div>
+          <label for="email" class="input-label">Email</label>
+          <input id="email" name="email" type="email" autocomplete="email" required class="input-field" placeholder="voce@empresa.com" />
+        </div>
+        <div>
+          <label for="senha" class="input-label">Senha</label>
+          <input id="senha" name="senha" type="password" autocomplete="current-password" required class="input-field" />
+        </div>
+
+        <div id="erro" role="alert" class="hidden rounded-md border border-red-500/40 bg-red-500/10 px-3 py-2 text-sm text-red-200"></div>
+
+        <button id="submit" type="submit" class="btn-primary w-full" data-cta="form-login">Entrar</button>
+        <p class="text-center text-sm text-slate-400">
+          Sem conta? <a href="/cliente/cadastro" class="text-brand-300 hover:text-brand-200">Criar conta grátis</a>
+        </p>
+      </form>
+    </div>
+  </section>
+
+  <script>
+    import { login } from '~/lib/api';
+    import { API_URL, DASHBOARD_URL } from '~/config';
+
+    const form = document.getElementById('form-login') as HTMLFormElement | null;
+    const erroBox = document.getElementById('erro')!;
+    const submitBtn = document.getElementById('submit') as HTMLButtonElement | null;
+
+    function mostrarErro(msg: string) {
+      erroBox.textContent = msg;
+      erroBox.classList.remove('hidden');
+    }
+    function limparErro() {
+      erroBox.textContent = '';
+      erroBox.classList.add('hidden');
+    }
+
+    form?.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      limparErro();
+      submitBtn!.disabled = true;
+      submitBtn!.textContent = 'Entrando…';
+
+      const fd = new FormData(form);
+      const r = await login(
+        {
+          email: String(fd.get('email') ?? '').trim(),
+          senha: String(fd.get('senha') ?? ''),
+        },
+        { apiUrl: API_URL },
+      );
+
+      const sdk = (window as any).__dsplayground;
+
+      if (r.ok) {
+        sdk?.enviarEvento?.('login_concluido', {
+          site_id: r.user.site_id, papel: r.user.papel,
+        });
+        window.location.href = DASHBOARD_URL;
+        return;
+      }
+
+      sdk?.enviarEvento?.('formulario_erro', {
+        formulario: 'login', code: r.code, status: r.status,
+      });
+      mostrarErro(
+        r.code === 'CREDENCIAIS_INVALIDAS'
+          ? 'Email ou senha incorretos. Confere e tenta de novo.'
+          : r.code === 'REDE'
+            ? 'Sem internet agora. Tenta de novo.'
+            : 'Não deu pra entrar agora. Tenta de novo, por favor.',
+      );
+      submitBtn!.disabled = false;
+      submitBtn!.textContent = 'Entrar';
+    });
+  </script>
+</Base>

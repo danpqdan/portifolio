@@ -1,0 +1,67 @@
+---
+import '~/styles/global.css';
+import SeoHead from '~/components/SeoHead.astro';
+import Nav from '~/components/Nav.astro';
+import Footer from '~/components/Footer.astro';
+import { PUBLISHABLE_KEY, API_URL, DEBUG } from '~/config';
+
+interface Props {
+  title: string;
+  description: string;
+  canonical?: string;
+  noindex?: boolean;
+}
+
+const { title, description, canonical, noindex } = Astro.props;
+
+const sdkConfig = {
+  websocketUrl: API_URL,
+  appId: 'landing',
+  ambiente: import.meta.env.MODE === 'production' ? 'production' : 'development',
+  debug: DEBUG,
+  intervaloEnvioMs: 5000,
+  ...(PUBLISHABLE_KEY ? { publishableKey: PUBLISHABLE_KEY } : {}),
+};
+---
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="preconnect" href={API_URL} />
+    <SeoHead title={title} description={description} canonical={canonical} noindex={noindex} />
+  </head>
+  <body class="min-h-screen bg-slate-950 text-slate-100 font-sans antialiased">
+    <Nav />
+    <main>
+      <slot />
+    </main>
+    <Footer />
+
+    <script is:inline type="application/json" id="ds-config" set:html={JSON.stringify(sdkConfig)} />
+
+    <script>
+      // Carregamento defer do SDK — analytics nao bloqueia render. Le a config
+      // do <script id="ds-config">. CTAs com [data-cta] disparam `cta_clicado`
+      // automaticamente via attachCtaTracking (testado em src/lib/tracking.test.ts).
+      import { iniciarAnalytics, enviarEvento } from '@danpqdan/dsplayground-analytics-sdk';
+      import { attachCtaTracking } from '~/lib/tracking';
+
+      const cfgEl = document.getElementById('ds-config');
+      const sdkConfig = cfgEl ? JSON.parse(cfgEl.textContent || '{}') : {};
+
+      try {
+        iniciarAnalytics(sdkConfig);
+        enviarEvento('page_view', {
+          path: window.location.pathname,
+          referrer: document.referrer || null,
+        });
+        (window as any).__dsplayground = { iniciarAnalytics, enviarEvento };
+        attachCtaTracking(document, enviarEvento);
+      } catch (e) {
+        if (sdkConfig.debug) console.warn('SDK falhou ao carregar', e);
+      }
+    </script>
+  </body>
+</html>
