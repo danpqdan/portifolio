@@ -12,7 +12,7 @@
     "test:watch": "vitest"
   },
   "dependencies": {
-    "@danpqdan/dsplayground-analytics-sdk": "^0.3.0",
+    "@danpqdan/dsplayground-analytics-sdk": "^0.3.1",
     "@react-spring/web": "^10.0.3",
     "react": "^19.2.5",
     "react-dom": "^19.2.5",

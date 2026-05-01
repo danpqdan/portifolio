@@ -45,7 +45,17 @@ const sdkConfig = {
       // Carregamento defer do SDK — analytics nao bloqueia render. Le a config
       // do <script id="ds-config">. CTAs com [data-cta] disparam `cta_clicado`
       // automaticamente via attachCtaTracking (testado em src/lib/tracking.test.ts).
-      import { iniciarAnalytics, enviarEvento } from '@danpqdan/dsplayground-analytics-sdk';
+      //
+      // IMPORTANTE: enviarEvento() so empilha se houver HeatmapUtils ativo
+      // (HeatmapUtils.empilharEventoNoAtivo retorna false sem instancia). Por
+      // isso instanciamos HeatmapUtils + configuramos coleta tempo real ->
+      // sendAnalyticsDataImmediate, igual frontend/src/classe/ClasseHome.jsx.
+      import {
+        iniciarAnalytics,
+        enviarEvento,
+        HeatmapUtils,
+        WebSocketService,
+      } from '@danpqdan/dsplayground-analytics-sdk';
       import { attachCtaTracking } from '~/lib/tracking';
 
       const cfgEl = document.getElementById('ds-config');
@@ -53,11 +63,28 @@ const sdkConfig = {
 
       try {
         iniciarAnalytics(sdkConfig);
+
+        const pageType = window.location.pathname || '/';
+        const heatmap = new HeatmapUtils(document.body, null, pageType);
+        heatmap.configurarColecaoTempoReal((dados) => {
+          if (!document.hidden) {
+            WebSocketService.sendAnalyticsDataImmediate(dados, false);
+          }
+        }, 5000);
+        heatmap.iniciarColecaoTempoReal();
+        heatmap.iniciar();
+        WebSocketService.connect();
+
         enviarEvento('page_view', {
           path: window.location.pathname,
           referrer: document.referrer || null,
         });
-        (window as any).__dsplayground = { iniciarAnalytics, enviarEvento };
+
+        window.addEventListener('pagehide', () => {
+          try { heatmap.parar('aba_fechada'); } catch {}
+        });
+
+        (window as any).__dsplayground = { iniciarAnalytics, enviarEvento, heatmap };
         attachCtaTracking(document, enviarEvento);
       } catch (e) {
         if (sdkConfig.debug) console.warn('SDK falhou ao carregar', e);
