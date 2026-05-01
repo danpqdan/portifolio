@@ -222,6 +222,50 @@ Restricao: `postgres_password` **nao pode conter aspa simples** — escape
 SQL nao e feito no template. Geracao recomendada e `secrets.token_urlsafe(32)`
 (safe por construcao).
 
+### Rotacao de `grafana_admin_password`
+
+`GF_SECURITY_ADMIN_PASSWORD` no compose so e' aplicada no setup inicial do
+Grafana — quando o volume `monitoring_grafana-data` e' criado pela primeira
+vez. Em volume ja existente (re-deploy normal), o user `admin` mantem a senha
+antiga. Quando o vault rotaciona `grafana_admin_password`, o backend regera
+`backend/.env` com a senha NOVA e fica em descompasso com o Grafana, que
+responde 401 `password-auth.failed` em todas as chamadas administrativas
+(GrafanaSyncService no `/gate`, scripts `provisionar_cliente.py` e
+`redo_dashboards.py`).
+
+Mesmo padrao do bug Postgres acima — `analytics-stack` resolve com `ALTER USER`,
+`monitoring` resolve com `grafana-cli admin reset-admin-password`.
+
+A role `monitoring` cobre isso com 2 tasks pos-`compose up`:
+
+1. **Aguardar Grafana pronto pra aceitar admin commands** — `wget /api/health` retry 15x4s.
+2. **Rotacionar senha do admin Grafana pra refletir vault atual (idempotente)** —
+   `grafana-cli admin reset-admin-password <senha>` dentro do container.
+   Senha passa via env var (`docker exec -e GF_PW=...`); `no_log: true`
+   esconde do log Ansible. `changed_when: false` porque CLI sempre executa
+   mas e' idempotente.
+
+Procedimento operacional pra rotacionar:
+
+```bash
+cd /opt/portifolio/ark/ansible
+ansible-vault edit group_vars/all.yml
+# trocar grafana_admin_password
+make -f ../Makefile ansible-apply
+# A role monitoring:
+#   1. regenera ark/monitoring/.env e backend/.env
+#   2. compose up -d (sobe stack)
+#   3. grafana-cli reset-admin-password no cluster
+#   4. backend GrafanaSyncService volta a autenticar
+```
+
+Recovery manual quando o ansible nao roda (debug):
+
+```bash
+PW=$(docker compose exec backend printenv GRAFANA_ADMIN_PASSWORD)
+docker exec portifolio-grafana grafana-cli admin reset-admin-password "$PW"
+```
+
 ## Owner:group — mapa operacional
 
 Grupo compartilhado **`analytics` GID 10001** e a ponte entre host e containers para bind-mounts funcionarem sem UID mismatch. Criado pela role `base` no host e pelos Dockerfiles do backend/frontend.

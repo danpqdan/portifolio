@@ -25,3 +25,50 @@
       - docker-compose.monitoring.yml
     state: present
   become_user: "{{ deploy_user }}"
+
+# ---- Rotacao de senha do admin do Grafana ----
+#
+# `GF_SECURITY_ADMIN_PASSWORD` (env do compose) so e' aplicada no setup
+# inicial — quando o volume monitoring_grafana-data e' criado. Em volume
+# existente (re-deploy normal), o user admin mantem a senha antiga. Quando
+# o vault rotaciona `grafana_admin_password`, o backend (.env) e o GF
+# divergem; backend tenta GET /api/orgs com creds novas, Grafana responde
+# 401 com `password-auth.failed`. Mesmo padrao do bug Postgres
+# (incidente 2026-05-01) — ver `ark/docs/servidor-producao.md`.
+#
+# Fix idempotente: `grafana-cli admin reset-admin-password` muda a senha
+# do user admin direto no DB do Grafana, sem precisar da senha atual
+# (CLI usa flat-file authority dentro do container). Senha NUNCA aparece
+# em `ps` no host (passa via stdin do `docker exec -i` quando suportado,
+# ou via env var no exec quando o CLI obriga argumento).
+
+- name: Aguardar Grafana pronto pra aceitar admin commands
+  when: not ansible_check_mode
+  ansible.builtin.shell: |
+    docker exec portifolio-grafana wget -q -O /dev/null --tries=1 http://localhost:3000/api/health
+  register: gf_ready
+  retries: 15
+  delay: 4
+  until: gf_ready.rc == 0
+  changed_when: false
+  failed_when: gf_ready.rc != 0 and gf_ready.attempts | default(1) >= 15
+
+- name: Rotacionar senha do admin Grafana pra refletir vault atual (idempotente)
+  # `grafana-cli admin reset-admin-password <senha>` so aceita arg posicional.
+  # Pra evitar a senha aparecer em `ps`, passamos via env var dentro do
+  # container e o CLI le da arg expandida pelo shell — nao da pra evitar
+  # totalmente em ps DO container, mas ps DO host nao mostra a senha
+  # (so o cmd `docker exec -e GF_PW=*** ...` que e' opaco). Trade-off
+  # aceitavel: ps do container so e' visivel pra root no host (que ja
+  # tem acesso a tudo).
+  when:
+    - not ansible_check_mode
+    - gf_ready.rc | default(1) == 0
+  ansible.builtin.shell: |
+    docker exec -e GF_PW="${GF_PW_VALUE}" portifolio-grafana \
+      sh -c 'grafana-cli admin reset-admin-password "$GF_PW"'
+  environment:
+    GF_PW_VALUE: "{{ grafana_admin_password }}"
+  no_log: true
+  changed_when: false
+  become_user: "{{ deploy_user }}"
