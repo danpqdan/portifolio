@@ -52,15 +52,47 @@ import Base from '~/layouts/Base.astro';
           </dl>
         </section>
 
-        <p class="text-xs text-slate-500">
-          Outras opções (trocar email/senha, cancelar conta) chegam em breve.
-        </p>
+        <!-- Trocar email -->
+        <section>
+          <h2 class="text-sm font-semibold uppercase tracking-wide text-slate-300">Trocar email</h2>
+          <form id="form-email" class="mt-2 space-y-3" novalidate>
+            <div>
+              <label for="senha-atual-email" class="input-label">Senha atual</label>
+              <input id="senha-atual-email" name="senha_atual" type="password" autocomplete="current-password" required class="input-field" />
+            </div>
+            <div>
+              <label for="novo-email" class="input-label">Novo email</label>
+              <input id="novo-email" name="novo_email" type="email" autocomplete="email" required class="input-field" />
+            </div>
+            <div id="erro-email" role="alert" class="hidden rounded-md border border-red-500/40 bg-red-500/10 px-3 py-2 text-sm text-red-200"></div>
+            <div id="ok-email" role="status" class="hidden rounded-md border border-emerald-500/40 bg-emerald-500/10 px-3 py-2 text-sm text-emerald-200">Email atualizado.</div>
+            <button id="submit-email" type="submit" class="btn-secondary text-sm" data-cta="trocar-email">Atualizar email</button>
+          </form>
+        </section>
+
+        <!-- Trocar senha -->
+        <section>
+          <h2 class="text-sm font-semibold uppercase tracking-wide text-slate-300">Trocar senha</h2>
+          <form id="form-senha" class="mt-2 space-y-3" novalidate>
+            <div>
+              <label for="senha-atual" class="input-label">Senha atual</label>
+              <input id="senha-atual" name="senha_atual" type="password" autocomplete="current-password" required class="input-field" />
+            </div>
+            <div>
+              <label for="nova-senha" class="input-label">Nova senha</label>
+              <input id="nova-senha" name="nova_senha" type="password" autocomplete="new-password" required minlength="8" class="input-field" placeholder="pelo menos 8 caracteres" />
+            </div>
+            <div id="erro-senha" role="alert" class="hidden rounded-md border border-red-500/40 bg-red-500/10 px-3 py-2 text-sm text-red-200"></div>
+            <div id="ok-senha" role="status" class="hidden rounded-md border border-emerald-500/40 bg-emerald-500/10 px-3 py-2 text-sm text-emerald-200">Senha atualizada.</div>
+            <button id="submit-senha" type="submit" class="btn-secondary text-sm" data-cta="trocar-senha">Atualizar senha</button>
+          </form>
+        </section>
       </div>
     </div>
   </section>
 
   <script>
-    import { obterConfiguracoes } from '~/lib/api';
+    import { alterarEmail, alterarSenha, obterConfiguracoes } from '~/lib/api';
     import { API_URL } from '~/config';
 
     const estadoBox = document.getElementById('estado')!;
@@ -151,6 +183,87 @@ import Base from '~/layouts/Base.astro';
     carregar().catch((e) => {
       console.error(e);
       mostrarErro('Erro inesperado. Tenta atualizar a página.');
+    });
+
+    // ----- Trocar email -----
+    const formEmail = document.getElementById('form-email') as HTMLFormElement;
+    const erroEmail = document.getElementById('erro-email')!;
+    const okEmail = document.getElementById('ok-email')!;
+    const submitEmail = document.getElementById('submit-email') as HTMLButtonElement;
+
+    formEmail?.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      erroEmail.classList.add('hidden');
+      okEmail.classList.add('hidden');
+      submitEmail.disabled = true;
+      submitEmail.textContent = 'Atualizando…';
+
+      const fd = new FormData(formEmail);
+      const r = await alterarEmail(
+        {
+          senha_atual: String(fd.get('senha_atual') ?? ''),
+          novo_email: String(fd.get('novo_email') ?? '').trim(),
+        },
+        { apiUrl: API_URL },
+      );
+
+      if (r.ok) {
+        okEmail.classList.remove('hidden');
+        formEmail.reset();
+      } else {
+        const msg = (
+          r.code === 'SENHA_INVALIDA' ? 'Senha atual incorreta.' :
+          r.code === 'EMAIL_INVALIDO' ? 'Email inválido. Use um formato válido.' :
+          r.code === 'EMAIL_JA_CADASTRADO' ? 'Esse email já está em uso.' :
+          r.code === 'NAO_AUTENTICADO' ? 'Sessão expirou. Faça login de novo.' :
+          r.code === 'REDE' ? 'Sem internet agora. Tenta de novo.' :
+          'Não deu pra atualizar agora. Tenta de novo.'
+        );
+        erroEmail.textContent = msg;
+        erroEmail.classList.remove('hidden');
+      }
+      submitEmail.disabled = false;
+      submitEmail.textContent = 'Atualizar email';
+    });
+
+    // ----- Trocar senha -----
+    const formSenha = document.getElementById('form-senha') as HTMLFormElement;
+    const erroSenha = document.getElementById('erro-senha')!;
+    const okSenha = document.getElementById('ok-senha')!;
+    const submitSenha = document.getElementById('submit-senha') as HTMLButtonElement;
+
+    formSenha?.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      erroSenha.classList.add('hidden');
+      okSenha.classList.add('hidden');
+      submitSenha.disabled = true;
+      submitSenha.textContent = 'Atualizando…';
+
+      const fd = new FormData(formSenha);
+      const r = await alterarSenha(
+        {
+          senha_atual: String(fd.get('senha_atual') ?? ''),
+          nova_senha: String(fd.get('nova_senha') ?? ''),
+        },
+        { apiUrl: API_URL },
+      );
+
+      if (r.ok) {
+        okSenha.classList.remove('hidden');
+        formSenha.reset();
+      } else {
+        const msg = (
+          r.code === 'SENHA_INVALIDA' ? 'Senha atual incorreta.' :
+          r.code === 'SENHA_CURTA' ? 'A nova senha precisa ter no mínimo 8 caracteres.' :
+          r.code === 'NAO_AUTENTICADO' ? 'Sessão expirou. Faça login de novo.' :
+          r.code === 'REDE' ? 'Sem internet agora. Tenta de novo.' :
+          'Não deu pra atualizar agora. Tenta de novo.'
+        );
+        erroSenha.textContent = msg;
+        erroSenha.classList.remove('hidden');
+      }
+      submitSenha.disabled = false;
+      submitSenha.textContent = 'Atualizar senha';
     });
   </script>
 </Base>
