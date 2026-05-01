@@ -176,3 +176,61 @@ jobs:
             exit 1
           fi
           echo "OK: portifolio.X/api/metrics bloqueado (HTTP ${code})"
+
+  app-x-cliente-fallback:
+    name: app.X /cliente/* fora de /metricas redireciona pro apex
+    runs-on: ubuntu-latest
+    env:
+      APP: https://app.dsplayground.com.br
+      APEX: https://dsplayground.com.br
+    steps:
+      - name: app.X /cliente/configuracoes -> 302 apex
+        run: |
+          # Sem fallback, app.X/cliente/<qualquer-coisa-nao-/metricas> da 404.
+          # Cliente clica em link errado/bookmark e fica perdido. nginx vhost
+          # do app.X tem `location /cliente/ { return 302 https://apex$uri; }`.
+          status=$(curl -sk -o /dev/null -w '%{http_code}' "${APP}/cliente/configuracoes")
+          target=$(curl -sk -o /dev/null -w '%{redirect_url}' "${APP}/cliente/configuracoes")
+          echo "HTTP ${status} -> ${target}"
+          if [ "$status" != "302" ] && [ "$status" != "301" ]; then
+            echo "::error::REGRESSAO: app.X/cliente/configuracoes nao redireciona (HTTP ${status}). Verificar nginx vhost app.X."
+            exit 1
+          fi
+          case "$target" in
+            "${APEX}"/cliente/configuracoes*)
+              echo "OK: redirect aponta pra apex"
+              ;;
+            *)
+              echo "::error::Redirect aponta pra ${target} (esperado apex/cliente/configuracoes)."
+              exit 1
+              ;;
+          esac
+
+      - name: app.X /cliente/exportar -> 302 apex (smoke duplo)
+        run: |
+          status=$(curl -sk -o /dev/null -w '%{http_code}' "${APP}/cliente/exportar")
+          target=$(curl -sk -o /dev/null -w '%{redirect_url}' "${APP}/cliente/exportar")
+          echo "HTTP ${status} -> ${target}"
+          if [ "$status" != "302" ] && [ "$status" != "301" ]; then
+            echo "::error::app.X/cliente/exportar nao redireciona (HTTP ${status})."
+            exit 1
+          fi
+
+      - name: app.X /cliente/metricas/ NAO redireciona (continua proxy pro Grafana)
+        run: |
+          # /cliente/metricas/ tem location proprio e mais especifico — deve
+          # continuar proxy pro Grafana, nao cair no fallback.
+          status=$(curl -sk -o /dev/null -w '%{http_code}' "${APP}/cliente/metricas/")
+          echo "HTTP ${status}"
+          # Sem cookie: auth_request retorna 401 -> @cliente_nao_autenticado
+          # devolve 302 pra apex/cliente/login. Aceitavel.
+          # Com cookie valido seria 200 (Grafana). Aqui basta NAO ser 404
+          # nem cair no fallback (que iria pra apex/cliente/metricas/).
+          target=$(curl -sk -o /dev/null -w '%{redirect_url}' "${APP}/cliente/metricas/")
+          case "$target" in
+            *"/cliente/metricas/"*)
+              echo "::error::REGRESSAO: /cliente/metricas/ esta caindo no fallback (redirect pra ${target}). Specificity quebrada."
+              exit 1
+              ;;
+          esac
+          echo "OK: /cliente/metricas/ nao caiu no fallback (target='${target}')"
