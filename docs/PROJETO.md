@@ -493,14 +493,18 @@ docker exec portifolio-influxdb influx backup /var/lib/influxdb2/backups
 - ✅ **Auth nos `/analytics/* REST**` (commit `d07c841`) — cookie obrigatório + bucket forçado por site_id; 9 testes em `test_analytics_auth.py`
 - ✅ **Trigger automático de provisionamento pós-cadastro** (commit `e9beb96`) — thread daemon best-effort chama `scripts.provisionar_cliente`; 5 testes
 - ✅ **Quota enforcement** — já estava implementado (sprint anterior); 6 testes verde validados em 2026-04-30
+- ✅ **Hostname do dashboard cliente em `app.dsplayground.com.br`** (commits `abee7da`, `69e6fd6`, `7c980a0`, deploy 2026-04-30) — cookie `cliente_session` viaja entre apex/app/api via `COOKIE_DOMAIN=dsplayground.com.br`; vhost nginx `app.X` ativo; landing redireciona pós-cadastro pra `app.X/cliente/metricas`; Grafana `GF_ROOT_URL` migrado.
+- ✅ **Apex em CF Pages** — landing comercial servida via Cloudflare Pages do repo `comercial`; nginx host removeu vhost apex (dead code).
+- ✅ **Hardening de conta** — PAT amplo revogado, PAT enxuto criado (`read:packages`), 2FA habilitado em GitHub e CF.
 
 ### 10.2 Fila atual
 
 | Prio | Item | Bloqueia | Onde | Estimativa |
 |---|---|---|---|---|
-| 🔴 **P0** | **Hostname do dashboard cliente** — quando CF Pages assumir apex, `/cliente/metricas/*` quebra (CF Pages é estático, não roteia pro Grafana via auth_request). Decidir: `app.X` dedicado, ou Pages Functions, ou pausar cutover. | Signup público (cliente cadastra mas o "ver painel" some). Ver `contas-e-acessos.md` §3.1 PG-1 | nginx + DNS + CF | 1-2d decisão + 0.5d implementação |
-| 🔴 **P0** | **Rotacionar PAT GitHub `ghp_TjbESMOV7vi...`** vazado em chat 2026-04-29 + emitir PAT enxuto (`read:packages` only) e substituir em CF Pages secret + Ansible vault | Token amplo com `admin:org`, `repo`, `workflow`, `delete_repo` em circulação | github.com/settings/tokens | 30 min |
-| 🔴 **P0** | **2FA + recovery codes offline** em GitHub e Cloudflare | Recovery em incidente sem 2FA = days/weeks no support | painéis dos provedores | 1-2h |
+| 🟡 **P1** | **Smoke test e2e do cookie + redirect** com credenciais reais — confirmar que `Set-Cookie: ...; Domain=dsplayground.com.br` aparece no `/login` e que `/cliente/metricas/` em `app.X` lê o cookie + carrega Grafana | UX de signup público — fluxo de fato funcionando | manual via curl + browser | 15min (você) |
+| 🟡 **P1** | **`PUBLIC_DASHBOARD_URL` no CF Pages do `comercial`** — formaliza var no painel CF, retry deploy. Hoje funciona via default da `config.ts` mas não está explícito | Configuração rastreável quando dev local divergir do prod | painel CF Pages | 2 min |
+| 🟢 **P2** | **CrowdSec nginx-bouncer task ansible** — packagecloud retorna HTML (404). `ignore_errors: true` adicionado em 2026-04-30 pra ansible-apply não abortar; firewall-bouncer (nftables) já cobre. Decidir: abandonar nginx-bouncer ou instalar `.rpm` direto | Próximos `ansible-apply` continuam verdes | `ark/ansible/roles/crowdsec/tasks/main.yml` | 30min |
+| 🟢 **P3** | **Decidir destino do `landing/` no monorepo** — hoje é espelho da canônica em CF Pages (`comercial`). Manter como fallback até Phase 4 da migração ou remover já | `deploy.yml` rebuilda landing redundante | `landing/` + `docker-compose.yml` + `deploy.yml` | 1h se decidir remover |
 | 🟡 **P1** | **Email transacional (Resend)** — sem isso magic-link em prod cai no stdout do container = "esqueci senha" totalmente quebrado | Recover password de cliente real | `group_vars/all.yml` + `email_sender.py` (já tem stub) | 0.5d |
 | 🟡 **P1** | **Email do produto `contato@dsplayground.com.br`** — landing referencia (plano Business). Cloudflare Email Routing → forward Gmail (free) é o caminho mais rápido | UX de contato comercial | painel CF | 1-2h |
 | 🟡 **P1** | **Dashboard de Settings do cliente** — mostrar `publishable_key` (botão copiar), trocar email/senha, ver plano + consumo, baixar export LGPD | Cliente sabe a key dele e como usar; sem isso o produto não vende | new pages no `comercial` repo + endpoints REST autenticados | 3-5d |
