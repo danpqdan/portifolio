@@ -347,6 +347,85 @@ def me():
     })
 
 
+def _ambiente_de_pk(valor: str) -> str:
+    """`pk_production_xxx` -> `production`. Defensivo pra valores legados."""
+    partes = valor.split("_", 2)
+    return partes[1] if len(partes) >= 3 and partes[0] == "pk" else "unknown"
+
+
+@cliente_auth_bp.route("/configuracoes", methods=["GET"])
+def configuracoes():
+    """Settings do cliente: user + site + publishable_keys ativas + quota + consumo.
+
+    Tudo escopado pelo `site_id` do cookie — anti-IDOR. Cliente A nao consegue
+    ver dados do cliente B nem passando ?site_id no query (ignorado).
+    """
+    cookie = request.cookies.get(COOKIE_NAME, "")
+    user = _obter_svc().validar_cookie(cookie)
+    if user is None:
+        return _erro("NAO_AUTENTICADO", "sessao ausente ou invalida", 401)
+
+    if _tenants_repo is None:
+        return _erro("BACKEND_INCOMPLETO", "tenants_repo nao configurado", 500)
+
+    site = _tenants_repo.obter_site(user.site_id)
+    if site is None:
+        # cookie valido mas site sumiu (rare race condition: admin deletou)
+        return _erro("SITE_NAO_ENCONTRADO", "site associado nao existe", 404)
+
+    keys_ativas = [
+        {
+            "key_id": k.key_id,
+            "valor": k.valor,
+            "nome": k.nome,
+            "ambiente": _ambiente_de_pk(k.valor),
+        }
+        for k in _tenants_repo.listar_publishable_keys(user.site_id)
+        if not k.revogada
+    ]
+
+    quota = _tenants_repo.obter_quota(user.site_id)
+    if quota is not None:
+        quota_dict = {
+            "eventos_por_minuto": quota.eventos_por_minuto,
+            "eventos_por_dia": quota.eventos_por_dia,
+            "emissoes_jwt_por_minuto": quota.emissoes_jwt_por_minuto,
+            "retencao_dias": quota.retencao_dias,
+        }
+    else:
+        # Defaults se quota nao foi inserida (deveria sempre existir via trigger
+        # ON sites INSERT, mas defensive).
+        quota_dict = {
+            "eventos_por_minuto": 600,
+            "eventos_por_dia": 100_000,
+            "emissoes_jwt_por_minuto": 5,
+            "retencao_dias": 30,
+        }
+
+    consumo_hoje = _tenants_repo.consumo_hoje(user.site_id)
+
+    return jsonify({
+        "user": {
+            "id": user.id,
+            "email": user.email,
+            "papel": user.papel,
+        },
+        "site": {
+            "id": site.id,
+            "slug": site.slug,
+            "nome": site.nome,
+            "ambiente": site.ambiente,
+            "plano": site.plano,
+            "bucket_name": site.bucket_name,
+        },
+        "publishable_keys": keys_ativas,
+        "quota": quota_dict,
+        "consumo": {
+            "eventos_hoje": consumo_hoje,
+        },
+    })
+
+
 @cliente_auth_bp.route("/gate", methods=["GET"])
 def gate():
     """Endpoint do nginx `auth_request`. Nao retorna body util — so codigo + headers.
