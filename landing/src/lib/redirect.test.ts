@@ -46,4 +46,27 @@ describe('resolverDestinoPosLogin', () => {
     expect(resolverDestinoPosLogin(qs('next=/\\evil.com'), FALLBACK))
       .toBe(FALLBACK);
   });
+
+  // Fluxo de cadastro: usa o mesmo helper. fallback e' DASHBOARD_URL com
+  // ?welcome=true (cadastro mostra onboarding). Quando next valido vem
+  // junto, ele tem precedencia (cliente queria ir pra outro lugar).
+  describe('fluxo de cadastro', () => {
+    const FALLBACK_CADASTRO = 'https://app.dsplayground.com.br/cliente/metricas?welcome=true';
+
+    test('next /cliente/* valido tem precedencia sobre fallback com welcome', () => {
+      expect(resolverDestinoPosLogin(qs('next=/cliente/configuracoes'), FALLBACK_CADASTRO))
+        .toBe('/cliente/configuracoes');
+    });
+
+    test('sem next, cai no fallback com welcome', () => {
+      expect(resolverDestinoPosLogin(qs(''), FALLBACK_CADASTRO))
+        .toBe(FALLBACK_CADASTRO);
+    });
+
+    test('cadastro com plano + next: next ainda ganha (next nao se mistura com plano)', () => {
+      // ?plano=pro e' usado pra mostrar banner; nao afeta destino pos-cadastro
+      expect(resolverDestinoPosLogin(qs('plano=pro&next=/cliente/exportar'), FALLBACK_CADASTRO))
+        .toBe('/cliente/exportar');
+    });
+  });
 });
