@@ -36,6 +36,7 @@ import Base from '~/layouts/Base.astro';
 
   <script>
     import { login } from '~/lib/api';
+    import { resolverDestinoPosLogin } from '~/lib/redirect';
     import { API_URL, DASHBOARD_URL } from '~/config';
 
     const form = document.getElementById('form-login') as HTMLFormElement | null;
@@ -72,7 +73,11 @@ import Base from '~/layouts/Base.astro';
         sdk?.enviarEvento?.('login_concluido', {
           site_id: r.user.site_id, papel: r.user.papel,
         });
-        window.location.href = DASHBOARD_URL;
+        const destino = resolverDestinoPosLogin(
+          new URL(window.location.href).searchParams,
+          DASHBOARD_URL,
+        );
+        window.location.href = destino;
         return;
       }
 
