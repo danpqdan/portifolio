@@ -66,6 +66,25 @@ export interface MagicLinkOk {
   ok: boolean;
 }
 
+export type AlterarSenhaErrorCode =
+  | 'NAO_AUTENTICADO'
+  | 'SENHA_INVALIDA'
+  | 'SENHA_CURTA'
+  | 'REDE'
+  | 'INESPERADO';
+
+export type AlterarEmailErrorCode =
+  | 'NAO_AUTENTICADO'
+  | 'SENHA_INVALIDA'
+  | 'EMAIL_INVALIDO'
+  | 'EMAIL_JA_CADASTRADO'
+  | 'REDE'
+  | 'INESPERADO';
+
+export interface AlterarOk {
+  ok: boolean;
+}
+
 export type ListarExportsErrorCode =
   | 'NAO_AUTENTICADO'
   | 'REDE'
@@ -211,6 +230,37 @@ export function solicitarMagicLink(
   );
 }
 
+async function patchJson<TOk, TErr extends string>(
+  url: string,
+  body: unknown,
+  fetchImpl: typeof fetch,
+  codeMap: Partial<Record<number, TErr>> = {},
+): Promise<Result<TOk, TErr>> {
+  let resp: Response;
+  try {
+    resp = await fetchImpl(url, {
+      method: 'PATCH',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+  } catch {
+    return { ok: false, code: 'REDE' as TErr, message: 'falha de rede', status: 0 };
+  }
+  let data: any = null;
+  try { data = await resp.json(); } catch { /* aceitavel pra 401 vazio */ }
+  if (resp.ok) {
+    return { ok: true, ...(data as TOk) };
+  }
+  const code = (data?.code ?? codeMap[resp.status] ?? 'INESPERADO') as TErr;
+  return {
+    ok: false,
+    code,
+    message: data?.message ?? `erro ${resp.status}`,
+    status: resp.status,
+  };
+}
+
 async function getJson<TOk, TErr extends string>(
   url: string,
   fetchImpl: typeof fetch,
@@ -247,6 +297,43 @@ async function getJson<TOk, TErr extends string>(
     message: `erro ${resp.status}`,
     status: resp.status,
   };
+}
+
+/**
+ * Troca senha do user logado.
+ * Codigos: SENHA_INVALIDA (atual errada), SENHA_CURTA (<8), NAO_AUTENTICADO.
+ */
+export function alterarSenha(
+  payload: { senha_atual: string; nova_senha: string },
+  opts: ApiOptions,
+): Promise<Result<AlterarOk, AlterarSenhaErrorCode>> {
+  return patchJson<AlterarOk, AlterarSenhaErrorCode>(
+    `${opts.apiUrl}/cliente/auth/senha`,
+    payload,
+    opts.fetchImpl ?? fetch,
+    { 401: 'NAO_AUTENTICADO', 403: 'SENHA_INVALIDA', 400: 'SENHA_CURTA' },
+  );
+}
+
+/**
+ * Troca email do user logado.
+ * Codigos: SENHA_INVALIDA, EMAIL_INVALIDO, EMAIL_JA_CADASTRADO, NAO_AUTENTICADO.
+ */
+export function alterarEmail(
+  payload: { senha_atual: string; novo_email: string },
+  opts: ApiOptions,
+): Promise<Result<AlterarOk, AlterarEmailErrorCode>> {
+  return patchJson<AlterarOk, AlterarEmailErrorCode>(
+    `${opts.apiUrl}/cliente/auth/email`,
+    payload,
+    opts.fetchImpl ?? fetch,
+    {
+      401: 'NAO_AUTENTICADO',
+      403: 'SENHA_INVALIDA',
+      400: 'EMAIL_INVALIDO',
+      409: 'EMAIL_JA_CADASTRADO',
+    },
+  );
 }
 
 /**

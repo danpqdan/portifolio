@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import {
+  alterarEmail, alterarSenha,
   cadastrar, listarExports, login,
   obterConfiguracoes, solicitarMagicLink,
   urlDashboard, urlDownloadExport,
@@ -291,5 +292,87 @@ describe('solicitarMagicLink()', () => {
     const r = await solicitarMagicLink({ email: 'd@x.com' }, { apiUrl: API_URL });
     expect(r.ok).toBe(false);
     if (!r.ok) expect(r.code).toBe('REDE');
+  });
+});
+
+describe('alterarSenha()', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  test('PATCH /cliente/auth/senha com senha correta retorna ok', async () => {
+    vi.stubGlobal('fetch', fetchMock(200, { status: 'success', ok: true }));
+    const r = await alterarSenha(
+      { senha_atual: 'old-secret', nova_senha: 'new-secret-123' },
+      { apiUrl: API_URL },
+    );
+    expect(r.ok).toBe(true);
+    expect(fetch).toHaveBeenCalledWith(
+      `${API_URL}/cliente/auth/senha`,
+      expect.objectContaining({ method: 'PATCH', credentials: 'include' }),
+    );
+  });
+
+  test('403 SENHA_INVALIDA', async () => {
+    vi.stubGlobal('fetch', fetchMock(403, {
+      status: 'error', code: 'SENHA_INVALIDA', message: 'senha atual incorreta',
+    }));
+    const r = await alterarSenha(
+      { senha_atual: 'errada', nova_senha: 'new12345' }, { apiUrl: API_URL },
+    );
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.code).toBe('SENHA_INVALIDA');
+  });
+
+  test('400 SENHA_CURTA', async () => {
+    vi.stubGlobal('fetch', fetchMock(400, {
+      status: 'error', code: 'SENHA_CURTA', message: 'minimo 8',
+    }));
+    const r = await alterarSenha(
+      { senha_atual: 'old', nova_senha: 'abc' }, { apiUrl: API_URL },
+    );
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.code).toBe('SENHA_CURTA');
+  });
+
+  test('401 NAO_AUTENTICADO', async () => {
+    vi.stubGlobal('fetch', fetchMock(401, {}));
+    const r = await alterarSenha(
+      { senha_atual: 'a', nova_senha: 'b12345678' }, { apiUrl: API_URL },
+    );
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.code).toBe('NAO_AUTENTICADO');
+  });
+});
+
+describe('alterarEmail()', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  test('PATCH /cliente/auth/email com senha correta retorna ok', async () => {
+    vi.stubGlobal('fetch', fetchMock(200, { status: 'success', ok: true }));
+    const r = await alterarEmail(
+      { senha_atual: 'secret', novo_email: 'novo@x.com' }, { apiUrl: API_URL },
+    );
+    expect(r.ok).toBe(true);
+  });
+
+  test('409 EMAIL_JA_CADASTRADO', async () => {
+    vi.stubGlobal('fetch', fetchMock(409, {
+      status: 'error', code: 'EMAIL_JA_CADASTRADO',
+    }));
+    const r = await alterarEmail(
+      { senha_atual: 'secret', novo_email: 'tomado@x.com' }, { apiUrl: API_URL },
+    );
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.code).toBe('EMAIL_JA_CADASTRADO');
+  });
+
+  test('400 EMAIL_INVALIDO', async () => {
+    vi.stubGlobal('fetch', fetchMock(400, {
+      status: 'error', code: 'EMAIL_INVALIDO',
+    }));
+    const r = await alterarEmail(
+      { senha_atual: 'secret', novo_email: 'sem-arroba' }, { apiUrl: API_URL },
+    );
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.code).toBe('EMAIL_INVALIDO');
   });
 });
