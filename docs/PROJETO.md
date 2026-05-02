@@ -527,20 +527,20 @@ docker exec portifolio-influxdb influx backup /var/lib/influxdb2/backups
 | 🟢 **P3** | **Decidir destino do `landing/` no monorepo** — hoje é espelho da canônica em CF Pages (`comercial`). Manter como fallback até Phase 4 da migração ou remover já | `deploy.yml` rebuilda landing redundante | `landing/` + `docker-compose.yml` + `deploy.yml` | 1h se decidir remover |
 | 🟡 **P1** | **Email transacional (Resend)** — sem isso magic-link em prod cai no stdout do container = "esqueci senha" totalmente quebrado | Recover password de cliente real | `group_vars/all.yml` + `email_sender.py` (já tem stub) | 0.5d |
 | 🟡 **P1** | **Email do produto `contato@dsplayground.com.br`** — landing referencia (plano Business). Cloudflare Email Routing → forward Gmail (free) é o caminho mais rápido | UX de contato comercial | painel CF | 1-2h |
-| 🟡 **P1** | **Dashboard de Settings do cliente** — mostrar `publishable_key` (botão copiar), trocar email/senha, ver plano + consumo, baixar export LGPD | Cliente sabe a key dele e como usar; sem isso o produto não vende | new pages no `comercial` repo + endpoints REST autenticados | 3-5d |
-| 🟡 **P1** | **Recover password UX** (`/cliente/esqueci-senha` page) — magic-link já tem endpoint, falta tela | Cliente esquece senha, perde acesso | `comercial` repo | 0.5d (depende de Resend) |
+| ✅ ~~**P1**~~ | ~~**Dashboard de Settings do cliente**~~ — **feito 2026-05-02**, `comercial/src/pages/cliente/configuracoes.astro` com publishable_key + botão copiar, troca email/senha, plano + consumo | — | — | — |
+| ✅ ~~**P1**~~ | ~~**Recover password UX**~~ — **feito 2026-05-02**, `comercial/src/pages/cliente/esqueci-senha.astro` live em CF Pages | — | — | — |
 | 🟡 **P1** | **Conta empresa/CNPJ** (PJ MEI/ME/SLU + contador) | Emitir NF pro primeiro cliente pago | externo | varia |
-| 🟡 **P1** | Cardinalidade enforcement runtime + alert em 80%/95% | Cliente pode detonar bucket InfluxDB | `backend/ingestao/validador.py` | 2-3d |
+| ✅ ~~**P1**~~ | ~~Cardinalidade enforcement runtime + alert em 80%/95%~~ — **feito 2026-05-02**, `backend/ingestao/cardinalidade.py` com alertas em 80% e 95% | — | — | — |
 | ✅ ~~**P1**~~ | ~~Container `analytics-archiver`~~ — **feito 2026-05-01**, sidecar com APScheduler cron 03:00 UTC, exporta line protocol gzip pra Cloudflare R2 (`backend/archiver/`) | — | — | — |
 | ✅ ~~**P1**~~ | ~~Endpoint `GET /cliente/exportar`~~ — **feito 2026-05-01**, listagem JSON + download via 302 signed URL R2 (TTL 5min), auth via cookie cliente_session, anti-IDOR via slug derivado do site_id | — | — | — |
-| 🟡 **P1** | Email diário com counts agregados de rejeições | UX: cliente não sabe que está rejeitando | novo: `backend/scripts/email_diario.py` + cron | 1-2d |
+| ✅ ~~**P1**~~ | ~~Email diário com counts agregados de rejeições~~ — **feito 2026-05-02**, `backend/scripts/email_diario.py` + container email-cron opt-in (PRs #57/#58); ativar requer `RESEND_API_KEY` no vault | — | — | — |
 | 🟡 **P1** | Backup offline de credenciais (1Password ou age key + pen drive): vault Ansible, recovery codes, age key dos backups | Recovery em catástrofe | externo + processo | 1-2h |
 | 🟢 **P2** | **Upgrade de plano** (billing Stripe ou MercadoPago — webhook → atualiza `sites.plano` + quotas) | Cliente Pro/Business sem caminho de pagamento | new `backend/billing/` | 5-7d |
 | 🟢 **P2** | Onda 1 do contrato SDK↔Backend: cache LRU idempotência + retry exponencial + dead-letter | Onda 2 e 3 dependem | SDK repo + `backend/ingestao/` | 3-5d |
 | 🟢 **P2** | Onda 2: validação timestamp + skew correction + overflow priority | Onda 3 depende | SDK repo | 2-3d |
 | 🟢 **P2** | Onda 3: backpressure dinâmico + schema version negotiation | Coordenação dinâmica em escala | SDK + backend | 2-3d |
-| 🟢 **P2** | CORS dinâmico via `sites.dominios_permitidos` | Multi-cliente real (cada cliente novo exige re-aplicar Ansible hoje) | `backend/app.py` middleware + `tenants_repo.py` | 2d |
-| 🟢 **P2** | Tags derivadas server-side: `device_type`, `pais` (GeoIP), `referrer_dominio` | Reduz dependência do cliente em enviar tags consistentes | `backend/ingestao/normalizador.py` | 1-2d |
+| ✅ ~~**P2**~~ | ~~CORS dinâmico via `sites.dominios_permitidos`~~ — **feito 2026-05-02**, `backend/ingestao/origins_dinamicos.py` consulta `site_dominios` em runtime | — | — | — |
+| ✅ ~~**P2**~~ | ~~Tags derivadas server-side: `device_type`, `pais` (GeoIP), `referrer_dominio`~~ — **feito 2026-05-02**, `backend/ingestao/derivacoes.py` | — | — | — |
 | 🟢 **P2** | Org-per-cliente fim-a-fim no Grafana: `/gate` força membership idempotente | Cliente cai na "Main Org" hoje | `cliente_routes.py:gate()` + Grafana API | 1-2d |
 | 🟢 **P3** | Backend `/metrics` Prometheus-client | Dashboards de operação | `backend/app.py` + scrape config | 1d |
 | 🟢 **P3** | DNS Cloudflare: criar `portifolio.dsplayground.com.br` CNAME proxiado | Subdomínio portfolio pessoal não resolve | painel CF | 5min |

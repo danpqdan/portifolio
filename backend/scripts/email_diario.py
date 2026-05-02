@@ -161,7 +161,7 @@ def executar_rodada_diaria(
 # ─── adapters para produção ───────────────────────────────────────────────────
 
 class _TenantsAdapter:
-    """Wraps TenantsRepo adicionando consumo_em_dia (não no protocolo base)."""
+    """Wraps TenantsRepo delegando ao protocolo base."""
 
     def __init__(self, repo):
         self._repo = repo
@@ -173,62 +173,17 @@ class _TenantsAdapter:
         return self._repo.obter_quota(site_id)
 
     def consumo_em_dia(self, site_id: str, dia: date) -> int:
-        # Ambas as implementações de TenantsRepo aceitam um parâmetro `dia`
-        # opcional via consumo_hoje — mas consumo_hoje só aceita hoje.
-        # Fazemos a query diretamente via método interno se disponível,
-        # ou fallback via SQL raw.
-        if hasattr(self._repo, "consumo_em_dia"):
-            return self._repo.consumo_em_dia(site_id, dia)
-        # Fallback: consulta direta (SQLite path guardado como _db_path)
-        if hasattr(self._repo, "_db_path"):
-            import sqlite3
-            db = sqlite3.connect(self._repo._db_path)
-            db.row_factory = sqlite3.Row
-            row = db.execute(
-                "SELECT eventos FROM consumo_diario WHERE site_id = ? AND dia = ?",
-                (site_id, dia.isoformat()),
-            ).fetchone()
-            db.close()
-            return int(row["eventos"]) if row else 0
-        # Postgres: acessa conn pool via _pool
-        if hasattr(self._repo, "_pool"):
-            with self._repo._pool.connection() as conn:
-                row = conn.execute(
-                    "SELECT eventos FROM consumo_diario WHERE site_id = %s AND dia = %s",
-                    (site_id, dia),
-                ).fetchone()
-            return row[0] if row else 0
-        return 0
+        return self._repo.consumo_em_dia(site_id, dia)
 
 
 class _UsersAdapter:
-    """Wraps SqliteClientesUsersRepo / PostgresClientesUsersRepo."""
+    """Wraps ClientesUsersRepo delegando ao protocolo base."""
 
     def __init__(self, repo):
         self._repo = repo
 
     def obter_user_por_site(self, site_id: str):
-        if hasattr(self._repo, "obter_user_por_site"):
-            return self._repo.obter_user_por_site(site_id)
-        # Fallback direto em SQLite
-        if hasattr(self._repo, "_db_path"):
-            import sqlite3
-            db = sqlite3.connect(self._repo._db_path)
-            db.row_factory = sqlite3.Row
-            row = db.execute(
-                "SELECT * FROM clientes_users WHERE site_id = ? AND desativado = 0 "
-                "ORDER BY criado_em LIMIT 1",
-                (site_id,),
-            ).fetchone()
-            db.close()
-            if row:
-                from auth.clientes_users_repo import ClienteUser
-                return ClienteUser(
-                    id=row["id"], site_id=row["site_id"], email=row["email"],
-                    papel=row["papel"],
-                    desativado=bool(row["desativado"]),
-                )
-        return None
+        return self._repo.obter_user_por_site(site_id)
 
 
 # ─── entrypoint ───────────────────────────────────────────────────────────────

@@ -19,7 +19,7 @@ import threading
 import uuid
 from contextlib import contextmanager
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Iterable, Iterator, Optional, Protocol
 
@@ -97,6 +97,7 @@ class TenantsRepo(Protocol):
 
     # consumo
     def consumo_hoje(self, site_id: str) -> int: ...
+    def consumo_em_dia(self, site_id: str, dia: date) -> int: ...
     def incrementar_consumo(self, site_id: str, eventos: int = 1) -> None: ...
 
     # emissoes
@@ -311,14 +312,16 @@ class SqliteTenantsRepo:
                          list(campos.values()) + [site_id])
 
     # consumo
-    def consumo_hoje(self, site_id):
-        dia = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    def consumo_em_dia(self, site_id: str, dia: date) -> int:
         with self._connect() as conn:
             row = conn.execute(
                 "SELECT eventos FROM consumo_diario WHERE site_id = ? AND dia = ?",
-                (site_id, dia),
+                (site_id, dia.isoformat()),
             ).fetchone()
         return int(row["eventos"]) if row else 0
+
+    def consumo_hoje(self, site_id):
+        return self.consumo_em_dia(site_id, datetime.now(timezone.utc).date())
 
     def incrementar_consumo(self, site_id, eventos=1):
         dia = datetime.now(timezone.utc).strftime("%Y-%m-%d")
@@ -570,14 +573,17 @@ class PostgresTenantsRepo:
                         list(campos.values()) + [site_id])
 
     # consumo
-    def consumo_hoje(self, site_id):
+    def consumo_em_dia(self, site_id: str, dia: date) -> int:
         with self._conn() as conn, conn.cursor() as cur:
             cur.execute(
-                "SELECT eventos FROM consumo_diario WHERE site_id = %s AND dia = CURRENT_DATE",
-                (site_id,),
+                "SELECT eventos FROM consumo_diario WHERE site_id = %s AND dia = %s",
+                (site_id, dia),
             )
             row = cur.fetchone()
         return int(row["eventos"]) if row else 0
+
+    def consumo_hoje(self, site_id):
+        return self.consumo_em_dia(site_id, datetime.now(timezone.utc).date())
 
     def incrementar_consumo(self, site_id, eventos=1):
         with self._conn() as conn, conn.cursor() as cur:
