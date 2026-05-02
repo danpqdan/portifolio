@@ -17,6 +17,8 @@ from influxdb_service import (
 )
 from ingestao.cardinalidade import TrackerCardinalidade, limite_para_plano
 from ingestao.derivacoes import (
+    derivar_group_bucket,
+    derivar_user_bucket,
     detectar_device_type,
     extrair_pais,
     extrair_referrer_dominio,
@@ -51,7 +53,7 @@ from ingestao.validador import validar_payload
 logger = logging.getLogger('analytics.ingestao')
 
 
-SCHEMA_VERSION_ACK = "1.1"
+SCHEMA_VERSION_ACK = "1.2"
 
 # Limites do plausibility de timestamp (Onda 2 — ja antecipado aqui porque
 # os timestamps sao calculados neste caminho e o custo e trivial).
@@ -314,10 +316,20 @@ class ServicoIngestao:
             cardinalidade_resultado.backpressure_hint = backpressure
             return cardinalidade_resultado
 
+        # Schema 1.2 (SDK v0.4): identidade opcional. Computa buckets server-side
+        # — cliente nao confia em bucket pre-calculado (poderia falsificar
+        # retention buckets pra inflar metricas de outro user).
+        user_id = data.get('user_id') if isinstance(data, dict) else None
+        group_id = data.get('group_id') if isinstance(data, dict) else None
+        user_bucket = derivar_user_bucket(user_id)
+        group_bucket = derivar_group_bucket(group_id)
+
         self._persistir_com_resiliencia(
             session_id, data, user_agent, ip_address,
             app_id=app_id, bucket=bucket_destino,
             device_type=device_type, pais=pais, referrer_dominio=referrer_dominio,
+            user_id=user_id, user_bucket=user_bucket,
+            group_id=group_id, group_bucket=group_bucket,
         )
 
         resumo = ResumoIngestao(
@@ -529,6 +541,10 @@ class ServicoIngestao:
         device_type: Optional[str] = None,
         pais: Optional[str] = None,
         referrer_dominio: Optional[str] = None,
+        user_id: Optional[str] = None,
+        user_bucket: Optional[str] = None,
+        group_id: Optional[str] = None,
+        group_bucket: Optional[str] = None,
     ) -> None:
         """Persistencia em InfluxDB nao deve derrubar a ingestao.
 
@@ -550,6 +566,10 @@ class ServicoIngestao:
             "device_type": device_type,
             "pais": pais,
             "referrer_dominio": referrer_dominio,
+            "user_id": user_id,
+            "user_bucket": user_bucket,
+            "group_id": group_id,
+            "group_bucket": group_bucket,
         }
         try:
             metricas = create_temporal_metric_from_heatmap(

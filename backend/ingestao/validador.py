@@ -5,6 +5,7 @@ de cada problema (ex.: `paginas./[0].eventos[2].tipo`). Campos desconhecidos
 no envelope e em cada evento sao ignorados silenciosamente para preservar
 forward-compat do contrato.
 """
+import re
 from typing import Any, List, Tuple
 
 TIPOS_EVENTO_VALIDOS = frozenset({
@@ -19,6 +20,12 @@ TIPOS_EVENTO_VALIDOS = frozenset({
     'web_vital',
     'custom',
 })
+
+# Schema 1.2 (SDK v0.4): user_id / group_id opcionais. Charset estreito
+# pra evitar log injection (\n) e ambiguidade em queries Flux. `@` aceito
+# pra cliente poder mandar email hasheado-parcial sem reescrever.
+_LIMITE_ID = 256
+_RE_ID_OPACO = re.compile(r"^[A-Za-z0-9_\-:.@]+$")
 
 
 AMBIENTES_VALIDOS = frozenset({'development', 'test', 'staging', 'production'})
@@ -36,8 +43,28 @@ def validar_payload(data: Any) -> Tuple[bool, List[str]]:
     _validar_numero_obrigatorio(data, 'timestamp_inicial', erros)
     _validar_numero_obrigatorio(data, 'timestamp_final', erros)
     _validar_paginas(data.get('paginas'), erros)
+    _validar_id_opcional(data, 'user_id', erros)
+    _validar_id_opcional(data, 'group_id', erros)
 
     return (len(erros) == 0, erros)
+
+
+def _validar_id_opcional(data: dict, chave: str, erros: List[str]) -> None:
+    """Schema 1.2: aceita ausente ou null. Se presente, exige string opaca
+    com charset estreito e <=256 chars."""
+    if chave not in data:
+        return
+    valor = data[chave]
+    if valor is None:
+        return
+    if not isinstance(valor, str):
+        erros.append(chave)
+        return
+    if not valor or len(valor) > _LIMITE_ID:
+        erros.append(chave)
+        return
+    if not _RE_ID_OPACO.match(valor):
+        erros.append(chave)
 
 
 def _validar_string_obrigatoria(data: dict, chave: str, erros: List[str]) -> None:

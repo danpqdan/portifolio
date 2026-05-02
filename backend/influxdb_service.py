@@ -46,6 +46,13 @@ class TemporalMetric:
     device_type: Optional[str] = None
     pais: Optional[str] = None
     referrer_dominio: Optional[str] = None
+    # Schema 1.2 (SDK v0.4): identidade de usuario / org.
+    # user_bucket / group_bucket viram tag (256 bins, cardinalidade controlada);
+    # user_id / group_id viram field (cardinalidade zero, exibicao/JOIN).
+    user_id: Optional[str] = None
+    user_bucket: Optional[str] = None
+    group_id: Optional[str] = None
+    group_bucket: Optional[str] = None
 
 
 @dataclass
@@ -65,6 +72,10 @@ class WebVitalMetric:
     device_type: Optional[str] = None
     pais: Optional[str] = None
     referrer_dominio: Optional[str] = None
+    user_id: Optional[str] = None
+    user_bucket: Optional[str] = None
+    group_id: Optional[str] = None
+    group_bucket: Optional[str] = None
 
 
 @dataclass
@@ -82,6 +93,31 @@ class CustomEventMetric:
     device_type: Optional[str] = None
     pais: Optional[str] = None
     referrer_dominio: Optional[str] = None
+    user_id: Optional[str] = None
+    user_bucket: Optional[str] = None
+    group_id: Optional[str] = None
+    group_bucket: Optional[str] = None
+
+
+def _aplicar_identidade(point, metric) -> "Point":
+    """Aplica tags/fields de identidade (schema 1.2) a um Point ja construido.
+
+    Decisao D1 opcao C:
+      - user_bucket / group_bucket -> TAG (256 bins, cardinalidade controlada).
+      - user_id / group_id -> FIELD (cardinalidade zero, exibicao/JOIN).
+
+    None nao e gravado — preserva forward-compat com Pontos antigos
+    (queries Flux com `r.user_bucket` so retornam linhas que tem o tag).
+    """
+    if metric.user_bucket:
+        point = point.tag("user_bucket", metric.user_bucket)
+    if metric.group_bucket:
+        point = point.tag("group_bucket", metric.group_bucket)
+    if metric.user_id:
+        point = point.field("user_id", metric.user_id)
+    if metric.group_id:
+        point = point.field("group_id", metric.group_id)
+    return point
 
 
 class InfluxDBService:
@@ -145,6 +181,7 @@ class InfluxDBService:
                 .field("user_agent", metric.user_agent or "unknown")
                 .time(metric.timestamp or datetime.now(timezone.utc))
             )
+            point = _aplicar_identidade(point, metric)
             self.write_api.write(bucket=bucket or self.bucket, record=point)
             return True
         except Exception as e:
@@ -178,6 +215,7 @@ class InfluxDBService:
             )
             if metric.metric_id:
                 point = point.field("metric_id", metric.metric_id)
+            point = _aplicar_identidade(point, metric)
             self.write_api.write(bucket=bucket or self.bucket, record=point)
             return True
         except Exception as e:
@@ -218,6 +256,7 @@ class InfluxDBService:
                 elif isinstance(valor, str):
                     point = point.field(chave_sanitizada, valor)
                 # None/outros descartados
+            point = _aplicar_identidade(point, metric)
             self.write_api.write(bucket=bucket or self.bucket, record=point)
             return True
         except Exception as e:
@@ -511,7 +550,11 @@ def _contar_por_tipo(eventos, tipo: str) -> int:
 def create_temporal_metric_from_heatmap(session_id: str, heatmap_data: dict,
                                       user_agent: str = None, ip_address: str = None,
                                       device_type: str = None, pais: str = None,
-                                      referrer_dominio: str = None) -> List[TemporalMetric]:
+                                      referrer_dominio: str = None,
+                                      user_id: Optional[str] = None,
+                                      user_bucket: Optional[str] = None,
+                                      group_id: Optional[str] = None,
+                                      group_bucket: Optional[str] = None) -> List[TemporalMetric]:
     """Agrega contagens por tipo de evento em metricas temporais (uma por pagina)."""
     metrics: List[TemporalMetric] = []
 
@@ -549,6 +592,10 @@ def create_temporal_metric_from_heatmap(session_id: str, heatmap_data: dict,
             device_type=device_type,
             pais=pais,
             referrer_dominio=referrer_dominio,
+            user_id=user_id,
+            user_bucket=user_bucket,
+            group_id=group_id,
+            group_bucket=group_bucket,
         ))
 
     return metrics
@@ -557,7 +604,11 @@ def create_temporal_metric_from_heatmap(session_id: str, heatmap_data: dict,
 def create_web_vitals_from_heatmap(session_id: str, heatmap_data: dict,
                                    user_agent: str = None, ip_address: str = None,
                                    device_type: str = None, pais: str = None,
-                                   referrer_dominio: str = None) -> List[WebVitalMetric]:
+                                   referrer_dominio: str = None,
+                                   user_id: Optional[str] = None,
+                                   user_bucket: Optional[str] = None,
+                                   group_id: Optional[str] = None,
+                                   group_bucket: Optional[str] = None) -> List[WebVitalMetric]:
     resultado: List[WebVitalMetric] = []
 
     paginas = {}
@@ -596,6 +647,10 @@ def create_web_vitals_from_heatmap(session_id: str, heatmap_data: dict,
                 device_type=device_type,
                 pais=pais,
                 referrer_dominio=referrer_dominio,
+                user_id=user_id,
+                user_bucket=user_bucket,
+                group_id=group_id,
+                group_bucket=group_bucket,
             ))
 
     return resultado
@@ -604,7 +659,11 @@ def create_web_vitals_from_heatmap(session_id: str, heatmap_data: dict,
 def create_custom_events_from_heatmap(session_id: str, heatmap_data: dict,
                                       user_agent: str = None, ip_address: str = None,
                                       device_type: str = None, pais: str = None,
-                                      referrer_dominio: str = None) -> List[CustomEventMetric]:
+                                      referrer_dominio: str = None,
+                                      user_id: Optional[str] = None,
+                                      user_bucket: Optional[str] = None,
+                                      group_id: Optional[str] = None,
+                                      group_bucket: Optional[str] = None) -> List[CustomEventMetric]:
     resultado: List[CustomEventMetric] = []
 
     paginas = {}
@@ -643,6 +702,10 @@ def create_custom_events_from_heatmap(session_id: str, heatmap_data: dict,
                 device_type=device_type,
                 pais=pais,
                 referrer_dominio=referrer_dominio,
+                user_id=user_id,
+                user_bucket=user_bucket,
+                group_id=group_id,
+                group_bucket=group_bucket,
             ))
 
     return resultado
