@@ -277,20 +277,31 @@ operacoes administrativas).
 Areas que **nenhuma das duas rodadas** auditou. Priorizadas por impacto/
 probabilidade.
 
-### P0 — Backups + Disaster Recovery 🔴
-**Por que importa**: comprometimento de seguranca + sem backup = perda
-permanente. Hoje os volumes `postgres_data`, `influxdb_data`, `backend_keys`
-nao tem backup automatico documentado. Se um atacante conseguir DROP
-DATABASE ou volumes corromperem, **recovery e impossivel**.
-**Investigar**:
-- Existe cron de `pg_dump` ou `wal-e`/`pgbackrest`? Onde armazena?
-- InfluxDB 2.x tem `influx backup` — automatizado?
-- Volumes Docker tem snapshot policy (BTRFS/ZFS)?
-- Backup do `backend_keys` (chaves RSA do JWT) — vital pra continuidade.
-- Backup off-site: R2 bucket separado (com versionamento)?
-- **Restore drill**: ja foi testado num ambiente de staging?
-**Acao sugerida**: implementar `pg_dump` + `influx backup` cron diario em
-sidecar dedicado, upload pra R2 com retencao 30/90/365 dias.
+### P0 — Backups + Disaster Recovery 🟡 PARCIAL (codigo pronto, operador instala)
+**Estado**: artefatos comitados em `ark/scripts/backup-prod.sh`,
+`ark/systemd/backup-prod.service`, `ark/scripts/restore-prod.sh`,
+`ark/docs/backup-restore.md`. Cobre `postgres_data` (via pg_dump),
+`backend_keys` (RSA do JWT), `monitoring_grafana-data`, `influxdb_config`.
+
+**Pendente do operador (~10min de configuracao):**
+1. Criar bucket R2 dedicado no CF dashboard (versionamento ON, lifecycle
+   30/90/365d). Procedimento em `ark/docs/backup-restore.md` §1.
+2. Adicionar `r2_bucket_backup: <nome>` ao vault Ansible.
+3. Adicionar `R2_BUCKET_BACKUP={{ r2_bucket_backup }}` ao
+   `templates/backend.env.j2`.
+4. `make -f ark/Makefile ansible-apply`.
+5. Instalar systemd service + timer (heredoc no `backup-restore.md` §3).
+6. Rodar `bash /opt/portifolio/ark/scripts/backup-prod.sh` manual pra
+   testar antes de deixar agendado.
+7. **Drill trimestral**: restore num ambiente staging usando
+   `restore-prod.sh`. Documentar resultado.
+
+Sem o passo 6+drill, ha codigo mas nao ha confianca — restore nunca
+testado e pior que sem restore (falsa sensacao de seguranca).
+
+**O que o script NAO cobre** (decisao):
+- `influxdb_data`: archiver ja faz tiering pra R2 (bucket separado).
+- `prometheus-data`: metricas sao derivadas, retencao 15d aceita perda.
 
 ### P1 — Dependency audit + CVE scan 🟡
 **Por que importa**: pacotes Python/Node + imagens base podem ter CVE
