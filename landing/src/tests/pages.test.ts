@@ -11,6 +11,7 @@ import { experimental_AstroContainer as AstroContainer } from 'astro/container';
 import { describe, expect, test } from 'vitest';
 
 import Cadastro from '~/pages/cliente/cadastro.astro';
+import Changelog from '~/pages/changelog.astro';
 import Configuracoes from '~/pages/cliente/configuracoes.astro';
 import EsqueciSenha from '~/pages/cliente/esqueci-senha.astro';
 import Exportar from '~/pages/cliente/exportar.astro';
@@ -640,5 +641,48 @@ describe('cliente/exportar.astro', () => {
   test('marcado noindex (área logada)', async () => {
     const html = await render(Exportar);
     expect(html).toContain('noindex');
+  });
+});
+
+describe('changelog.astro', () => {
+  test('hero "O que mudou recentemente"', async () => {
+    const html = await render(Changelog);
+    expect(html).toContain('mudou');
+    expect(html).toContain('recentemente');
+  });
+
+  test('renderiza ol com aria-label de historico', async () => {
+    const html = await render(Changelog);
+    expect(html).toMatch(/<ol[^>]*aria-label="Histórico de releases"/);
+  });
+
+  test('cada release tem time com datetime ISO', async () => {
+    const html = await render(Changelog);
+    expect(html).toMatch(/<time[^>]*datetime="2026-05-01"/);
+    expect(html).toMatch(/<time[^>]*datetime="2026-04-29"/);
+  });
+
+  test('release destaque tem ring brand', async () => {
+    const html = await render(Changelog);
+    expect(html).toContain('ring-brand-500/30');
+  });
+
+  test('badges de tipo (novo/fix/manutencao) renderizam', async () => {
+    const html = await render(Changelog);
+    expect(html).toContain('novo');
+    expect(html).toContain('manutenção');
+  });
+
+  test('CTA pra GitHub commits + sugerir feature', async () => {
+    const html = await render(Changelog);
+    expect(html).toMatch(/data-cta="changelog-github"/);
+    expect(html).toMatch(/data-cta="changelog-sugerir"/);
+  });
+
+  test('lista features dos PRs recentes (Cmd+K, Onboarding, Configuracoes Tabs)', async () => {
+    const html = await render(Changelog);
+    expect(html).toContain('Cmd+K');
+    expect(html).toContain('Onboarding');
+    expect(html).toContain('abas');
   });
 });
