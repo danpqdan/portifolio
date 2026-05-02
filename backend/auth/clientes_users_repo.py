@@ -84,6 +84,7 @@ class ClientesUsersRepo(Protocol):
                    senha_hash: Optional[str] = None) -> ClienteUser: ...
     def obter_user(self, user_id: str) -> Optional[ClienteUser]: ...
     def obter_user_por_email(self, email: str) -> Optional[ClienteUser]: ...
+    def obter_user_por_site(self, site_id: str) -> Optional[ClienteUser]: ...
     def registrar_login(self, user_id: str) -> None: ...
     def desativar_user(self, user_id: str) -> None: ...
     def atualizar_senha_hash(self, user_id: str, senha_hash: str) -> None: ...
@@ -158,6 +159,15 @@ class SqliteClientesUsersRepo:
             row = conn.execute(
                 "SELECT * FROM clientes_users WHERE email = ? COLLATE NOCASE",
                 (email_norm,),
+            ).fetchone()
+        return _row_to_user(row) if row else None
+
+    def obter_user_por_site(self, site_id: str) -> Optional[ClienteUser]:
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT * FROM clientes_users WHERE site_id = ? AND ativo = 1 "
+                "ORDER BY criado_em LIMIT 1",
+                (site_id,),
             ).fetchone()
         return _row_to_user(row) if row else None
 
@@ -371,6 +381,16 @@ class PostgresClientesUsersRepo:
         email_norm = normalizar_email(email)
         with self._conn() as conn, conn.cursor() as cur:
             cur.execute("SELECT * FROM clientes_users WHERE LOWER(email) = %s", (email_norm,))
+            row = cur.fetchone()
+        return _dict_to_user(row) if row else None
+
+    def obter_user_por_site(self, site_id: str) -> Optional[ClienteUser]:
+        with self._conn() as conn, conn.cursor() as cur:
+            cur.execute(
+                "SELECT * FROM clientes_users WHERE site_id = %s AND ativo = true "
+                "ORDER BY criado_em LIMIT 1",
+                (site_id,),
+            )
             row = cur.fetchone()
         return _dict_to_user(row) if row else None
 
