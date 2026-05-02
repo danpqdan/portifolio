@@ -74,6 +74,10 @@ class MagicLink:
     expira_em: datetime
     consumido_em: Optional[datetime]
     ip_solicitacao: Optional[str]
+    # 'login' (legado/default — entra direto no dashboard ao consumir)
+    # 'reset' (consumir nao cria sessao; redireciona pra form de nova senha
+    #          servida pela landing; sessao so e criada apos POST /confirmar)
+    tipo: str = "login"
 
 
 # ---------- interface comum ----------
@@ -101,7 +105,8 @@ class ClientesUsersRepo(Protocol):
     # magic-links
     def criar_magic_link(self, user_id: str, token_hash: str, *,
                          expira_em: datetime,
-                         ip: Optional[str] = None) -> MagicLink: ...
+                         ip: Optional[str] = None,
+                         tipo: str = "login") -> MagicLink: ...
     def obter_magic_link_por_hash(self, token_hash: str) -> Optional[MagicLink]: ...
     def consumir_magic_link(self, token_hash: str) -> bool: ...
     def contar_magic_links_recentes(self, user_id: str, janela_segundos: int) -> int: ...
@@ -235,18 +240,29 @@ class SqliteClientesUsersRepo:
             return cur.rowcount or 0
 
     # magic-links
-    def criar_magic_link(self, user_id, token_hash, *, expira_em, ip=None):
+    def criar_magic_link(self, user_id, token_hash, *, expira_em, ip=None, tipo="login"):
         magic_id = str(uuid.uuid4())
+        if tipo not in ("login", "reset"):
+            raise ValueError(f"tipo invalido: {tipo}")
+        # Migracao SQLite — coluna `tipo` adicionada em 2026-05-02 no
+        # esquema; DBs pre-fix nao tem. PRAGMA table_info verifica e
+        # ALTER TABLE adiciona on-the-fly.
         with self._lock, self._connect() as conn:
+            cols = {r["name"] for r in conn.execute("PRAGMA table_info(clientes_magic_links)")}
+            if "tipo" not in cols:
+                conn.execute(
+                    "ALTER TABLE clientes_magic_links "
+                    "ADD COLUMN tipo TEXT NOT NULL DEFAULT 'login'"
+                )
             conn.execute(
                 "INSERT INTO clientes_magic_links "
-                "(id, user_id, token_hash, expira_em, ip_solicitacao) "
-                "VALUES (?, ?, ?, ?, ?)",
-                (magic_id, user_id, token_hash, _iso(expira_em), ip),
+                "(id, user_id, token_hash, expira_em, ip_solicitacao, tipo) "
+                "VALUES (?, ?, ?, ?, ?, ?)",
+                (magic_id, user_id, token_hash, _iso(expira_em), ip, tipo),
             )
         return MagicLink(
             id=magic_id, user_id=user_id, token_hash=token_hash,
-            expira_em=expira_em, consumido_em=None, ip_solicitacao=ip,
+            expira_em=expira_em, consumido_em=None, ip_solicitacao=ip, tipo=tipo,
         )
 
     def obter_magic_link_por_hash(self, token_hash):
@@ -323,11 +339,14 @@ def _row_to_sessao(row: sqlite3.Row) -> Sessao:
 
 
 def _row_to_magic(row: sqlite3.Row) -> MagicLink:
+    keys = row.keys()
+    tipo = row["tipo"] if "tipo" in keys else "login"
     return MagicLink(
         id=row["id"], user_id=row["user_id"], token_hash=row["token_hash"],
         expira_em=_parse_iso(row["expira_em"]),
         consumido_em=_parse_iso(row["consumido_em"]),
         ip_solicitacao=row["ip_solicitacao"],
+        tipo=tipo,
     )
 
 
@@ -451,18 +470,20 @@ class PostgresClientesUsersRepo:
             return cur.rowcount or 0
 
     # magic-links
-    def criar_magic_link(self, user_id, token_hash, *, expira_em, ip=None):
+    def criar_magic_link(self, user_id, token_hash, *, expira_em, ip=None, tipo="login"):
+        if tipo not in ("login", "reset"):
+            raise ValueError(f"tipo invalido: {tipo}")
         magic_id = str(uuid.uuid4())
         with self._conn() as conn, conn.cursor() as cur:
             cur.execute(
                 "INSERT INTO clientes_magic_links "
-                "(id, user_id, token_hash, expira_em, ip_solicitacao) "
-                "VALUES (%s, %s, %s, %s, %s)",
-                (magic_id, user_id, token_hash, expira_em, ip),
+                "(id, user_id, token_hash, expira_em, ip_solicitacao, tipo) "
+                "VALUES (%s, %s, %s, %s, %s, %s)",
+                (magic_id, user_id, token_hash, expira_em, ip, tipo),
             )
         return MagicLink(
             id=magic_id, user_id=user_id, token_hash=token_hash,
-            expira_em=expira_em, consumido_em=None, ip_solicitacao=ip,
+            expira_em=expira_em, consumido_em=None, ip_solicitacao=ip, tipo=tipo,
         )
 
     def obter_magic_link_por_hash(self, token_hash):
@@ -522,6 +543,7 @@ def _dict_to_magic(row: dict) -> MagicLink:
         id=str(row["id"]), user_id=str(row["user_id"]), token_hash=row["token_hash"],
         expira_em=row["expira_em"], consumido_em=row["consumido_em"],
         ip_solicitacao=row["ip_solicitacao"],
+        tipo=row.get("tipo") or "login",
     )
 
 

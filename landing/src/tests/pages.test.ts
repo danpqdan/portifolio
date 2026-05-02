@@ -486,10 +486,11 @@ describe('integracoes.astro', () => {
 });
 
 describe('cliente/esqueci-senha.astro', () => {
-  test('título "Recuperar acesso" e descrição do magic-link', async () => {
+  test('título "Recuperar senha" e descrição do fluxo de redefinicao', async () => {
     const html = await render(EsqueciSenha);
-    expect(html).toContain('Recuperar acesso');
-    expect(html).toContain('link mágico');
+    expect(html).toContain('Recuperar senha');
+    // Anti-enum: copy menciona o token TTL pra confirmar fluxo proper
+    expect(html).toContain('escolher uma nova senha');
   });
 
   test('input email com label associada (a11y)', async () => {
