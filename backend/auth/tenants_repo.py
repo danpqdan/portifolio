@@ -108,6 +108,15 @@ class TenantsRepo(Protocol):
                                  janela_segundos: int = 60) -> int: ...
     def limpar_emissoes_antigas(self, dias: int = 7) -> int: ...
 
+    # idempotencia stripe
+    def marcar_evento_stripe_processado(self, event_id: str) -> bool: ...
+    """Tenta marcar `event_id` como processado. True = inseriu (primeira vez),
+    False = ja existia (retry duplicado, descartar)."""
+
+    # revogacao embed jwt
+    def jti_embed_esta_revogado(self, jti: str) -> bool: ...
+    def revogar_jti_embed(self, jti: str, *, motivo: Optional[str] = None) -> None: ...
+
 
 # ======================================================================
 #                            SQLite
@@ -374,6 +383,31 @@ class SqliteTenantsRepo:
         with self._lock, self._connect() as conn:
             cur = conn.execute("DELETE FROM emissoes_jwt WHERE emitido_em < ?", (corte,))
             return cur.rowcount or 0
+
+    # idempotencia stripe
+    def marcar_evento_stripe_processado(self, event_id):
+        with self._lock, self._connect() as conn:
+            cur = conn.execute(
+                "INSERT OR IGNORE INTO stripe_eventos_processados (event_id) VALUES (?)",
+                (event_id,),
+            )
+            return (cur.rowcount or 0) > 0
+
+    # revogacao embed jwt
+    def jti_embed_esta_revogado(self, jti):
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT 1 FROM embed_jwt_revogados WHERE jti = ? LIMIT 1",
+                (jti,),
+            ).fetchone()
+        return row is not None
+
+    def revogar_jti_embed(self, jti, *, motivo=None):
+        with self._lock, self._connect() as conn:
+            conn.execute(
+                "INSERT OR IGNORE INTO embed_jwt_revogados (jti, motivo) VALUES (?, ?)",
+                (jti, motivo),
+            )
 
 
 def _row_to_site(row: sqlite3.Row) -> Site:
@@ -643,6 +677,33 @@ class PostgresTenantsRepo:
                 (dias,),
             )
             return cur.rowcount or 0
+
+    # idempotencia stripe
+    def marcar_evento_stripe_processado(self, event_id):
+        with self._conn() as conn, conn.cursor() as cur:
+            cur.execute(
+                "INSERT INTO stripe_eventos_processados (event_id) VALUES (%s) "
+                "ON CONFLICT (event_id) DO NOTHING",
+                (event_id,),
+            )
+            return (cur.rowcount or 0) > 0
+
+    # revogacao embed jwt
+    def jti_embed_esta_revogado(self, jti):
+        with self._conn() as conn, conn.cursor() as cur:
+            cur.execute(
+                "SELECT 1 FROM embed_jwt_revogados WHERE jti = %s LIMIT 1",
+                (jti,),
+            )
+            return cur.fetchone() is not None
+
+    def revogar_jti_embed(self, jti, *, motivo=None):
+        with self._conn() as conn, conn.cursor() as cur:
+            cur.execute(
+                "INSERT INTO embed_jwt_revogados (jti, motivo) VALUES (%s, %s) "
+                "ON CONFLICT (jti) DO NOTHING",
+                (jti, motivo),
+            )
 
 
 def _dict_row():
