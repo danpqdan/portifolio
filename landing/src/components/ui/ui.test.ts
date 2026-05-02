@@ -14,7 +14,6 @@ import Breadcrumbs from './Breadcrumbs.astro';
 import Button from './Button.astro';
 import Card from './Card.astro';
 import ChartCard from './ChartCard.astro';
-import CommandPalette from './CommandPalette.astro';
 import EmptyState from './EmptyState.astro';
 import FormError from './FormError.astro';
 import Input from './Input.astro';
@@ -598,70 +597,5 @@ describe('Breadcrumbs', () => {
     expect(html).toContain('"name":"Sozinho"');
     // ultimo nao tem href -> sem "item" no JSON-LD
     expect(html).toContain('"position":1,"name":"Sozinho"}]');
-  });
-});
-
-describe('CommandPalette', () => {
-  test('dialog tem role + aria-modal + aria-label', async () => {
-    const html = await render(CommandPalette);
-    expect(html).toMatch(/<div[^>]*id="cmdk-dialog"[^>]*role="dialog"[^>]*aria-modal="true"/);
-    expect(html).toContain('aria-label="Busca rápida"');
-  });
-
-  test('input com label sr-only acessivel', async () => {
-    const html = await render(CommandPalette);
-    expect(html).toMatch(/<label[^>]*for="cmdk-input"[^>]*class="sr-only"/);
-    expect(html).toMatch(/<input[^>]*id="cmdk-input"[^>]*type="text"/);
-  });
-
-  test('listbox tem role + aria-label', async () => {
-    const html = await render(CommandPalette);
-    expect(html).toMatch(/<ul[^>]*id="cmdk-list"[^>]*role="listbox"/);
-  });
-
-  test('cada item tem role=option + aria-selected', async () => {
-    const html = await render(CommandPalette);
-    expect(html).toMatch(/role="option"[^>]*aria-selected="false"/);
-  });
-
-  test('lista comandos por grupo (navegar/cliente/externo)', async () => {
-    const html = await render(CommandPalette);
-    expect(html).toContain('data-group="navegar"');
-    expect(html).toContain('data-group="cliente"');
-    expect(html).toContain('data-group="externo"');
-    expect(html).toContain('Navegar');
-    expect(html).toContain('Área do cliente');
-    expect(html).toContain('Externo');
-  });
-
-  test('inclui comandos chave (Painel, Configurações, Recursos, Preços)', async () => {
-    const html = await render(CommandPalette);
-    expect(html).toContain('Ir pro painel');
-    expect(html).toContain('Configurações');
-    expect(html).toContain('Recursos');
-    expect(html).toContain('Preços');
-  });
-
-  test('comandos externos sinalizam externo', async () => {
-    const html = await render(CommandPalette);
-    expect(html).toMatch(/<span[^>]*>externo ↗<\/span>/);
-  });
-
-  test('hint de teclado com Esc + Cmd K visível no footer', async () => {
-    const html = await render(CommandPalette);
-    expect(html).toContain('Esc');
-    expect(html).toContain('⌘K');
-  });
-
-  test('backdrop e dialog escondidos no SSR (abre via JS)', async () => {
-    const html = await render(CommandPalette);
-    expect(html).toMatch(/id="cmdk-backdrop"[^>]*class="hidden/);
-    expect(html).toMatch(/id="cmdk-dialog"[^>]*class="hidden/);
-  });
-
-  test('estado vazio escondido por default', async () => {
-    const html = await render(CommandPalette);
-    expect(html).toMatch(/id="cmdk-empty"[^>]*class="hidden/);
-    expect(html).toContain('Nada encontrado');
   });
 });

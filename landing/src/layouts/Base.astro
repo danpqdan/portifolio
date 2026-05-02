@@ -4,7 +4,6 @@ import SeoHead from '~/components/SeoHead.astro';
 import Nav from '~/components/Nav.astro';
 import Footer from '~/components/Footer.astro';
 import ToastContainer from '~/components/ui/ToastContainer.astro';
-import CommandPalette from '~/components/ui/CommandPalette.astro';
 import { PUBLISHABLE_KEY, API_URL, DEBUG } from '~/config';
 
 interface Props {
@@ -42,7 +41,6 @@ const sdkConfig = {
     <Footer />
 
     <ToastContainer />
-    <CommandPalette />
 
     <script is:inline type="application/json" id="ds-config" set:html={JSON.stringify(sdkConfig)} />
 
