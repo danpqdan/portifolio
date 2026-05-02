@@ -10,10 +10,69 @@ Semantica: cada tick do SDK e um delta. Contadores somam — dashboards usam `su
 nao `mean()`. `permanencia_segundos` tambem soma (tempo visivel adicional na janela).
 """
 import logging
+import re
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
+
+
+# ==================== VALIDADORES (anti-injecao Flux) ====================
+#
+# Inputs que entram em queries Flux via f-string precisam ser validados antes
+# de chegarem aqui. Bucket-per-tenant ja limita o blast radius (ataque preso
+# ao bucket do proprio cliente), mas mesmo assim um filtro malicioso pode
+# vazar dados de outro user/sessao DENTRO do bucket. Usamos allowlist regex
+# em vez de tentar escapar — Flux strings com `\` e `"` exigem cuidado e
+# allowlist e mais defensivel.
+
+_RE_TAG_VALOR = re.compile(r"^[A-Za-z0-9_.\-]{1,128}$")
+_RE_TEMPO = re.compile(
+    r"^("                                # absoluto OU relativo OU now()
+    r"now\(\)"                            # now()
+    r"|-?\d+(ns|us|µs|ms|s|m|h|d|w|y)"   # -24h, -7d, 30m, etc.
+    r"|\d{4}-\d{2}-\d{2}"                # YYYY-MM-DD
+    r"(T\d{2}:\d{2}:\d{2}(\.\d+)?Z?)?"   # ...THH:MM:SS[.fff][Z] opcional
+    r")$"
+)
+_RE_BUCKET = re.compile(r"^[A-Za-z0-9_.\-]{1,64}$")
+_RE_SESSION_ID = re.compile(r"^[A-Za-z0-9_\-]{1,128}$")
+
+
+class FluxParametroInvalido(ValueError):
+    """Erro levantado quando um parametro de query Flux nao passa na allowlist."""
+
+
+def _validar_tag(nome: str, valor: Optional[str]) -> Optional[str]:
+    """Valida valor de tag/field; retorna o valor se OK, None se vazio."""
+    if valor is None or valor == "":
+        return None
+    if not isinstance(valor, str) or not _RE_TAG_VALOR.match(valor):
+        raise FluxParametroInvalido(
+            f"valor invalido para {nome}: caracteres fora da allowlist"
+        )
+    return valor
+
+
+def _validar_tempo(nome: str, valor: str) -> str:
+    """Valida expressao temporal Flux (range start/stop)."""
+    if not isinstance(valor, str) or not _RE_TEMPO.match(valor):
+        raise FluxParametroInvalido(
+            f"valor invalido para {nome}: nao e expressao temporal Flux"
+        )
+    return valor
+
+
+def _validar_bucket(valor: str) -> str:
+    if not isinstance(valor, str) or not _RE_BUCKET.match(valor):
+        raise FluxParametroInvalido("bucket invalido")
+    return valor
+
+
+def _validar_session_id(valor: str) -> str:
+    if not isinstance(valor, str) or not _RE_SESSION_ID.match(valor):
+        raise FluxParametroInvalido("session_id invalido")
+    return valor
 
 try:
     from influxdb_client import InfluxDBClient, Point
@@ -364,6 +423,13 @@ class InfluxDBService:
         if not self.enabled:
             return []
 
+        app_id = _validar_tag("app_id", app_id)
+        page_type = _validar_tag("page_type", page_type)
+        ambiente = _validar_tag("ambiente", ambiente)
+        inicio = _validar_tempo("inicio", inicio)
+        fim = _validar_tempo("fim", fim)
+        bucket_alvo = _validar_bucket(bucket or self.bucket)
+
         filtros = ['r._measurement == "page_analytics"']
         if app_id:
             filtros.append(f'r.app_id == "{app_id}"')
@@ -379,7 +445,6 @@ class InfluxDBService:
         ]
         filtro_campos = ' or '.join([f'r._field == "{c}"' for c in campos_numericos])
 
-        bucket_alvo = bucket or self.bucket
         query = f'''
         from(bucket: "{bucket_alvo}")
           |> range(start: {inicio}, stop: {fim})
@@ -419,6 +484,13 @@ class InfluxDBService:
         if not self.enabled:
             return []
 
+        app_id = _validar_tag("app_id", app_id)
+        page_type = _validar_tag("page_type", page_type)
+        nome = _validar_tag("nome", nome)
+        inicio = _validar_tempo("inicio", inicio)
+        fim = _validar_tempo("fim", fim)
+        bucket_alvo = _validar_bucket(bucket or self.bucket)
+
         filtros = ['r._measurement == "web_vitals"', 'r._field == "valor"']
         if app_id:
             filtros.append(f'r.app_id == "{app_id}"')
@@ -428,7 +500,6 @@ class InfluxDBService:
             filtros.append(f'r.nome == "{nome}"')
         filtro_str = ' and '.join(filtros)
 
-        bucket_alvo = bucket or self.bucket
         query = f'''
         from(bucket: "{bucket_alvo}")
           |> range(start: {inicio}, stop: {fim})
@@ -506,15 +577,21 @@ class InfluxDBService:
         if not self.enabled:
             return {"page_analytics": [], "web_vitals": [], "custom_events": []}
 
+        session_id = _validar_session_id(session_id)
+        inicio = _validar_tempo("inicio", inicio)
+        bucket_alvo = _validar_bucket(self.bucket)
+
         saida: Dict[str, List[Dict[str, Any]]] = {
             "page_analytics": [],
             "web_vitals": [],
             "custom_events": [],
         }
 
+        # Lista hardcoded — measurements nunca vem do request, sao constantes
+        # do schema. Mantida fora da allowlist generica pra clareza.
         for measurement in saida.keys():
             query = f'''
-            from(bucket: "{self.bucket}")
+            from(bucket: "{bucket_alvo}")
               |> range(start: {inicio})
               |> filter(fn: (r) => r._measurement == "{measurement}")
               |> filter(fn: (r) => r.session_id == "{session_id}")
@@ -544,6 +621,8 @@ class InfluxDBService:
         if not self.enabled or not self.client:
             return False
 
+        session_id = _validar_session_id(session_id)
+        inicio = _validar_tempo("inicio", inicio)
         agora = datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
         sucesso = True
         try:
