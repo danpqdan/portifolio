@@ -29,8 +29,12 @@ const sdkConfig = {
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#020617" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <link rel="preconnect" href={API_URL} />
+    <link rel="apple-touch-icon" href="/favicon.svg" />
+    <link rel="manifest" href="/manifest.json" />
+    <link rel="preconnect" href={API_URL} crossorigin />
+    <link rel="dns-prefetch" href={API_URL} />
     <SeoHead title={title} description={description} canonical={canonical} noindex={noindex} />
   </head>
   <body class="min-h-screen bg-slate-950 text-slate-100 font-sans antialiased">
