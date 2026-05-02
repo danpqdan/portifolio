@@ -53,4 +53,9 @@ cookies.txt
 backend/data/keys/
 backend/data/tenants.db
 backend/data/tenants.db-*
+
+# Quando o backend roda local com bind mount, o volume `portifolio_backend_keys`
+# aparece como `data/` na raiz do repo. Jamais versionar — sao chaves RSA do
+# JWT do SDK e auth multi-tenant.
+/data/
 .claude
