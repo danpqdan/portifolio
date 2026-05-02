@@ -16,7 +16,10 @@ Este arquivo guia o Claude Code ao operar esta VPS. O foco e gerencia de servido
 - Raiz: `/opt/portifolio` — dono `deploy:analytics`, modo `0750`
 - Infra/operacao: `/opt/portifolio/ark/` (Nginx, Ansible, CrowdSec, monitoramento)
 - App: `backend/` (Flask + Socket.IO + InfluxDB + Postgres), `frontend/` (React + Vite, build estatico servido por nginx:alpine)
-- **`landing/` aqui e ESPELHO MANUAL** do repo `danpqdan/comercial` (CF Pages builda do `comercial`, nao deste repo). Mudancas em `landing/` SEM replicar no `comercial` ficam invisiveis em prod do apex `dsplayground.com.br`. Detalhes operacionais: `ark/docs/embed-iframe.md` -> "Gotchas conhecidos da Fase 1" #2.
+- **Repos externos relacionados** (este monorepo NAO contem o codigo deles, mas depende):
+  - **`landing/` aqui e ESPELHO MANUAL** do repo `danpqdan/comercial` (CF Pages builda do `comercial`, nao deste repo). Mudancas em `landing/` SEM replicar no `comercial` ficam invisiveis em prod do apex `dsplayground.com.br`.
+  - **SDK de analytics** vive no repo separado `danpqdan/dsplayground-analytics-sdk` (publico, GitHub Packages). Frontend consome como dep npm `@danpqdan/dsplayground-analytics-sdk`. **Nao tem pasta `sdk/` aqui** — pra mexer no SDK, ir no repo dele.
+  - Detalhes operacionais: `ark/docs/embed-iframe.md` -> "Gotchas conhecidos da Fase 1" #2.
 - Leitura obrigatoria antes de mexer em app: `/opt/portifolio/AGENTS.md` e `/opt/portifolio/README.md`
 - Leitura obrigatoria antes de mexer em infra: `/opt/portifolio/ark/README.md` e `/opt/portifolio/ark/docs/servidor-producao.md` (**este e a fonte canonica da arquitetura atual** — CLAUDE.md e resumo)
 
