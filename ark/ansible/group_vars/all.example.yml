@@ -94,6 +94,11 @@ r2_bucket: "dsplayground-analytics-archive"
 # false = nao roda backfill no boot do container; true = roda 1x antes do cron.
 archiver_run_on_start: "false"
 
+# === Stripe billing (preencher via ansible-vault edit) ===
+stripe_api_key: ""
+stripe_price_ids: "{}"
+stripe_webhook_secret: ""
+
 # === Landing comercial (apex dsplayground.com.br) ===
 # PAT GitHub com `read:packages` — baixa @danpqdan/dsplayground-analytics-sdk
 # do GitHub Packages durante o build do container `landing`. Exposto so durante
