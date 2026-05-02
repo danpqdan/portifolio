@@ -11,6 +11,7 @@ import { experimental_AstroContainer as AstroContainer } from 'astro/container';
 import { describe, expect, test } from 'vitest';
 
 import Index from '~/pages/index.astro';
+import Painel from '~/pages/cliente/painel.astro';
 import Precos from '~/pages/precos.astro';
 
 async function render(component: any): Promise<string> {
@@ -119,5 +120,45 @@ describe('precos.astro', () => {
   test('CTA do plano Pro vai pra cadastro com query plano=pro', async () => {
     const html = await render(Precos);
     expect(html).toMatch(/href="\/cliente\/cadastro\?plano=pro"/);
+  });
+});
+
+describe('cliente/painel.astro', () => {
+  test('renderiza com title + skeleton inicial + secoes principais escondidas', async () => {
+    const html = await render(Painel);
+    expect(html).toContain('Painel');
+    expect(html).toContain('Carregando dados do seu site');
+    // skeleton com aria-busy
+    expect(html).toMatch(/id="painel-loading"[^>]*aria-busy="true"/);
+    // conteudo e erro escondidos por SSR
+    expect(html).toMatch(/id="painel-conteudo"[^>]*hidden/);
+    expect(html).toMatch(/id="painel-erro"[^>]*hidden/);
+  });
+
+  test('4 KPIs com classes js-card-* pra hidratar', async () => {
+    const html = await render(Painel);
+    expect(html).toContain('js-card-eventos-hoje');
+    expect(html).toContain('js-card-quota');
+    expect(html).toContain('js-card-cardinalidade');
+    expect(html).toContain('js-card-plano');
+  });
+
+  test('ChartCard 24h em estado empty com link pro Grafana', async () => {
+    const html = await render(Painel);
+    expect(html).toContain('Eventos por hora');
+    expect(html).toContain('app.dsplayground.com.br');
+    expect(html).toMatch(/data-state="empty"/);
+  });
+
+  test('atalhos pra configuracoes/exportar/precos', async () => {
+    const html = await render(Painel);
+    expect(html).toMatch(/href="\/cliente\/configuracoes"[^>]*data-cta="painel-atalho-keys"/);
+    expect(html).toMatch(/href="\/cliente\/exportar"[^>]*data-cta="painel-atalho-exportar"/);
+    expect(html).toMatch(/href="\/precos"[^>]*data-cta="painel-atalho-precos"/);
+  });
+
+  test('marcado noindex (area logada)', async () => {
+    const html = await render(Painel);
+    expect(html).toContain('noindex');
   });
 });
