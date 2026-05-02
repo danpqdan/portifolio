@@ -12,6 +12,8 @@ O frontend tem duas responsabilidades: renderizar a experiência atual do portf�
 - `backend/influxdb_service.py`: integração e escrita no InfluxDB.
 - `backend/dto/`: objetos de transferência usados para analytics.
 - `frontend/src/components/`, `pages/`, `hooks/`, `utils/`: UI, telas e utilitários de coleta/envio.
+- `landing/`: **espelho manual** da landing comercial — repo canônico é `danpqdan/comercial` (CF Pages builda dele). Qualquer alteração aqui em `landing/` precisa ser replicada no `comercial` para chegar em produção no apex `dsplayground.com.br`. Não é submodule, não há sync automático. Ver `ark/docs/embed-iframe.md` → "Gotchas conhecidos da Fase 1" para histórico do problema.
+- `ark/`: infraestrutura (Nginx, Ansible, CrowdSec, monitoring) — ver `ark/docs/servidor-producao.md` (canônico).
 - `docs/`: documentação técnica, deploy, InfluxDB e histórico de correções.
 - `continue/`: problemas encontrados, decisões em aberto e próximos passos documentados.
 
