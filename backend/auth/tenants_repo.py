@@ -449,7 +449,35 @@ class PostgresTenantsRepo:
         schema = SCHEMA_POSTGRES_PATH.read_text(encoding="utf-8")
         with self._conn() as conn:
             with conn.cursor() as cur:
-                cur.execute(schema)
+                # Em prod o backend conecta como `portifolio_app` (least-privilege),
+                # nao como superuser. Se o DB ja foi configurado pelo Ansible
+                # (CREATE TABLE + ALTER OWNER pra portifolio_app), CREATE TABLE
+                # IF NOT EXISTS aqui sao no-ops. Mas se algum ALTER TABLE no
+                # schema mudar tabela de propriedade alheia, falha com
+                # InsufficientPrivilege — comportamento esperado em prod
+                # configurada. Logamos warning e seguimos: tabelas existem.
+                #
+                # Este try/except protege boot pos-DR/clean-room ate o operador
+                # rodar `make -f ark/Makefile ansible-apply` (que aplica
+                # ALTER OWNER + GRANTs corretos).
+                try:
+                    cur.execute(schema)
+                except Exception as exc:
+                    name = type(exc).__name__
+                    # Aceitar InsufficientPrivilege (codigo SQLSTATE 42501)
+                    # ou ProgrammingError vindo de ALTER TABLE em tabela alheia.
+                    # Outras falhas (sintaxe, conexao, etc) propagam.
+                    if 'InsufficientPrivilege' not in name and \
+                       'permission denied' not in str(exc).lower():
+                        raise
+                    import logging as _logging
+                    _logging.getLogger(__name__).warning(
+                        "schema_postgres.sql parcialmente aplicado: %s. "
+                        "Esperado se Ansible nao rodou ainda (DB clean-room). "
+                        "Rode `make -f ark/Makefile ansible-apply` pra aplicar "
+                        "ALTER OWNER + GRANTs definitivos. Tabelas devem existir.",
+                        exc,
+                    )
 
     @contextmanager
     def _conn(self) -> Iterator:
