@@ -122,6 +122,26 @@ services:
       - ./backend:/app
     restart: unless-stopped
 
+  email-cron:
+    build:
+      context: ./backend
+      dockerfile: archiver/Dockerfile
+    container_name: portifolio-email-cron
+    # Profile `email-cron` = opt-in. Requer RESEND_API_KEY no .env.
+    # Ativar: docker compose --profile email-cron up -d --build email-cron
+    profiles:
+      - email-cron
+    command: ["python", "-m", "scripts.email_cron_main"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    # Sidecar — nao expoe portas. APScheduler com cron diario 07:00 UTC.
+    env_file:
+      - ./backend/.env
+    volumes:
+      - ./backend:/app
+    restart: unless-stopped
+
   landing:
     build:
       context: ./landing
