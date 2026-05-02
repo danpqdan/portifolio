@@ -284,17 +284,33 @@ probabilidade.
 `backend_keys` (RSA do JWT), `monitoring_grafana-data`, `influxdb_config`.
 
 **Pendente do operador (~10min de configuracao):**
-1. Criar bucket R2 dedicado no CF dashboard (versionamento ON, lifecycle
-   30/90/365d). Procedimento em `ark/docs/backup-restore.md` §1.
-2. Adicionar `r2_bucket_backup: <nome>` ao vault Ansible.
-3. Adicionar `R2_BUCKET_BACKUP={{ r2_bucket_backup }}` ao
-   `templates/backend.env.j2`.
+
+⚠️ **Bloqueio atual**: as credenciais R2 atuais sao scoped ao bucket
+`dsplayground-analytics-archive` (do archiver) — `list_buckets` retorna
+`AccessDenied`. Antes de ativar upload, decidir UM dos cenarios:
+
+| Cenario | Acao |
+|---|---|
+| **A** — bucket novo + creds ampliadas | Operador ja criou bucket separado e ampliou as creds R2 atuais pra incluir ele. So adicionar `r2_bucket_backup: <nome>` ao vault. |
+| **B** — bucket novo + creds novas | Bucket novo precisa de creds proprias. Adicionar ao vault `r2_backup_account_id`, `r2_backup_access_key_id`, `r2_backup_secret_access_key`, `r2_bucket_backup`. Modificar `backup-prod.sh` pra usar creds dedicadas. |
+| **C** — reusar `dsplayground-analytics-archive` com prefix | NAO recomendado — backups com chave RSA convivem com archive de cliente, blast radius maior. Mas viavel: prefix `prod/` separa. |
+
+**Passos a aplicar quando o cenario estiver decidido:**
+1. Criar/configurar bucket R2 (versionamento ON, lifecycle 30/90/365d).
+   Procedimento detalhado em `ark/docs/backup-restore.md` §1.
+2. Adicionar var(s) ao vault Ansible (depende do cenario).
+3. Adicionar `R2_BUCKET_BACKUP={{ r2_bucket_backup }}` (e demais vars
+   se for cenario B) ao `templates/backend.env.j2`.
 4. `make -f ark/Makefile ansible-apply`.
 5. Instalar systemd service + timer (heredoc no `backup-restore.md` §3).
 6. Rodar `bash /opt/portifolio/ark/scripts/backup-prod.sh` manual pra
    testar antes de deixar agendado.
 7. **Drill trimestral**: restore num ambiente staging usando
    `restore-prod.sh`. Documentar resultado.
+
+**Estado atual sem passos acima**: backup local funcional (`/var/lib/backup-prod/`,
+retencao 7d). Em caso de comprometimento do filesystem, perde-se. Para
+DR real, finalizar configuracao R2 e drill.
 
 Sem o passo 6+drill, ha codigo mas nao ha confianca — restore nunca
 testado e pior que sem restore (falsa sensacao de seguranca).
@@ -303,18 +319,82 @@ testado e pior que sem restore (falsa sensacao de seguranca).
 - `influxdb_data`: archiver ja faz tiering pra R2 (bucket separado).
 - `prometheus-data`: metricas sao derivadas, retencao 15d aceita perda.
 
-### P1 — Dependency audit + CVE scan 🟡
-**Por que importa**: pacotes Python/Node + imagens base podem ter CVE
-HIGH/CRITICAL silenciosos. Sem scan automatico, vulnerabilidades novas
-nao sao detectadas.
-**Investigar**:
-- `pip-audit -r backend/requirements.txt` — vulns transitivas Python.
-- `npm audit --omit=dev` no `frontend/` e `landing/`.
-- `trivy image postgres:16-alpine influxdb:2.7 grafana/grafana:11.2.0
-  prom/prometheus:v2.54.1 prom/node-exporter:v1.8.2 crowdsecurity/crowdsec:v1.6.3`.
-- `dnf check-update` no host — pacotes RHEL com patch pendente.
-**Acao sugerida**: GitHub Action `dependabot.yml` + `trivy-action` no CI;
-falhar build em CRITICAL nao-mitigado.
+### P1 — Dependency audit + CVE scan 🟡 PARCIAL (Python OK, resto pendente)
+
+**Estado**: scan executado em 2026-05-02. Achados:
+
+#### Backend Python ✅ CORRIGIDO
+13 CVEs em 7 pacotes — todos atualizados em `backend/requirements.txt`:
+
+| Pacote | De | Para | CVEs |
+|---|---|---|---|
+| cryptography | 46.0.2 | 46.0.7 | 3 (CVE-2026-26007/34073/39892) |
+| pyjwt | 2.9.0 | 2.12.0 | CVE-2026-32597 (impacta sdk_jwt + embed_jwt) |
+| Flask | 3.1.2 | 3.1.3 | CVE-2026-27205 |
+| Werkzeug | 3.1.3 | 3.1.6 | 3 |
+| urllib3 | 2.5.0 | 2.6.3 | 3 |
+| Pygments | 2.19.2 | 2.20.0 | CVE-2026-4539 |
+| python-dotenv | 1.1.1 | 1.2.2 | CVE-2026-28684 |
+
+`pip-audit -r requirements.txt` apos: **No known vulnerabilities found**.
+Aplicado em runtime no proximo `docker compose up -d --build backend`.
+
+#### Frontend npm 🟡 PENDENTE OPERADOR
+`uuid <14.0.0` — moderate (CVE buffer bounds em v3/v5/v6, GHSA-w5hq-g745-h8pq).
+Fix via `npm audit fix --force` instala uuid@14 (**breaking change**).
+**Operador**: avaliar se codigo do frontend usa API V3/V5/V6 (improvavel —
+geralmente `uuid.v4()` que continua compativel) e fazer upgrade num PR
+dedicado com testes de build. Landing: 0 vulns.
+
+#### Host RHEL 🟡 PENDENTE OPERADOR (precisa reboot)
+`dnf updateinfo --security` listou 9 advisories Importante/Seg pendentes:
+
+```
+RLSA-2026:8921   kernel + kernel-core + kernel-modules
+RLSA-2026:10949  python3 + python3-libs
+RLSA-2026:11504  PackageKit + PackageKit-glib
+RLSA-2026:10708  gdk-pixbuf2
+RLSA-2026:11510  vim-minimal + vim-filesystem
+RLSA-2026:9692   webkit2gtk3-jsc
+```
+
+**Operador**: agendar janela com aviso, rodar:
+```bash
+sudo dnf upgrade --security -y
+sudo dnf needs-restarting -r  # 1 = reboot necessario
+sudo systemctl reboot
+```
+
+Apos reboot, validar containers sobem (`docker compose ps`),
+smoke test (`bash ark/scripts/agent-smoke.sh`), CrowdSec ativo.
+
+#### Imagens base do monitoring 🟡 PENDENTE OPERADOR (avaliar versoes)
+3 imagens com mais de 8 meses (criadas Jul-Sep 2024):
+
+```
+grafana/grafana:11.2.0          (Aug 2024)
+prom/prometheus:v2.54.1          (Aug 2024)
+prom/node-exporter:v1.8.2        (Jul 2024)
+crowdsecurity/crowdsec:v1.6.3    (Sep 2024)
+```
+
+Atualizadas: `influxdb:2.7` (Apr 2026), `postgres:16-alpine` (Apr 2026).
+
+**Operador**: avaliar upgrade pra LTS atuais — mudancas em
+`ark/monitoring/docker-compose.monitoring.yml` e
+`ark/crowdsec/docker-compose.crowdsec.yml`. Recomendar minor patches
+seguros antes de jumps majors.
+
+#### CVE scan continuo 🟡 PENDENTE
+- **GitHub Action Dependabot** (`.github/dependabot.yml`): npm + pip
+  + GitHub Actions. Abre PR semanal com upgrades.
+- **Trivy CI**: scan das imagens em todo PR; falha build em CRITICAL
+  nao-mitigado.
+- **`pip-audit`** no CI (`.github/workflows/ci.yml`): falha em qualquer
+  CVE no requirements.txt.
+
+**Acao sugerida P1.5**: adicionar dependabot.yml + step de pip-audit no
+ci.yml em PR proximo.
 
 ### P2 — GitHub repo hardening 🟡
 **Por que importa**: branch protection ausente = qualquer push direto na
