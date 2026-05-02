@@ -58,21 +58,21 @@ class AplicarPlanoTests(unittest.TestCase):
         self.assertEqual(quota_antes.eventos_por_minuto, quota_depois.eventos_por_minuto)
         self.assertEqual(quota_antes.retencao_dias, quota_depois.retencao_dias)
 
-    # 4. Upgrade free->pequeno -> True, quota atualizada
-    def test_upgrade_free_para_pequeno(self):
-        resultado = aplicar_plano(self.site.id, "pequeno", self.repo)
+    # 4. Upgrade free->pro -> True, quota atualizada
+    def test_upgrade_free_para_pro(self):
+        resultado = aplicar_plano(self.site.id, "pro", self.repo)
         self.assertTrue(resultado)
         quota = self.repo.obter_quota(self.site.id)
-        self.assertEqual(quota.eventos_por_dia, PLANO_DEFAULTS["pequeno"]["eventos_por_dia"])
-        self.assertEqual(quota.eventos_por_minuto, PLANO_DEFAULTS["pequeno"]["eventos_por_minuto"])
-        self.assertEqual(quota.retencao_dias, PLANO_DEFAULTS["pequeno"]["retencao_dias"])
+        self.assertEqual(quota.eventos_por_dia, PLANO_DEFAULTS["pro"]["eventos_por_dia"])
+        self.assertEqual(quota.eventos_por_minuto, PLANO_DEFAULTS["pro"]["eventos_por_minuto"])
+        self.assertEqual(quota.retencao_dias, PLANO_DEFAULTS["pro"]["retencao_dias"])
         site_atualizado = self.repo.obter_site(self.site.id)
-        self.assertEqual(site_atualizado.plano, "pequeno")
+        self.assertEqual(site_atualizado.plano, "pro")
 
-    # 5. Downgrade grande->free -> True, quota atualizada
-    def test_downgrade_grande_para_free(self):
-        # Primeiro sobe para grande
-        aplicar_plano(self.site.id, "grande", self.repo)
+    # 5. Downgrade pro->free -> True, quota atualizada
+    def test_downgrade_pro_para_free(self):
+        # Primeiro sobe para pro
+        aplicar_plano(self.site.id, "pro", self.repo)
         # Depois desce para free
         resultado = aplicar_plano(self.site.id, "free", self.repo)
         self.assertTrue(resultado)
@@ -85,9 +85,9 @@ class AplicarPlanoTests(unittest.TestCase):
 
     # 6. Idempotencia: 2x mesmo plano -> segunda retorna False
     def test_idempotencia_segunda_chamada_retorna_false(self):
-        primeira = aplicar_plano(self.site.id, "medio", self.repo)
+        primeira = aplicar_plano(self.site.id, "pro", self.repo)
         self.assertTrue(primeira)
-        segunda = aplicar_plano(self.site.id, "medio", self.repo)
+        segunda = aplicar_plano(self.site.id, "pro", self.repo)
         self.assertFalse(segunda)
 
 
