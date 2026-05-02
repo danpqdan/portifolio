@@ -194,23 +194,57 @@ Detalhes do plano de migracao para CORS dinamico (por `sites.dominios_permitidos
 - Grafana: `https://grafana.dsplayground.com.br` (via Nginx) — admin user/senha via `ark/monitoring/.env`.
 - Prometheus: `http://<host>:9090` (ainda publico, **TODO**) — retencao 15 dias (`--storage.tsdb.retention.time=15d`).
 
-## Estado dos fixes 2026-04-22 (revisado 2026-05-01)
+## Estado dos fixes 2026-04-22 (revisado 2026-05-02)
 
 **Aplicados em prod (confirmados):**
 - ✅ Backend `gunicorn --worker-class eventlet -w 1` rodando.
 - ✅ Certbot removido; CF Origin Cert e a unica fonte de TLS (validade ate 2041).
-- ✅ Prometheus (`9090`) e node-exporter (`9100`) bindam em `127.0.0.1` no `ark/monitoring/docker-compose.monitoring.yml`. Sem porta publica externa (firewalld so libera 22022/80/443).
+- ✅ Prometheus (`9090`) e node-exporter (`9100`) bindam em `127.0.0.1` no `ark/monitoring/docker-compose.monitoring.yml`. Sem porta publica externa.
 
 **Codigo pronto no repo, falta efetivar via ansible-apply:**
-- 🟡 Logger root do Flask separado do `security_logger` em `backend/app.py:91-96` (`propagate = False`, file handler exclusivo no logger nomeado `security`). `security.log` so recebe linhas com `evento=`/eventos do logger nomeado; resto vai pra stdout do container. Confirmado por leitura do repo 2026-05-01.
-- 🟡 `roles/analytics-stack/tasks/main.yml:93-94, 103-104, 113-114` ja tem `when: not ansible_check_mode` nas tasks de health (backend, landing) e retencao Influx. `make ansible-check` nao deve quebrar nessas. Confirmado por leitura do repo 2026-05-01.
+- 🟡 Logger root do Flask separado do `security_logger` em `backend/app.py:91-96` (`propagate = False`, file handler exclusivo no logger nomeado `security`).
+- 🟡 `roles/analytics-stack/tasks/main.yml` ja tem `when: not ansible_check_mode` nas tasks de health.
 
 **A confirmar via SSH (so dah pra validar no host):**
-- 🔍 **Vault encryption:** `group_vars/all.yml` na VPS deve estar criptografado (`$ANSIBLE_VAULT;1.1;AES256` na primeira linha). Senha em `/opt/portifolio/.vault-password` (0600, `deploy:analytics`, fora do git). Usuario reportou "vault precisa garantir criptografia" em 2026-05-01. Comando de check: `head -c 30 /opt/portifolio/ark/ansible/group_vars/all.yml`.
+- 🔍 **Vault encryption:** `group_vars/all.yml` na VPS deve estar criptografado (`$ANSIBLE_VAULT;1.1;AES256` na primeira linha).
 
-**Nao e mais pendencia:** instalacao do bouncer-nginx via packagecloud — bouncer (`crowdsec-firewall-bouncer-nftables`) ja vem por default com a instalacao do CrowdSec via repo oficial. Tasks redundantes em `roles/crowdsec/tasks/main.yml` removidas em PR separado.
+## Marcos 2026-05-02
 
-Quando vault confirmado, remover esta secao.
+**Landing/dashboard cliente — reformulacao SaaS-grade:**
+- ✅ Design system proprio em `landing/src/components/ui/` — 13 componentes (Badge, Tabs, Toast, Modal/EmptyState, MetricCard, ChartCard, Stepper, Breadcrumbs, etc.) com tokens semanticos (success/warning/danger/info) em `@theme` do Tailwind 4.
+- ✅ 18 paginas Astro: home, /precos, /recursos, /seguranca, /sobre, /integracoes, /changelog, /status, 404/500 + area cliente (cadastro, login, esqueci-senha, painel, configuracoes 7 abas, onboarding wizard 3 passos, exportar).
+- ✅ Telemetria explicita em milestones de funil (onboarding_step_concluido, key_copiada, snippet_copiado, primeiro_evento + trackConversion).
+- ✅ Live counter no painel — polling /cliente/auth/configuracoes a cada 30s, pill "live ●" pulsante, pausa quando aba esconde.
+- ✅ Mobile fix: Tabs com 7+ entradas usa `overflow-x-auto + whitespace-nowrap + flex-shrink-0` (era flex-wrap, empilhava feio em 375px).
+- ✅ 5 links pra `github.com/danpqdan/portifolio/issues` substituidos por `mailto:contato@dsplayground.com.br?subject=...` (repo privado, links 404avam pra anonimo). CF Email Routing pra contato@ ja configurado.
+
+**Stack landing/ atualizada (security audit):**
+| Pacote | Antes | Depois |
+|---|---|---|
+| astro | ^4.16.7 | ^6.2.1 |
+| @astrojs/tailwind | ^5.1.2 | removido (deprecated) |
+| @tailwindcss/vite | — | ^4.2.4 |
+| tailwindcss | ^3.4.13 | ^4.2.4 |
+| vitest | ^2.1.3 | ^3.2.4 |
+| happy-dom | ^15.7.4 | ^20.9.0 (CRITICAL RCE fix) |
+| `overrides.yaml` | — | ^2.8.3 |
+
+`tailwind.config.mjs` deletado — tokens em `@theme {}` em `src/styles/global.css`. `@tailwind base/components/utilities` → `@import "tailwindcss"`. `astro.config.mjs`: `integrations:[tailwind()]` → `vite:{plugins:[tailwindcss()]}`.
+
+`npm audit`: **found 0 vulnerabilities** (era 12: 1 CRITICAL + 1 HIGH + 10 moderate).
+Vitest: 245/245 verde. astro check 0 errors. astro build 18 paginas.
+
+**Fixes CI 2026-05-02:**
+- ✅ `backend/billing/test_plano_service.py` — testes legados usavam plano `pequeno`/`medio`/`grande` mas `plano_service.PLANO_DEFAULTS` ja refatorou pra `free`/`pro`. Renomeei tests + asserts.
+- ✅ `backend/billing/test_routes.py` — esperava 4 planos, route lista 2. Atualizado.
+- ✅ `backend/test_cliente_configuracoes.py` — mesma coisa, 4→2.
+- ✅ Ansible `Subir stack com docker compose` quebrava com `Error while parsing JSON output of /bin/docker compose images --format json` quando container parado apontava pra imagem deletada. Pre-task `docker container prune -f` + `recreate: auto` em `roles/analytics-stack/tasks/main.yml`.
+
+`SECRET_KEY=test pytest backend/` → 441 passed, 13 subtests.
+
+**Workflow worktree:** trabalho em `D:/comercial-wt`, `D:/portifolio-wt`, `D:/portifolio-fix2/3` (criados ad-hoc com `git worktree add`) pra nao conflitar com working tree principal. Removidos no fim de cada PR.
+
+**Nao e mais pendencia (do bloco anterior):** instalacao do bouncer-nginx via packagecloud — bouncer (`crowdsec-firewall-bouncer-nftables`) ja vem por default com a instalacao do CrowdSec via repo oficial.
 
 ## Quando em duvida
 
