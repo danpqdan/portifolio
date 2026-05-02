@@ -261,21 +261,14 @@ server {
     include             /etc/nginx/snippets/ssl.conf;
 
     client_max_body_size 1m;
-    access_log /var/log/nginx/portifolio-api.access.log;
+    # Usa log_format api_no_query (definido no http{} no topo deste arquivo)
+    # pra omitir query string — widget embed passa ?token=<JWT> ali e nao
+    # queremos persistir tokens no access.log.
+    access_log /var/log/nginx/portifolio-api.access.log api_no_query;
     error_log  /var/log/nginx/portifolio-api.error.log warn;
 
     # CSP estrito: a API so retorna JSON, nao deve carregar nada.
     add_header Content-Security-Policy "default-src 'none'; frame-ancestors 'none'; base-uri 'none'" always;
-
-    # Log custom: $request_uri inclui query string, e o widget embed passa
-    # ?token=<JWT> nas URLs. Strippa query do log pra nao persistir tokens
-    # em access.log (legivel pelo grupo nginx; CrowdSec parsa esse path).
-    log_format api_no_query '$remote_addr - $remote_user [$time_local] '
-                            '"$request_method $uri $server_protocol" '
-                            '$status $body_bytes_sent '
-                            '"$http_referer" "$http_user_agent" '
-                            'rt=$request_time';
-    access_log /var/log/nginx/portifolio-api.access.log api_no_query;
 
     # Bloqueio publico de /metrics — Prometheus scrape acontece DENTRO da rede
     # docker (backend:5000/metrics), nao via nginx. Externamente vaza
