@@ -10,6 +10,7 @@
 import { experimental_AstroContainer as AstroContainer } from 'astro/container';
 import { describe, expect, test } from 'vitest';
 
+import Configuracoes from '~/pages/cliente/configuracoes.astro';
 import Index from '~/pages/index.astro';
 import Painel from '~/pages/cliente/painel.astro';
 import Precos from '~/pages/precos.astro';
@@ -159,6 +160,60 @@ describe('cliente/painel.astro', () => {
 
   test('marcado noindex (area logada)', async () => {
     const html = await render(Painel);
+    expect(html).toContain('noindex');
+  });
+});
+
+describe('cliente/configuracoes.astro', () => {
+  test('renderiza com tabs estruturadas', async () => {
+    const html = await render(Configuracoes);
+    expect(html).toContain('Configurações');
+    expect(html).toMatch(/role="tablist"/);
+    // 4 abas
+    expect(html).toMatch(/data-tab-id="visao"/);
+    expect(html).toMatch(/data-tab-id="chaves"/);
+    expect(html).toMatch(/data-tab-id="plano"/);
+    expect(html).toMatch(/data-tab-id="perfil"/);
+  });
+
+  test('aba visao tem 3 MetricCards (eventos hoje, quota, cardinalidade)', async () => {
+    const html = await render(Configuracoes);
+    expect(html).toContain('js-card-eventos-hoje');
+    expect(html).toContain('js-card-quota-pct');
+    expect(html).toContain('js-card-cardinalidade-pct');
+  });
+
+  test('aba plano tem CTA pra /precos', async () => {
+    const html = await render(Configuracoes);
+    expect(html).toMatch(/href="\/precos"[^>]*data-cta="config-upgrade"/);
+  });
+
+  test('aba plano tem barra de progressbar acessivel pra cardinalidade', async () => {
+    const html = await render(Configuracoes);
+    expect(html).toMatch(/id="cardinalidade-bar"[^>]*role="progressbar"[^>]*aria-valuemin="0"[^>]*aria-valuemax="100"/);
+  });
+
+  test('aba perfil tem 2 forms (email + senha)', async () => {
+    const html = await render(Configuracoes);
+    expect(html).toMatch(/id="form-email"/);
+    expect(html).toMatch(/id="form-senha"/);
+    expect(html).toMatch(/id="submit-email"[^>]*data-cta="trocar-email"/);
+    expect(html).toMatch(/id="submit-senha"[^>]*data-cta="trocar-senha"/);
+  });
+
+  test('hashSync ligado pra deep link nas tabs', async () => {
+    const html = await render(Configuracoes);
+    expect(html).toContain('data-hash-sync="true"');
+  });
+
+  test('skeleton inicial visivel + conteudo escondido', async () => {
+    const html = await render(Configuracoes);
+    expect(html).toMatch(/id="config-loading"[^>]*aria-busy="true"/);
+    expect(html).toMatch(/id="config-conteudo"[^>]*hidden/);
+  });
+
+  test('marcado noindex', async () => {
+    const html = await render(Configuracoes);
     expect(html).toContain('noindex');
   });
 });
