@@ -76,3 +76,21 @@ CREATE TABLE IF NOT EXISTS consumo_diario (
     PRIMARY KEY (site_id, dia),
     FOREIGN KEY (site_id) REFERENCES sites(id) ON DELETE CASCADE
 );
+
+-- Eventos Stripe ja processados — chave de idempotencia.
+-- Stripe re-entrega webhooks em retries (timeout, 5xx); sem essa tabela,
+-- aplicar_plano() rodaria N vezes pro mesmo evento, podendo bagunçar
+-- estado de assinatura. INSERT ON CONFLICT DO NOTHING e o gate.
+CREATE TABLE IF NOT EXISTS stripe_eventos_processados (
+    event_id        TEXT PRIMARY KEY,
+    processado_em   TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+-- JWT embed revogados — defesa contra leak/cancelamento antes de exp.
+-- TTL curto (60-600s) ja limita janela; tabela cobre revogacao explicita.
+-- Limpeza periodica via expurgo (>24h apos exp).
+CREATE TABLE IF NOT EXISTS embed_jwt_revogados (
+    jti             TEXT PRIMARY KEY,
+    motivo          TEXT,
+    revogado_em     TEXT NOT NULL DEFAULT (datetime('now'))
+);

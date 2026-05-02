@@ -181,12 +181,71 @@ def log_safe(logger, level, message, *args):
         '📊': '[ANALYTICS]', '🚫': '[BLOCKED]', '🧹': '[CLEANUP]',
         '⏰': '[TIMEOUT]', '🌐': '[REMOTE]', '💻': '[LOCAL]', '🔍': '[DEBUG]'
     }
-    
+
     safe_message = message
     for emoji, replacement in emoji_map.items():
         safe_message = safe_message.replace(emoji, replacement)
-    
+
     getattr(logger, level)(safe_message, *args)
+
+
+# ==================== LOG SCRUBBING (anti-leak) ====================
+# Filter aplicado em handlers de log pra redijir credenciais que possam ter
+# vazado em mensagens (exception traces, error logs, .env paths, etc). Cobre
+# os padroes mais comuns. NAO substitui sanitizacao no call site — e rede de
+# seguranca pra eventos imprevistos (ex: Flask exception logger).
+import re as _re_logscrub
+
+_LOG_PATTERNS = [
+    # postgres://user:senha@host
+    (_re_logscrub.compile(r'(postgres(?:ql)?://[^:\s"\']+:)([^@\s"\']+)(@)'),
+     r'\1***\3'),
+    # Bearer <token>
+    (_re_logscrub.compile(r'(Bearer\s+)[A-Za-z0-9._\-]+'), r'\1***'),
+    # Authorization: Bearer ...
+    (_re_logscrub.compile(r'(Authorization["\']?\s*[:=]\s*["\']?)[^"\'\s,}]+'),
+     r'\1***'),
+    # X-API-Key, x-admin-token etc
+    (_re_logscrub.compile(r'(X-(?:API|Admin|Auth)-(?:Key|Token)["\']?\s*[:=]\s*["\']?)[^"\'\s,}]+',
+                          _re_logscrub.IGNORECASE),
+     r'\1***'),
+    # ?token=<jwt>
+    (_re_logscrub.compile(r'([?&]token=)[A-Za-z0-9._\-]+'), r'\1***'),
+    # SECRET_KEY=... e parentes
+    (_re_logscrub.compile(r'([A-Z_]*(?:SECRET|TOKEN|PASSWORD|KEY|API_KEY)[A-Z_]*\s*[:=]\s*)([^\s"\',}]+)'),
+     r'\1***'),
+    # Cookie: cliente_session=...
+    (_re_logscrub.compile(r'(cliente_session=)[^;\s]+'), r'\1***'),
+    # JWT crus (header.payload.signature)
+    (_re_logscrub.compile(r'\beyJ[A-Za-z0-9_\-]+\.[A-Za-z0-9_\-]+\.[A-Za-z0-9_\-]+\b'),
+     'eyJ***.***.***')
+]
+
+
+class _LogScrubFilter(logging.Filter):
+    """Redije credenciais comuns no record antes de gravar no handler."""
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        try:
+            msg = record.getMessage()
+        except Exception:
+            return True
+        scrubbed = msg
+        for pattern, replacement in _LOG_PATTERNS:
+            scrubbed = pattern.sub(replacement, scrubbed)
+        if scrubbed != msg:
+            # Ja interpolou args; sobrescreve msg e zera args pra evitar
+            # double-format que crashe em LogRecord.getMessage.
+            record.msg = scrubbed
+            record.args = ()
+        return True
+
+
+# Aplica filter em todos os handlers conhecidos.
+_scrub = _LogScrubFilter()
+for _h in logging.getLogger().handlers:
+    _h.addFilter(_scrub)
+_security_handler.addFilter(_scrub)
 
 # ==================== SISTEMA DE SESSÕES (mantido igual) ====================
 active_sessions = {}
@@ -444,10 +503,13 @@ log_safe(security_logger, 'info', "[SUCCESS] Metrics Prometheus em /metrics")
 
 # /auth/sdk-token chamado por todo browser que carrega landing publica —
 # default flask-limiter (50/h) bate em segundos com handful de page loads.
-# Protecao real ja existe via quotas.emissoes_jwt_por_minuto (Postgres,
-# per-publishable_key). Isentar do limiter global IP-based.
+# Defesa real e em camadas: nginx zone=cliente_auth (10r/s burst 10, applied no
+# location /auth/sdk-token) + quotas.emissoes_jwt_por_minuto (Postgres,
+# per-publishable_key). Aqui no Flask aplicamos um limite per-IP generoso
+# (60/min) — ja absorve burst de page reload e barra brute force absurdo
+# (era unlimited por exempt).
 from auth.routes import emitir_sdk_token  # noqa: E402
-limiter.exempt(emitir_sdk_token)
+limiter.limit("60 per minute")(emitir_sdk_token)
 
 # ==================== AUTH DO DASHBOARD DO CLIENTE ====================
 # Blueprint `/api/cliente/auth` com login humano (cookie HttpOnly) para
@@ -476,6 +538,12 @@ try:
     # devolvendo 500 pro browser. Como /gate so e alcancavel via nginx interno
     # (location internal), nao da pra abusar de fora; isentar do limiter.
     limiter.exempt(_cliente_routes_mod.gate)
+    # Endpoints de auth humana ganham limite per-IP no Flask alem do nginx —
+    # defesa em profundidade contra brute force. Burst no nginx (5) cobre
+    # tentativas rapidas; flask cobre acumulado por minuto.
+    limiter.limit("10 per minute")(_cliente_routes_mod.login)
+    limiter.limit("5 per minute")(_cliente_routes_mod.solicitar_magic_link)
+    limiter.limit("5 per minute")(_cliente_routes_mod.cadastro)
     if _grafana_sync_service:
         log_safe(security_logger, 'info', "[SUCCESS] Grafana org sync ativo")
     log_safe(security_logger, 'info', "[SUCCESS] Auth do dashboard inicializado")
@@ -838,11 +906,31 @@ def _verificar_token_admin():
     return True, None
 
 
+def _fingerprint_admin_token() -> str:
+    """SHA-256 truncado do ADMIN_API_TOKEN — fingerprint pra audit log.
+
+    Logar o token cru abriria leak; logar SHA permite correlacao entre eventos
+    e detectar uso de token leaked sem expor o segredo. Truncado em 12 chars
+    pra reduzir custo no log mantendo unicidade pratica.
+    """
+    token_esperado = os.environ.get('ADMIN_API_TOKEN', '')
+    if not token_esperado:
+        return 'no-token'
+    return hashlib.sha256(token_esperado.encode()).hexdigest()[:12]
+
+
 def _registrar_audit(acao: str, session_id: str, resultado: str):
-    """Grava linha de auditoria administrativa."""
+    """Grava linha de auditoria administrativa.
+
+    Inclui fingerprint do token usado pra correlacao em caso de leak suspeito,
+    sem expor o token. session_id passa por sanitize basica pra evitar log
+    injection (newlines no path).
+    """
+    sid_safe = (session_id or '')[:128].replace('\n', '\\n').replace('\r', '\\r')
     log_safe(security_logger, 'info',
-             f"[ADMIN-AUDIT] acao={acao} session_id={session_id} "
+             f"[ADMIN-AUDIT] acao={acao} session_id={sid_safe} "
              f"resultado={resultado} ip={request.environ.get('REMOTE_ADDR', 'unknown')} "
+             f"token_fp={_fingerprint_admin_token()} "
              f"timestamp={datetime.now().isoformat()}")
 
 
