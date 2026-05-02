@@ -37,7 +37,20 @@ import EmptyState from '~/components/ui/EmptyState.astro';
           class="mt-1 text-sm text-slate-400"
         >Carregando dados do seu site…</p>
       </div>
-      <div class="flex items-center gap-2">
+      <div class="flex items-center gap-3">
+        <!-- Indicador "live" — pulsa quando polling esta ativo. Hidden ate
+             carregar pela primeira vez. -->
+        <span
+          id="painel-live-pill"
+          class="hidden inline-flex items-center gap-1.5 rounded-full bg-success-500/15 px-2 py-0.5 text-xs font-medium text-success-200 ring-1 ring-inset ring-success-500/30"
+          aria-live="polite"
+        >
+          <span class="relative flex h-1.5 w-1.5" aria-hidden="true">
+            <span class="absolute inset-0 animate-ping rounded-full bg-success-400 opacity-75"></span>
+            <span class="relative h-1.5 w-1.5 rounded-full bg-success-400"></span>
+          </span>
+          <span id="painel-live-text">live</span>
+        </span>
         <Button href="/cliente/configuracoes" variant="secondary" data-cta="painel-configuracoes">Configurações</Button>
       </div>
     </header>
@@ -269,7 +282,70 @@ import EmptyState from '~/components/ui/EmptyState.astro';
 
       elLoading.classList.add('hidden');
       elConteudo.classList.remove('hidden');
+
+      // Live polling — refresh discreto a cada 30s. Mantem KPIs vivos
+      // sem WebSocket reverso (SDK so envia pra cima). Pausa quando aba
+      // oculta pra poupar bateria/rede. Mostra delta no pill.
+      iniciarLivePolling(r.consumo.eventos_hoje);
     }
+
+    let lastLiveSnapshot = 0;
+    let livePollTimer: ReturnType<typeof setInterval> | null = null;
+    const LIVE_POLL_MS = 30_000;
+
+    function pararLivePolling() {
+      if (livePollTimer) {
+        clearInterval(livePollTimer);
+        livePollTimer = null;
+      }
+    }
+
+    async function tickLive() {
+      const r = await obterConfiguracoes({ apiUrl: API_URL });
+      if (!r.ok) return; // erro silencioso, mantem ultimos valores
+
+      const atual = r.consumo.eventos_hoje;
+      const delta = atual - lastLiveSnapshot;
+      lastLiveSnapshot = atual;
+
+      // Atualiza KPI eventos_hoje + quota %
+      setMetric('js-card-eventos-hoje', new Intl.NumberFormat('pt-BR').format(atual));
+      const percentDia = pct(atual, r.quota.eventos_por_dia);
+      setMetric(
+        'js-card-quota',
+        `${percentDia.toFixed(1)}%`,
+        `<p class="mt-1 flex items-center gap-1 text-xs font-medium ${classeQuota(percentDia)}">
+          <span aria-hidden="true">${direcaoQuota(percentDia) === 'up' ? '↑' : direcaoQuota(percentDia) === 'down' ? '↓' : '→'}</span>
+          <span>${new Intl.NumberFormat('pt-BR').format(atual)} / ${new Intl.NumberFormat('pt-BR').format(r.quota.eventos_por_dia)}</span>
+          <span class="text-slate-500">eventos</span>
+        </p>`,
+      );
+
+      // Pill atualiza com delta visivel
+      const liveText = document.getElementById('painel-live-text');
+      if (liveText) {
+        liveText.textContent = delta > 0 ? `+${delta} novos` : 'live';
+      }
+    }
+
+    function iniciarLivePolling(eventosInicial: number) {
+      pararLivePolling();
+      lastLiveSnapshot = eventosInicial;
+
+      const pill = document.getElementById('painel-live-pill');
+      if (pill) pill.classList.remove('hidden');
+
+      livePollTimer = setInterval(tickLive, LIVE_POLL_MS);
+    }
+
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden) {
+        pararLivePolling();
+      } else if (!elConteudo.classList.contains('hidden') && lastLiveSnapshot > 0) {
+        // Retomou foco — re-inicia polling com snapshot atual.
+        livePollTimer = setInterval(tickLive, LIVE_POLL_MS);
+      }
+    });
 
     carregar().catch((e) => {
       console.error('painel: erro inesperado', e);

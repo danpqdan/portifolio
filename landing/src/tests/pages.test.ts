@@ -175,6 +175,12 @@ describe('cliente/painel.astro', () => {
     const html = await render(Painel);
     expect(html).toContain('noindex');
   });
+
+  test('live pill com aria-live polite (escondido inicial, JS revela apos load)', async () => {
+    const html = await render(Painel);
+    expect(html).toMatch(/id="painel-live-pill"[^>]*class="hidden[^"]*"[^>]*aria-live="polite"/);
+    expect(html).toContain('id="painel-live-text"');
+  });
 });
 
 describe('cliente/configuracoes.astro', () => {
