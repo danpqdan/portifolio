@@ -12,6 +12,7 @@ import { describe, expect, test } from 'vitest';
 
 import Configuracoes from '~/pages/cliente/configuracoes.astro';
 import Index from '~/pages/index.astro';
+import Onboarding from '~/pages/cliente/onboarding.astro';
 import Painel from '~/pages/cliente/painel.astro';
 import Precos from '~/pages/precos.astro';
 
@@ -214,6 +215,66 @@ describe('cliente/configuracoes.astro', () => {
 
   test('marcado noindex', async () => {
     const html = await render(Configuracoes);
+    expect(html).toContain('noindex');
+  });
+});
+
+describe('cliente/onboarding.astro', () => {
+  test('renderiza com titulo e Stepper inicial em key', async () => {
+    const html = await render(Onboarding);
+    expect(html).toContain('Vamos colocar pra rodar');
+    expect(html).toMatch(/data-current-step="key"/);
+  });
+
+  test('3 steps no Stepper com IDs corretos', async () => {
+    const html = await render(Onboarding);
+    expect(html).toContain('data-step-id="key"');
+    expect(html).toContain('data-step-id="snippet"');
+    expect(html).toContain('data-step-id="evento"');
+  });
+
+  test('step containers escondidos por SSR (JS revela apos load)', async () => {
+    const html = await render(Onboarding);
+    expect(html).toMatch(/id="step-key"[^>]*hidden/);
+    expect(html).toMatch(/id="step-snippet"[^>]*hidden/);
+    expect(html).toMatch(/id="step-evento"[^>]*hidden/);
+  });
+
+  test('step 2 tem 5 plataformas no Tabs (html/react/next/wordpress/shopify)', async () => {
+    const html = await render(Onboarding);
+    expect(html).toContain('data-tab-id="html"');
+    expect(html).toContain('data-tab-id="react"');
+    expect(html).toContain('data-tab-id="next"');
+    expect(html).toContain('data-tab-id="wordpress"');
+    expect(html).toContain('data-tab-id="shopify"');
+  });
+
+  test('step 2 tem botoes copy snippet pra cada plataforma', async () => {
+    const html = await render(Onboarding);
+    expect(html).toMatch(/data-snippet="snippet-html"[^>]*class="js-copy-snippet/);
+    expect(html).toMatch(/data-snippet="snippet-react"/);
+  });
+
+  test('step 3 tem polling visual (spinner + counter)', async () => {
+    const html = await render(Onboarding);
+    expect(html).toContain('id="onb-poll-counter"');
+    expect(html).toMatch(/animate-spin/);
+  });
+
+  test('step 3 tem estados timeout e sucesso escondidos por SSR', async () => {
+    const html = await render(Onboarding);
+    expect(html).toMatch(/id="onb-timeout"[^>]*hidden/);
+    expect(html).toMatch(/id="onb-sucesso"[^>]*hidden/);
+  });
+
+  test('step 3 sucesso tem CTAs pra painel + configuracoes', async () => {
+    const html = await render(Onboarding);
+    expect(html).toMatch(/href="\/cliente\/painel"[^>]*data-cta="onb-finalizar-painel"/);
+    expect(html).toMatch(/href="\/cliente\/configuracoes"[^>]*data-cta="onb-finalizar-config"/);
+  });
+
+  test('marcado noindex (area logada)', async () => {
+    const html = await render(Onboarding);
     expect(html).toContain('noindex');
   });
 });

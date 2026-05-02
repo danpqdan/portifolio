@@ -18,6 +18,7 @@ import FormError from './FormError.astro';
 import Input from './Input.astro';
 import MetricCard from './MetricCard.astro';
 import Section from './Section.astro';
+import Stepper from './Stepper.astro';
 import Tabs from './Tabs.astro';
 import ToastContainer from './ToastContainer.astro';
 
@@ -481,5 +482,51 @@ describe('EmptyState', () => {
     });
     expect(html).toMatch(/<button[^>]*type="button"/);
     expect(html).toContain('Tentar de novo');
+  });
+});
+
+describe('Stepper', () => {
+  const steps = [
+    { id: 'a', label: 'Primeiro' },
+    { id: 'b', label: 'Segundo' },
+    { id: 'c', label: 'Terceiro' },
+  ];
+
+  test('renderiza ol com aria-label', async () => {
+    const html = await render(Stepper, { steps, current: 'a', ariaLabel: 'Wizard' });
+    expect(html).toMatch(/^<ol[^>]*aria-label="Wizard"/);
+  });
+
+  test('cada step tem data-step-id e data-step-state', async () => {
+    const html = await render(Stepper, { steps, current: 'b' });
+    expect(html).toContain('data-step-id="a"');
+    expect(html).toContain('data-step-id="b"');
+    expect(html).toContain('data-step-id="c"');
+    expect(html).toMatch(/data-step-id="a"[^>]*data-step-state="completed"/);
+    expect(html).toMatch(/data-step-id="b"[^>]*data-step-state="current"/);
+    expect(html).toMatch(/data-step-id="c"[^>]*data-step-state="pending"/);
+  });
+
+  test('current step tem aria-current=step', async () => {
+    const html = await render(Stepper, { steps, current: 'b' });
+    expect(html).toMatch(/aria-current="step"[^>]*data-step-id="b"|data-step-id="b"[^>]*aria-current="step"/);
+  });
+
+  test('completed steps mostram check', async () => {
+    const html = await render(Stepper, { steps, current: 'c' });
+    // Ambos a e b sao completed, deveriam ter ✓
+    const completedCount = (html.match(/✓/g) || []).length;
+    expect(completedCount).toBe(2);
+  });
+
+  test('current step usa cor brand-300 ring', async () => {
+    const html = await render(Stepper, { steps, current: 'a' });
+    expect(html).toContain('ring-brand-300');
+  });
+
+  test('pending steps usam cor neutra', async () => {
+    const html = await render(Stepper, { steps, current: 'a' });
+    // b e c sao pending → text-slate-400
+    expect(html).toContain('text-slate-400');
   });
 });
