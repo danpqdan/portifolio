@@ -15,6 +15,7 @@ class InfluxDBCapturador:
         self.metricas = []
         self.web_vitals = []
         self.custom_events = []
+        self.conversion_events = []
         self.lancar_erro = lancar_erro
 
     def write_temporal_metrics_async(self, metrica):
@@ -27,6 +28,9 @@ class InfluxDBCapturador:
 
     def write_custom_event_async(self, metrica):
         self.custom_events.append(metrica)
+
+    def write_conversion_event_async(self, metrica):
+        self.conversion_events.append(metrica)
 
 
 def payload_valido(id_registro: str | None = None):
@@ -323,6 +327,93 @@ class ServicoIngestaoUserIdGroupIdTest(unittest.TestCase):
         # Se este teste flakar por colisao real, trocar a string fixa.
         self.assertNotEqual(a, b,
             f"namespaces deveriam separar — colisao acidental? user={a} group={b}")
+
+
+class ServicoIngestaoConversionEventsTest(unittest.TestCase):
+    """Eventos __purchase/__signup/__conversion vao pra conversion_events,
+    nao pra custom_events. Eventos __identify/__group/__reset sao descartados."""
+
+    def setUp(self):
+        resetar_idempotencia()
+
+    def _payload_com_eventos(self, *eventos):
+        agora_ms = int(time.time() * 1000)
+        return {
+            "id_registro": f"reg-{uuid.uuid4()}",
+            "app_id": "teste-app",
+            "ambiente": "production",
+            "timestamp_inicial": agora_ms - 5000,
+            "timestamp_final": agora_ms,
+            "paginas": {
+                "/": [{
+                    "eventos": list(eventos),
+                    "visualizacoes": 1,
+                    "segundos": 5,
+                    "timestamp_inicial": agora_ms - 5000,
+                    "timestamp_final": agora_ms,
+                }]
+            },
+        }
+
+    def test_purchase_vai_pra_conversion_events_nao_custom(self):
+        cap = InfluxDBCapturador()
+        servico = ServicoIngestao(influxdb_service=cap)
+        payload = self._payload_com_eventos(
+            {"tipo": "custom", "timestamp": 1, "dados": {
+                "nome": "__purchase",
+                "propriedades": {"value": 99.9, "currency": "BRL"},
+            }},
+        )
+        servico.ingerir(session_id='s1', data=payload)
+        self.assertEqual(len(cap.conversion_events), 1)
+        self.assertEqual(len(cap.custom_events), 0)
+        self.assertEqual(cap.conversion_events[0].tipo, "purchase")
+        self.assertAlmostEqual(cap.conversion_events[0].valor, 99.9)
+        self.assertEqual(cap.conversion_events[0].moeda, "BRL")
+
+    def test_signup_vai_pra_conversion_events(self):
+        cap = InfluxDBCapturador()
+        servico = ServicoIngestao(influxdb_service=cap)
+        payload = self._payload_com_eventos(
+            {"tipo": "custom", "timestamp": 1, "dados": {
+                "nome": "__signup",
+                "propriedades": {"plan": "pro"},
+            }},
+        )
+        servico.ingerir(session_id='s1', data=payload)
+        self.assertEqual(len(cap.conversion_events), 1)
+        self.assertEqual(cap.conversion_events[0].tipo, "signup")
+        self.assertEqual(cap.conversion_events[0].plano, "pro")
+
+    def test_identidade_nao_vai_pra_nenhum_pipeline(self):
+        cap = InfluxDBCapturador()
+        servico = ServicoIngestao(influxdb_service=cap)
+        payload = self._payload_com_eventos(
+            {"tipo": "custom", "timestamp": 1, "dados": {"nome": "__identify", "propriedades": {}}},
+            {"tipo": "custom", "timestamp": 2, "dados": {"nome": "__group", "propriedades": {}}},
+            {"tipo": "custom", "timestamp": 3, "dados": {"nome": "__reset", "propriedades": {}}},
+        )
+        servico.ingerir(session_id='s1', data=payload)
+        self.assertEqual(len(cap.custom_events), 0)
+        self.assertEqual(len(cap.conversion_events), 0)
+
+    def test_evento_normal_e_purchase_no_mesmo_payload(self):
+        cap = InfluxDBCapturador()
+        servico = ServicoIngestao(influxdb_service=cap)
+        payload = self._payload_com_eventos(
+            {"tipo": "custom", "timestamp": 1, "dados": {
+                "nome": "__purchase",
+                "propriedades": {"value": 10, "currency": "USD"},
+            }},
+            {"tipo": "custom", "timestamp": 2, "dados": {
+                "nome": "botao_clicado",
+                "propriedades": {"id": "checkout"},
+            }},
+        )
+        servico.ingerir(session_id='s1', data=payload)
+        self.assertEqual(len(cap.conversion_events), 1)
+        self.assertEqual(len(cap.custom_events), 1)
+        self.assertEqual(cap.custom_events[0].nome, "botao_clicado")
 
 
 if __name__ == '__main__':

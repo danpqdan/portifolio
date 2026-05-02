@@ -12,9 +12,13 @@ import { describe, expect, test } from 'vitest';
 import Badge from './Badge.astro';
 import Button from './Button.astro';
 import Card from './Card.astro';
+import ChartCard from './ChartCard.astro';
+import EmptyState from './EmptyState.astro';
 import FormError from './FormError.astro';
 import Input from './Input.astro';
+import MetricCard from './MetricCard.astro';
 import Section from './Section.astro';
+import Stepper from './Stepper.astro';
 import Tabs from './Tabs.astro';
 import ToastContainer from './ToastContainer.astro';
 
@@ -303,5 +307,226 @@ describe('ToastContainer', () => {
   test('region usa pointer-events-none pra nao bloquear cliques', async () => {
     const html = await render(ToastContainer);
     expect(html).toMatch(/id="ds-toast-region"[^>]*pointer-events-none/);
+  });
+});
+
+describe('MetricCard', () => {
+  test('renderiza article com label e value', async () => {
+    const html = await render(MetricCard, { label: 'Eventos hoje', value: '12.847' });
+    expect(html).toMatch(/^<article/);
+    expect(html).toContain('Eventos hoje');
+    expect(html).toContain('12.847');
+    expect(html).toContain('data-metric-card');
+  });
+
+  test('uppercase tracking-wide no label e text-3xl tabular-nums no value', async () => {
+    const html = await render(MetricCard, { label: 'X', value: '1' });
+    expect(html).toContain('uppercase tracking-wide');
+    expect(html).toMatch(/text-3xl[^"]*tabular-nums/);
+  });
+
+  test('delta up usa cor success', async () => {
+    const html = await render(MetricCard, {
+      label: 'X', value: '1',
+      delta: { value: 18, direction: 'up', label: 'vs ontem' },
+    });
+    expect(html).toContain('text-success-300');
+    expect(html).toContain('↑');
+    expect(html).toContain('+18%');
+    expect(html).toContain('vs ontem');
+  });
+
+  test('delta down usa cor danger', async () => {
+    const html = await render(MetricCard, {
+      label: 'X', value: '1',
+      delta: { value: -5, direction: 'down' },
+    });
+    expect(html).toContain('text-danger-300');
+    expect(html).toContain('↓');
+    expect(html).toContain('-5%');
+  });
+
+  test('delta flat usa warning + seta horizontal', async () => {
+    const html = await render(MetricCard, {
+      label: 'X', value: '1',
+      delta: { value: 0, direction: 'flat' },
+    });
+    expect(html).toContain('text-warning-300');
+    expect(html).toContain('→');
+  });
+
+  test('sparkline gera path SVG com M e L (>=2 pontos)', async () => {
+    const html = await render(MetricCard, {
+      label: 'X', value: '1',
+      sparkline: [10, 20, 15, 25, 18],
+    });
+    expect(html).toMatch(/<svg[^>]*viewBox="0 0 100 30"/);
+    expect(html).toMatch(/<path[^>]*d="M [^"]+L [^"]+/);
+    expect(html).toContain('aria-hidden="true"');
+  });
+
+  test('sparkline com 1 ponto so nao renderiza svg', async () => {
+    const html = await render(MetricCard, {
+      label: 'X', value: '1',
+      sparkline: [10],
+    });
+    expect(html).not.toMatch(/<svg[^>]*viewBox="0 0 100 30"/);
+  });
+
+  test('hint vai pro title nativo', async () => {
+    const html = await render(MetricCard, {
+      label: 'X', value: '1',
+      hint: 'Quantos eventos chegaram hoje',
+    });
+    expect(html).toContain('title="Quantos eventos chegaram hoje"');
+  });
+});
+
+describe('ChartCard', () => {
+  test('renderiza title + subtitle no header', async () => {
+    const html = await render(ChartCard, { title: 'Eventos por hora', subtitle: 'Últimas 24h' });
+    expect(html).toContain('Eventos por hora');
+    expect(html).toContain('Últimas 24h');
+  });
+
+  test('default state ready esconde loading/empty/error', async () => {
+    const html = await render(ChartCard, { title: 'X' });
+    expect(html).toContain('data-state="ready"');
+    expect(html).toMatch(/js-chart-state-loading[^"]*hidden/);
+    expect(html).toMatch(/js-chart-state-empty[^"]*hidden/);
+    expect(html).toMatch(/js-chart-state-error[^"]*hidden/);
+  });
+
+  test('state loading mostra skeleton bars com animate-pulse', async () => {
+    const html = await render(ChartCard, { title: 'X', state: 'loading' });
+    expect(html).toContain('data-state="loading"');
+    expect(html).toContain('animate-pulse');
+    // ready state escondido
+    expect(html).toMatch(/js-chart-state-ready[^"]*hidden/);
+  });
+
+  test('state empty mostra emptyTitle e emptyDescription', async () => {
+    const html = await render(ChartCard, {
+      title: 'X', state: 'empty',
+      emptyTitle: 'Sem dados', emptyDescription: 'Espere chegar evento',
+    });
+    expect(html).toContain('Sem dados');
+    expect(html).toContain('Espere chegar evento');
+  });
+
+  test('state error tem role=alert + errorMessage', async () => {
+    const html = await render(ChartCard, {
+      title: 'X', state: 'error',
+      errorMessage: 'Backend caiu',
+    });
+    // Tanto a class quanto role="alert" estao no mesmo elemento
+    expect(html).toMatch(/<div[^>]*class="js-chart-state-error[^"]*"[^>]*role="alert"/);
+    expect(html).toContain('Backend caiu');
+  });
+
+  test('action header renderiza link', async () => {
+    const html = await render(ChartCard, {
+      title: 'X',
+      action: { href: '/grafana', label: 'Ver tudo', 'data-cta': 'chart-grafana' },
+    });
+    expect(html).toMatch(/href="\/grafana"[^>]*data-cta="chart-grafana"/);
+    expect(html).toContain('Ver tudo');
+  });
+
+  test('height lg aplica h-80', async () => {
+    const html = await render(ChartCard, { title: 'X', height: 'lg' });
+    expect(html).toContain('h-80');
+  });
+});
+
+describe('EmptyState', () => {
+  test('default neutral renderiza icon + title', async () => {
+    const html = await render(EmptyState, { title: 'Nada aqui', icon: '📊' });
+    expect(html).toContain('Nada aqui');
+    expect(html).toContain('📊');
+    expect(html).toContain('border-slate-800');
+  });
+
+  test('description renderiza quando passada', async () => {
+    const html = await render(EmptyState, {
+      title: 'X', description: 'Cole o snippet pra começar',
+    });
+    expect(html).toContain('Cole o snippet pra começar');
+  });
+
+  test('variant danger usa borda danger + role=alert', async () => {
+    const html = await render(EmptyState, { title: 'X', variant: 'danger' });
+    expect(html).toContain('border-danger-500/30');
+    expect(html).toContain('role="alert"');
+  });
+
+  test('variant warning usa borda warning sem role=alert', async () => {
+    const html = await render(EmptyState, { title: 'X', variant: 'warning' });
+    expect(html).toContain('border-warning-500/30');
+    expect(html).not.toContain('role="alert"');
+  });
+
+  test('action com href renderiza <a>', async () => {
+    const html = await render(EmptyState, {
+      title: 'X',
+      action: { href: '/cadastro', label: 'Criar conta', 'data-cta': 'empty-cadastro' },
+    });
+    expect(html).toMatch(/<a[^>]*href="\/cadastro"[^>]*data-cta="empty-cadastro"/);
+    expect(html).toContain('Criar conta');
+  });
+
+  test('action sem href renderiza <button>', async () => {
+    const html = await render(EmptyState, {
+      title: 'X',
+      action: { label: 'Tentar de novo' },
+    });
+    expect(html).toMatch(/<button[^>]*type="button"/);
+    expect(html).toContain('Tentar de novo');
+  });
+});
+
+describe('Stepper', () => {
+  const steps = [
+    { id: 'a', label: 'Primeiro' },
+    { id: 'b', label: 'Segundo' },
+    { id: 'c', label: 'Terceiro' },
+  ];
+
+  test('renderiza ol com aria-label', async () => {
+    const html = await render(Stepper, { steps, current: 'a', ariaLabel: 'Wizard' });
+    expect(html).toMatch(/^<ol[^>]*aria-label="Wizard"/);
+  });
+
+  test('cada step tem data-step-id e data-step-state', async () => {
+    const html = await render(Stepper, { steps, current: 'b' });
+    expect(html).toContain('data-step-id="a"');
+    expect(html).toContain('data-step-id="b"');
+    expect(html).toContain('data-step-id="c"');
+    expect(html).toMatch(/data-step-id="a"[^>]*data-step-state="completed"/);
+    expect(html).toMatch(/data-step-id="b"[^>]*data-step-state="current"/);
+    expect(html).toMatch(/data-step-id="c"[^>]*data-step-state="pending"/);
+  });
+
+  test('current step tem aria-current=step', async () => {
+    const html = await render(Stepper, { steps, current: 'b' });
+    expect(html).toMatch(/aria-current="step"[^>]*data-step-id="b"|data-step-id="b"[^>]*aria-current="step"/);
+  });
+
+  test('completed steps mostram check', async () => {
+    const html = await render(Stepper, { steps, current: 'c' });
+    // Ambos a e b sao completed, deveriam ter ✓
+    const completedCount = (html.match(/✓/g) || []).length;
+    expect(completedCount).toBe(2);
+  });
+
+  test('current step usa cor brand-300 ring', async () => {
+    const html = await render(Stepper, { steps, current: 'a' });
+    expect(html).toContain('ring-brand-300');
+  });
+
+  test('pending steps usam cor neutra', async () => {
+    const html = await render(Stepper, { steps, current: 'a' });
+    // b e c sao pending → text-slate-400
+    expect(html).toContain('text-slate-400');
   });
 });
