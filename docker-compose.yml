@@ -1,5 +1,7 @@
-# Resource limits (mem_limit/cpus): syntax legacy v2 — `docker compose up`
-# honra. `deploy.resources.limits` (v3) so vale em swarm e seria ignorado.
+# Resource limits: so `mem_limit` (sintaxe legacy v2 honrada por `docker
+# compose up`). CPU NAO limitado — VPS HostGator tem 1 vCPU; qualquer
+# `cpus: > 1.0` falha com "range of CPUs is from 0.01 to 1.00", e
+# fair-share natural do kernel ja distribui o vCPU entre os containers.
 # Numeros conservadores; ajustar ao monitorar uso real via Prometheus.
 #
 # A6 (network isolation) ainda nao aplicado — ver memo de seguranca: requer
@@ -28,7 +30,6 @@ services:
       retries: 10
     mem_limit: 1g
     mem_reservation: 512m
-    cpus: 1.5
     restart: unless-stopped
 
   postgres:
@@ -48,7 +49,6 @@ services:
       retries: 10
     mem_limit: 512m
     mem_reservation: 256m
-    cpus: 1.0
     restart: unless-stopped
 
   backend:
@@ -79,7 +79,6 @@ services:
       DASHBOARDS_TEMPLATE_DIR: /app/dashboards
     mem_limit: 768m
     mem_reservation: 384m
-    cpus: 1.5
     restart: unless-stopped
 
   frontend:
@@ -110,7 +109,6 @@ services:
       - "127.0.0.1:3000:80"
     mem_limit: 128m
     mem_reservation: 64m
-    cpus: 0.5
     restart: unless-stopped
 
   archiver:
@@ -140,7 +138,6 @@ services:
       - ./backend:/app
     mem_limit: 512m
     mem_reservation: 128m
-    cpus: 1.0
     restart: unless-stopped
 
   email-cron:
@@ -163,7 +160,6 @@ services:
       - ./backend:/app
     mem_limit: 256m
     mem_reservation: 64m
-    cpus: 0.5
     restart: unless-stopped
 
   landing:
@@ -188,7 +184,6 @@ services:
       - "127.0.0.1:3002:80"
     mem_limit: 128m
     mem_reservation: 64m
-    cpus: 0.5
     restart: unless-stopped
 
 secrets:
