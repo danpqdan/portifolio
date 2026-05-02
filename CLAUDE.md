@@ -116,15 +116,16 @@ curl -s http://127.0.0.1:5000/health/influxdb
 
 ## CI / CD (GitHub Actions + self-hosted runner)
 
-Tres workflows em `.github/workflows/`:
+Quatro workflows em `.github/workflows/`:
 
 | Workflow | Trigger | Responsabilidade |
 |---|---|---|
 | `ci.yml` | PR, push em `main` | `docker-compose config`, ansible syntax, frontend lint+test+build, backend lint+test |
 | `prod-regression.yml` | push em paths sensiveis + cron diario 03:17 UTC | smoke via curl: sem debugger Werkzeug, sem `/console`, sem rota sem prefixo `/api`, bundle estatico servido |
-| `deploy.yml` | `workflow_run` CI OK em `main` (+ `workflow_dispatch`) | CD: runner na VPS roda `git reset --hard origin/main` + `docker compose up -d --build --force-recreate --no-deps backend frontend` + health |
+| `deploy.yml` | `workflow_run` CI OK em `main` (+ `workflow_dispatch`) | CD app: runner na VPS roda `git reset --hard origin/main` + `docker compose up -d --build --force-recreate --no-deps backend frontend` + health |
+| `ansible-apply.yml` | push em `main` com path `ark/ansible/**` (+ `workflow_dispatch`) | CD infra: `make -f ark/Makefile ansible-apply` + recreate condicional do backend se `backend/.env` mudou (md5 antes/depois) |
 
-**Limites do CD automatico:** apenas `backend` e `frontend` sao rebuildados. Mudancas em InfluxDB/Postgres, roles Ansible, nginx do host, monitoring ou crowdsec exigem `make -f ark/Makefile ansible-apply` manual.
+**Limites do CD automatico:** roles Ansible / vault / templates de `.env` agora aplicam automaticamente via `ansible-apply.yml`. Os dois workflows compartilham concurrency group `deploy-production` — serializam pra evitar race entre apply (escreve `.env`) e rebuild (recreate de container). Mudancas em outros composes (`ark/monitoring/`, `ark/crowdsec/`) ainda exigem `make monitoring-up` / `crowdsec-up` manual — eles ficam fora do escopo do playbook principal.
 
 **Self-hosted runner:** servico systemd `actions.runner.danpqdan-portifolio.vps-production.service`, roda como `deploy`, label `production-vps`, em `/opt/actions-runner/`. Necessario porque HostGator bloqueia SSH externo em `22022` — runner puxa jobs via HTTPS outbound.
 
@@ -175,9 +176,10 @@ Backend opera com CORS **estatico** por enquanto: lista vem de `cors_origins` em
 Adicionar uma origem hoje:
 
 1. `cd ark/ansible && ansible-vault edit group_vars/all.yml` (ajusta `cors_origins:`).
-2. `make -f ark/Makefile ansible-apply` — regenera `backend/.env`.
-3. `docker compose up -d --force-recreate --no-deps backend` — `restart` nao recarrega `env_file`.
-4. Validar: `docker exec portifolio-backend env | grep CORS_ORIGINS`.
+2. Commitar e abrir PR com a mudanca encriptada do vault. Apos merge em `main`, `ansible-apply.yml` aplica automaticamente e recria o backend (detecta mudanca de `.env` por hash md5).
+3. Validar: `docker exec portifolio-backend env | grep CORS_ORIGINS`.
+
+Hotfix urgente sem PR: `make -f ark/Makefile ansible-apply` na VPS + `docker compose up -d --force-recreate --no-deps backend`. Mas comitar a mudanca do vault depois pra prod nao divergir do repo.
 
 Detalhes do plano de migracao para CORS dinamico (por `sites.dominios_permitidos`, ja previsto no schema do Postgres) em `docs/plano-clientes-ambientes.md` -> "CORS e origens permitidas".
 
