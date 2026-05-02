@@ -27,6 +27,37 @@
     mode: "0644"
   notify: reload nginx
 
+- name: Copiar cloudflare-real-ip.conf (CF Real-IP restoration)
+  copy:
+    src: "{{ playbook_dir }}/../nginx/cloudflare-real-ip.conf"
+    dest: /etc/nginx/snippets/cloudflare-real-ip.conf
+    owner: root
+    group: root
+    mode: "0644"
+  notify: reload nginx
+
+- name: Garantir diretorio de archive (.bak files fora do conf.d ativo)
+  file:
+    path: /etc/nginx/archive
+    state: directory
+    owner: root
+    group: root
+    mode: "0750"
+
+- name: Mover .bak files antigos de /etc/nginx/conf.d/ para /etc/nginx/archive/
+  shell: |
+    set -eu
+    shopt -s nullglob
+    moved=0
+    for f in /etc/nginx/conf.d/*.bak* /etc/nginx/conf.d/*.conf.bak*; do
+      [ -e "$f" ] || continue
+      mv -n "$f" /etc/nginx/archive/ && moved=1
+    done
+    exit 0
+  args:
+    executable: /bin/bash
+  changed_when: false
+
 - name: Renderizar vhost do portifolio
   template:
     src: portifolio.conf.j2

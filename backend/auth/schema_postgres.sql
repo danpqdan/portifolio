@@ -76,3 +76,17 @@ CREATE TABLE IF NOT EXISTS consumo_diario (
     atualizado_em   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     PRIMARY KEY (site_id, dia)
 );
+
+-- Idempotencia de webhooks Stripe — evita aplicar a mesma mudanca de plano
+-- N vezes quando Stripe retenta entregar (timeout/5xx).
+CREATE TABLE IF NOT EXISTS stripe_eventos_processados (
+    event_id        TEXT PRIMARY KEY,
+    processado_em   TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- JWT embed revogados — TTL curto ja limita janela, mas cobre leak/banimento.
+CREATE TABLE IF NOT EXISTS embed_jwt_revogados (
+    jti             TEXT PRIMARY KEY,
+    motivo          TEXT,
+    revogado_em     TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
