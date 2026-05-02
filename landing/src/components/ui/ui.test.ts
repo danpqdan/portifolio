@@ -9,11 +9,14 @@
 import { experimental_AstroContainer as AstroContainer } from 'astro/container';
 import { describe, expect, test } from 'vitest';
 
+import Badge from './Badge.astro';
 import Button from './Button.astro';
 import Card from './Card.astro';
 import FormError from './FormError.astro';
 import Input from './Input.astro';
 import Section from './Section.astro';
+import Tabs from './Tabs.astro';
+import ToastContainer from './ToastContainer.astro';
 
 async function render(component: any, props: Record<string, unknown> = {}, slots?: Record<string, string>) {
   const container = await AstroContainer.create();
@@ -173,5 +176,132 @@ describe('Section', () => {
   test('as="main" troca tag semantica', async () => {
     const html = await render(Section, { as: 'main' }, { default: 'x' });
     expect(html).toMatch(/^<main/);
+  });
+});
+
+describe('Badge', () => {
+  test('renderiza <span> com variant neutral por default', async () => {
+    const html = await render(Badge, {}, { default: 'production' });
+    expect(html).toMatch(/^<span/);
+    expect(html).toContain('bg-slate-800');
+    expect(html).toContain('text-slate-200');
+    expect(html).toContain('production');
+    expect(html).toContain('data-variant="neutral"');
+  });
+
+  test('variant success usa tokens semanticos', async () => {
+    const html = await render(Badge, { variant: 'success' }, { default: 'OK' });
+    expect(html).toContain('bg-success-500/15');
+    expect(html).toContain('text-success-200');
+    expect(html).not.toContain('bg-slate-800');
+  });
+
+  test('variant danger usa danger-*', async () => {
+    const html = await render(Badge, { variant: 'danger' }, { default: 'X' });
+    expect(html).toContain('bg-danger-500/15');
+    expect(html).toContain('ring-danger-500/30');
+  });
+
+  test('size md aumenta padding/text', async () => {
+    const html = await render(Badge, { size: 'md' }, { default: 'X' });
+    expect(html).toContain('text-sm');
+    expect(html).toContain('px-2.5');
+  });
+
+  test('dot=true adiciona indicador circular escondido pra a11y', async () => {
+    const html = await render(Badge, { variant: 'success', dot: true }, { default: 'Ativo' });
+    // Atributos podem vir em qualquer ordem — checar presenca individual
+    expect(html).toContain('aria-hidden="true"');
+    expect(html).toContain('bg-success-400');
+    expect(html).toMatch(/h-1\.5[^"]*w-1\.5[^"]*rounded-full/);
+  });
+
+  test('dot=false (default) nao renderiza indicador', async () => {
+    const html = await render(Badge, {}, { default: 'X' });
+    expect(html).not.toContain('aria-hidden="true"');
+  });
+});
+
+describe('Tabs', () => {
+  const tabs = [
+    { id: 'visao', label: 'Visão geral' },
+    { id: 'keys', label: 'Chaves' },
+    { id: 'plano', label: 'Plano' },
+  ];
+
+  test('renderiza tablist com aria-label', async () => {
+    const html = await render(Tabs, { tabs, ariaLabel: 'Configurações' });
+    expect(html).toMatch(/role="tablist"[^>]*aria-label="Configurações"/);
+  });
+
+  test('cada tab tem role, id, aria-controls e data-tab-id', async () => {
+    const html = await render(Tabs, { tabs });
+    for (const t of tabs) {
+      expect(html).toMatch(new RegExp(`role="tab"[^>]*id="tab-${t.id}"`));
+      expect(html).toMatch(new RegExp(`aria-controls="panel-${t.id}"`));
+      expect(html).toMatch(new RegExp(`data-tab-id="${t.id}"`));
+    }
+  });
+
+  test('primeira tab fica ativa por default (aria-selected=true, tabindex=0)', async () => {
+    const html = await render(Tabs, { tabs });
+    expect(html).toMatch(/id="tab-visao"[^>]*aria-controls="panel-visao"[^>]*aria-selected="true"[^>]*tabindex="0"/);
+    expect(html).toMatch(/id="tab-keys"[^>]*aria-selected="false"[^>]*tabindex="-1"/);
+  });
+
+  test('defaultTab override muda aba ativa', async () => {
+    const html = await render(Tabs, { tabs, defaultTab: 'plano' });
+    expect(html).toMatch(/id="tab-plano"[^>]*aria-selected="true"/);
+    expect(html).toMatch(/id="tab-visao"[^>]*aria-selected="false"/);
+  });
+
+  test('paineis tem role=tabpanel + aria-labelledby coerente', async () => {
+    const html = await render(Tabs, { tabs });
+    for (const t of tabs) {
+      expect(html).toMatch(new RegExp(`role="tabpanel"[^>]*id="panel-${t.id}"[^>]*aria-labelledby="tab-${t.id}"`));
+    }
+  });
+
+  test('paineis inativos vem com hidden', async () => {
+    const html = await render(Tabs, { tabs });
+    // panel-keys e panel-plano estao inativos -> devem ter hidden
+    expect(html).toMatch(/id="panel-keys"[^>]*hidden/);
+    expect(html).toMatch(/id="panel-plano"[^>]*hidden/);
+    // panel-visao ativo nao deve ter hidden (regex negativa simplificada:
+    // verifica que nao ha 'hidden' antes do proximo '>')
+    const visaoMatch = html.match(/id="panel-visao"[^>]*>/);
+    expect(visaoMatch).not.toBeNull();
+    expect(visaoMatch![0]).not.toContain('hidden');
+  });
+
+  test('hashSync=true seta data attr pro script ler', async () => {
+    const html = await render(Tabs, { tabs, hashSync: true });
+    expect(html).toContain('data-hash-sync="true"');
+  });
+
+  test('hashSync default e false', async () => {
+    const html = await render(Tabs, { tabs });
+    expect(html).toContain('data-hash-sync="false"');
+  });
+});
+
+describe('ToastContainer', () => {
+  test('renderiza region com aria-live=polite', async () => {
+    const html = await render(ToastContainer);
+    expect(html).toMatch(/id="ds-toast-region"[^>]*role="region"[^>]*aria-label="Notificações"[^>]*aria-live="polite"/);
+  });
+
+  test('inclui template de toast com slots data-slot', async () => {
+    const html = await render(ToastContainer);
+    expect(html).toContain('id="ds-toast-tpl"');
+    expect(html).toContain('data-slot="icon"');
+    expect(html).toContain('data-slot="message"');
+    expect(html).toContain('data-slot="close"');
+    expect(html).toContain('aria-label="Fechar notificação"');
+  });
+
+  test('region usa pointer-events-none pra nao bloquear cliques', async () => {
+    const html = await render(ToastContainer);
+    expect(html).toMatch(/id="ds-toast-region"[^>]*pointer-events-none/);
   });
 });
