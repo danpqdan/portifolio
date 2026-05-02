@@ -1,5 +1,6 @@
 ---
 import Base from '~/layouts/Base.astro';
+import Breadcrumbs from '~/components/ui/Breadcrumbs.astro';
 ---
 <Base
   title="Baixar arquivos arquivados"
@@ -7,6 +8,13 @@ import Base from '~/layouts/Base.astro';
   noindex={true}
 >
   <section class="mx-auto flex min-h-[70vh] max-w-2xl flex-col px-4 py-16 sm:px-6">
+    <Breadcrumbs
+      items={[
+        { href: '/cliente/painel', label: 'Painel' },
+        { label: 'Exportar dados' },
+      ]}
+      class="mb-4"
+    />
     <div class="card">
       <h1 class="text-2xl font-bold text-white">Arquivo de dados</h1>
       <p class="mt-1 text-sm text-slate-400">
