@@ -8,7 +8,7 @@ import About from './pages/About';
 import ClienteLogin from './pages/ClienteLogin';
 import ClienteMetricas from './pages/ClienteMetricas';
 import EmbedWidget from './pages/EmbedWidget';
-import { iniciarAnalytics, enviarEvento } from '@danpqdan/dsplayground-analytics-sdk';
+import { iniciarAnalytics, enviarEvento, trackConversion } from '@danpqdan/dsplayground-analytics-sdk';
 import { WEBSOCKET_URL, DEBUG_ENABLED, NODE_ENV, PUBLISHABLE_KEY } from './config.js';
 
 const AMBIENTES_SUPORTADOS = ['development', 'test', 'staging', 'production'];
@@ -46,6 +46,9 @@ function Portfolio() {
       enviarEvento('app_carregado', {
         rota_inicial: window.location.pathname,
         viewport_width: window.innerWidth,
+      });
+      trackConversion('portfolio_load', undefined, {
+        rota: window.location.pathname,
       });
     };
     window.addEventListener('torre:started', onTorreStarted);
