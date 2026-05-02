@@ -122,20 +122,20 @@ class StripeWebhookTests(unittest.TestCase):
 
     # 3. subscription.created com metadata valido -> 200, plano atualizado
     def test_subscription_created_atualiza_plano(self):
-        payload = _payload_subscription(self.site.id, "pequeno", "customer.subscription.created")
+        payload = _payload_subscription(self.site.id, "pro", "customer.subscription.created")
         sig = _assinar(payload, self.secret)
         with patch.dict(os.environ, {"STRIPE_WEBHOOK_SECRET": self.secret}):
             resp = self._post(payload, sig)
         self.assertEqual(resp.status_code, 200)
         self.assertTrue(resp.get_json()["received"])
         site_atualizado = self.repo.obter_site(self.site.id)
-        self.assertEqual(site_atualizado.plano, "pequeno")
+        self.assertEqual(site_atualizado.plano, "pro")
 
     # 4. subscription.deleted -> 200, downgrade para free
     def test_subscription_deleted_faz_downgrade_free(self):
-        # Primeiro coloca no plano medio
+        # Primeiro coloca no plano pro
         from billing.plano_service import aplicar_plano
-        aplicar_plano(self.site.id, "medio", self.repo)
+        aplicar_plano(self.site.id, "pro", self.repo)
 
         payload = _payload_deleted(self.site.id)
         sig = _assinar(payload, self.secret)
