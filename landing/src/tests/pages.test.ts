@@ -26,6 +26,7 @@ import Precos from '~/pages/precos.astro';
 import Recursos from '~/pages/recursos.astro';
 import Seguranca from '~/pages/seguranca.astro';
 import Sobre from '~/pages/sobre.astro';
+import Status from '~/pages/status.astro';
 
 async function render(component: any): Promise<string> {
   const container = await AstroContainer.create();
@@ -679,10 +680,49 @@ describe('changelog.astro', () => {
     expect(html).toMatch(/data-cta="changelog-sugerir"/);
   });
 
-  test('lista features dos PRs recentes (Cmd+K, Onboarding, Configuracoes Tabs)', async () => {
+  test('lista features dos PRs recentes (Onboarding, abas, embed)', async () => {
     const html = await render(Changelog);
-    expect(html).toContain('Cmd+K');
     expect(html).toContain('Onboarding');
     expect(html).toContain('abas');
+    expect(html).toContain('Embed iframe');
+  });
+});
+
+describe('status.astro', () => {
+  test('hero com badge de status overall', async () => {
+    const html = await render(Status);
+    expect(html).toContain('id="status-overall-label"');
+    expect(html).toContain('verificando');
+  });
+
+  test('lista dos servicos com pills js-status-pill', async () => {
+    const html = await render(Status);
+    expect(html).toMatch(/<ul[^>]*aria-label="Status dos serviços"/);
+    expect(html).toContain('data-svc-id="api"');
+    expect(html).toContain('data-svc-id="web"');
+    expect(html).toContain('data-svc-id="grafana"');
+    expect(html).toContain('data-svc-id="influxdb"');
+  });
+
+  test('API tem healthUrl pra ping', async () => {
+    const html = await render(Status);
+    expect(html).toMatch(/data-svc-id="api"[^>]*data-svc-health="\/health\/app"/);
+  });
+
+  test('servicos atras de auth tem link de detalhe', async () => {
+    const html = await render(Status);
+    expect(html).toMatch(/data-cta="status-grafana-detalhe"/);
+    expect(html).toMatch(/data-cta="status-embed-detalhe"/);
+  });
+
+  test('CTA pra reportar incidente vai pra issue tracker', async () => {
+    const html = await render(Status);
+    expect(html).toMatch(/data-cta="status-reportar"/);
+    expect(html).toContain('labels=incident');
+  });
+
+  test('elemento de "ultima verificacao" presente pra hidratar', async () => {
+    const html = await render(Status);
+    expect(html).toContain('id="status-ultima-verificacao"');
   });
 });

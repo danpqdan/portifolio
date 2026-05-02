@@ -231,6 +231,17 @@ const platformTabs = [
     const POLL_INTERVAL_MS = 3000;
     const POLL_MAX_ATTEMPTS = 100; // 5min
 
+    /** Atalho pra emitir evento no proprio painel (dogfood — somos cliente
+     *  do nosso produto). __dsplayground vem do Base.astro; se SDK nao
+     *  carregou, no-op silencioso. */
+    type SDKExtras = {
+      enviarEvento?: (nome: string, props: Record<string, unknown>) => void;
+      trackConversion?: (nome: string, valor?: number, props?: Record<string, unknown>) => void;
+    };
+    function sdk(): SDKExtras | null {
+      return ((window as any).__dsplayground as SDKExtras | undefined) ?? null;
+    }
+
     function snippetHtml(key: string): string {
       return `<script src="https://cdn.dsplayground.com.br/sdk/v0/sdk.umd.js"><\/script>
 <script>
@@ -371,6 +382,16 @@ export function AnalyticsProvider({ children }: { children: React.ReactNode }) {
       document.getElementById('onb-sucesso')!.classList.remove('hidden');
       document.getElementById('onb-sucesso-msg')!.textContent =
         `Já tem ${new Intl.NumberFormat('pt-BR').format(eventos)} evento(s) registrado(s) hoje.`;
+
+      // Conversao chave de ativacao — usuario instalou e SDK ta enviando.
+      // Tracked como conversion (estruturada) + evento simples (funil bruto).
+      sdk()?.trackConversion?.('first_event_received', eventos, {
+        polling_attempts: pollCount,
+      });
+      sdk()?.enviarEvento?.('onboarding_primeiro_evento', {
+        eventos_hoje: eventos,
+        tentativas: pollCount,
+      });
       // Marca step 3 como completed visualmente
       const list = stepperWrap.querySelector('ol');
       const item = list?.querySelectorAll<HTMLElement>('li[data-step-id]')[2];
@@ -480,9 +501,15 @@ export function AnalyticsProvider({ children }: { children: React.ReactNode }) {
     }
 
     // Botoes navegacao
-    document.getElementById('onb-next-1')?.addEventListener('click', () => showStep('snippet'));
+    document.getElementById('onb-next-1')?.addEventListener('click', () => {
+      sdk()?.enviarEvento?.('onboarding_step_concluido', { step: 'key' });
+      showStep('snippet');
+    });
     document.getElementById('onb-back-2')?.addEventListener('click', () => showStep('key'));
-    document.getElementById('onb-next-2')?.addEventListener('click', () => showStep('evento'));
+    document.getElementById('onb-next-2')?.addEventListener('click', () => {
+      sdk()?.enviarEvento?.('onboarding_step_concluido', { step: 'snippet' });
+      showStep('evento');
+    });
     document.getElementById('onb-back-3')?.addEventListener('click', () => showStep('snippet'));
 
     // Copiar key
@@ -491,8 +518,10 @@ export function AnalyticsProvider({ children }: { children: React.ReactNode }) {
       try {
         await navigator.clipboard.writeText(publishableKey);
         showToast('Key copiada', { variant: 'success' });
+        sdk()?.enviarEvento?.('onboarding_key_copiada', {});
       } catch {
         showToast('Não consegui acessar a área de transferência', { variant: 'error' });
+        sdk()?.enviarEvento?.('onboarding_key_copia_falhou', {});
       }
     });
 
@@ -503,11 +532,14 @@ export function AnalyticsProvider({ children }: { children: React.ReactNode }) {
         if (!targetId) return;
         const codeEl = document.getElementById(targetId);
         if (!codeEl) return;
+        const plataforma = targetId.replace(/^snippet-/, ''); // snippet-react -> react
         try {
           await navigator.clipboard.writeText(codeEl.textContent ?? '');
           showToast('Snippet copiado', { variant: 'success' });
+          sdk()?.enviarEvento?.('onboarding_snippet_copiado', { plataforma });
         } catch {
           showToast('Não consegui acessar a área de transferência', { variant: 'error' });
+          sdk()?.enviarEvento?.('onboarding_snippet_copia_falhou', { plataforma });
         }
       });
     });
