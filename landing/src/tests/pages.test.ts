@@ -10,10 +10,15 @@
 import { experimental_AstroContainer as AstroContainer } from 'astro/container';
 import { describe, expect, test } from 'vitest';
 
+import Cadastro from '~/pages/cliente/cadastro.astro';
 import Configuracoes from '~/pages/cliente/configuracoes.astro';
+import EsqueciSenha from '~/pages/cliente/esqueci-senha.astro';
+import Exportar from '~/pages/cliente/exportar.astro';
 import Erro404 from '~/pages/404.astro';
+import Login from '~/pages/cliente/login.astro';
 import Erro500 from '~/pages/500.astro';
 import Index from '~/pages/index.astro';
+import Integracoes from '~/pages/integracoes.astro';
 import Onboarding from '~/pages/cliente/onboarding.astro';
 import Painel from '~/pages/cliente/painel.astro';
 import Precos from '~/pages/precos.astro';
@@ -175,11 +180,33 @@ describe('cliente/configuracoes.astro', () => {
     const html = await render(Configuracoes);
     expect(html).toContain('Configurações');
     expect(html).toMatch(/role="tablist"/);
-    // 4 abas
+    // 7 abas (4 ativas + 3 placeholder Fase 2/3)
     expect(html).toMatch(/data-tab-id="visao"/);
     expect(html).toMatch(/data-tab-id="chaves"/);
     expect(html).toMatch(/data-tab-id="plano"/);
+    expect(html).toMatch(/data-tab-id="embeds"/);
+    expect(html).toMatch(/data-tab-id="faturamento"/);
+    expect(html).toMatch(/data-tab-id="time"/);
     expect(html).toMatch(/data-tab-id="perfil"/);
+  });
+
+  test('aba embeds tem CTA pra plano Pro', async () => {
+    const html = await render(Configuracoes);
+    expect(html).toContain('Embeds de gráfico');
+    expect(html).toMatch(/data-cta="config-embeds-pro"/);
+  });
+
+  test('aba faturamento aponta pra issue tracker enquanto Stripe nao integra', async () => {
+    const html = await render(Configuracoes);
+    expect(html).toContain('Self-service em construção');
+    expect(html).toMatch(/data-cta="config-faturamento-issue"/);
+  });
+
+  test('aba time descreve papéis previstos (Owner/Editor/Viewer)', async () => {
+    const html = await render(Configuracoes);
+    expect(html).toContain('Owner');
+    expect(html).toContain('Editor');
+    expect(html).toContain('Viewer');
   });
 
   test('aba visao tem 3 MetricCards (eventos hoje, quota, cardinalidade)', async () => {
@@ -404,5 +431,214 @@ describe('500.astro', () => {
   test('disclosure de issue tracker', async () => {
     const html = await render(Erro500);
     expect(html).toContain('github.com/danpqdan/portifolio/issues');
+  });
+});
+
+describe('integracoes.astro', () => {
+  test('hero "Cole, instale, pronto"', async () => {
+    const html = await render(Integracoes);
+    expect(html).toContain('Cole, instale');
+  });
+
+  test('Tabs com 6 plataformas (html/react/next/astro/wordpress/shopify)', async () => {
+    const html = await render(Integracoes);
+    expect(html).toContain('data-tab-id="html"');
+    expect(html).toContain('data-tab-id="react"');
+    expect(html).toContain('data-tab-id="next"');
+    expect(html).toContain('data-tab-id="astro"');
+    expect(html).toContain('data-tab-id="wordpress"');
+    expect(html).toContain('data-tab-id="shopify"');
+  });
+
+  test('placeholder pk_xxx aparece em todos os snippets', async () => {
+    const html = await render(Integracoes);
+    expect(html).toContain('pk_xxxxxxxxxxxxxxxxxxxx');
+  });
+
+  test('seção REST API lista endpoints chave', async () => {
+    const html = await render(Integracoes);
+    expect(html).toContain('/auth/sdk-token');
+    expect(html).toContain('/cliente/auth/configuracoes');
+    expect(html).toContain('/cliente/exportar/');
+    expect(html).toContain('/health/app');
+  });
+
+  test('seção eventos customizados com exemplo enviarEvento', async () => {
+    const html = await render(Integracoes);
+    expect(html).toContain('enviarEvento');
+    expect(html).toContain('venda_concluida');
+  });
+
+  test('CTAs pra cadastro + GitHub do SDK', async () => {
+    const html = await render(Integracoes);
+    expect(html).toMatch(/data-cta="integracoes-cadastro"/);
+    expect(html).toMatch(/data-cta="integracoes-github"/);
+  });
+});
+
+describe('cliente/esqueci-senha.astro', () => {
+  test('título "Recuperar acesso" e descrição do magic-link', async () => {
+    const html = await render(EsqueciSenha);
+    expect(html).toContain('Recuperar acesso');
+    expect(html).toContain('link mágico');
+  });
+
+  test('input email com label associada (a11y)', async () => {
+    const html = await render(EsqueciSenha);
+    expect(html).toMatch(/<label[^>]*for="email"/);
+    expect(html).toMatch(/<input[^>]*id="email"[^>]*type="email"/);
+  });
+
+  test('botão de submit tem data-cta="form-esqueci-senha"', async () => {
+    const html = await render(EsqueciSenha);
+    expect(html).toContain('data-cta="form-esqueci-senha"');
+  });
+
+  test('link "Lembrou da senha?" aponta pra /cliente/login', async () => {
+    const html = await render(EsqueciSenha);
+    expect(html).toMatch(/href="\/cliente\/login"/);
+    expect(html).toContain('Lembrou da senha?');
+  });
+
+  test('link "Sem conta?" aponta pra /cliente/cadastro', async () => {
+    const html = await render(EsqueciSenha);
+    expect(html).toMatch(/href="\/cliente\/cadastro"/);
+    expect(html).toContain('Sem conta?');
+  });
+
+  test('mensagem de sucesso existe + menciona expiração em 15 minutos', async () => {
+    const html = await render(EsqueciSenha);
+    expect(html).toContain('Link enviado');
+    expect(html).toContain('15 minutos');
+  });
+
+  test('caixa de erro tem role=alert (a11y)', async () => {
+    const html = await render(EsqueciSenha);
+    const alertCount = (html.match(/role="alert"/g) || []).length;
+    expect(alertCount).toBeGreaterThanOrEqual(2);
+  });
+});
+
+describe('cliente/login.astro', () => {
+  test('título "Entrar" com instrução de email', async () => {
+    const html = await render(Login);
+    expect(html).toContain('Entrar');
+    expect(html).toContain('Use o email da sua conta');
+  });
+
+  test('inputs email e senha com labels associadas (a11y)', async () => {
+    const html = await render(Login);
+    expect(html).toMatch(/<label[^>]*for="email"/);
+    expect(html).toMatch(/<input[^>]*id="email"[^>]*type="email"/);
+    expect(html).toMatch(/<label[^>]*for="senha"/);
+    expect(html).toMatch(/<input[^>]*id="senha"[^>]*type="password"/);
+  });
+
+  test('botão submit com data-cta="form-login"', async () => {
+    const html = await render(Login);
+    expect(html).toContain('data-cta="form-login"');
+  });
+
+  test('link "Sem conta?" aponta pra /cliente/cadastro', async () => {
+    const html = await render(Login);
+    expect(html).toMatch(/href="\/cliente\/cadastro"/);
+    expect(html).toContain('Sem conta?');
+  });
+
+  test('link "Esqueci minha senha" com data-cta="link-esqueci-senha"', async () => {
+    const html = await render(Login);
+    expect(html).toMatch(/href="\/cliente\/esqueci-senha"[^>]*data-cta="link-esqueci-senha"/);
+    expect(html).toContain('Esqueci minha senha');
+  });
+
+  test('FormError oculto com role=alert (a11y)', async () => {
+    const html = await render(Login);
+    expect(html).toContain('role="alert"');
+    expect(html).toContain('hidden');
+  });
+});
+
+describe('cliente/cadastro.astro', () => {
+  test('título "Criar conta" com slogan grátis sem cartão', async () => {
+    const html = await render(Cadastro);
+    expect(html).toContain('Criar conta');
+    expect(html).toContain('grátis');
+    expect(html).toContain('Sem cartão de crédito');
+  });
+
+  test('4 inputs: nome_site, slug, email, senha com labels (a11y)', async () => {
+    const html = await render(Cadastro);
+    expect(html).toMatch(/<label[^>]*for="nome_site"/);
+    expect(html).toMatch(/<label[^>]*for="slug"/);
+    expect(html).toMatch(/<label[^>]*for="email"/);
+    expect(html).toMatch(/<label[^>]*for="senha"/);
+  });
+
+  test('slug tem hint sobre URL do painel', async () => {
+    const html = await render(Cadastro);
+    expect(html).toContain('URL do seu painel');
+    expect(html).toContain('letras minúsculas');
+  });
+
+  test('slug tem pattern de validação e limites 3-32', async () => {
+    const html = await render(Cadastro);
+    expect(html).toMatch(/minlength="3"/);
+    expect(html).toMatch(/maxlength="32"/);
+    expect(html).toMatch(/pattern="/);
+  });
+
+  test('botão submit com data-cta="form-cadastro"', async () => {
+    const html = await render(Cadastro);
+    expect(html).toContain('data-cta="form-cadastro"');
+  });
+
+  test('link "Já tem conta?" aponta pra /cliente/login', async () => {
+    const html = await render(Cadastro);
+    expect(html).toMatch(/href="\/cliente\/login"/);
+    expect(html).toContain('Já tem conta?');
+  });
+
+  test('FormError oculto com role=alert (a11y)', async () => {
+    const html = await render(Cadastro);
+    expect(html).toContain('role="alert"');
+    expect(html).toContain('hidden');
+  });
+});
+
+describe('cliente/exportar.astro', () => {
+  test('título "Arquivo de dados" com breadcrumb Painel', async () => {
+    const html = await render(Exportar);
+    expect(html).toContain('Arquivo de dados');
+    expect(html).toMatch(/href="\/cliente\/painel"/);
+    expect(html).toContain('Exportar dados');
+  });
+
+  test('descreve formato .lp.gz e influx write', async () => {
+    const html = await render(Exportar);
+    expect(html).toContain('.lp.gz');
+    expect(html).toContain('influx write');
+  });
+
+  test('lista de arquivos inicialmente oculta + div estado visível', async () => {
+    const html = await render(Exportar);
+    expect(html).toMatch(/id="arquivos"[^>]*hidden/);
+    expect(html).toContain('id="estado"');
+    expect(html).toContain('Carregando');
+  });
+
+  test('caixa de erro com role=alert inicialmente oculta', async () => {
+    const html = await render(Exportar);
+    expect(html).toMatch(/id="erro"[^>]*role="alert"/);
+    expect(html).toContain('hidden');
+  });
+
+  test('nota de validade dos links de 5 minutos', async () => {
+    const html = await render(Exportar);
+    expect(html).toContain('5 minutos');
+  });
+
+  test('marcado noindex (área logada)', async () => {
+    const html = await render(Exportar);
+    expect(html).toContain('noindex');
   });
 });

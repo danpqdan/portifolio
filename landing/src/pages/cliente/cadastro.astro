@@ -44,9 +44,15 @@ import Section from '~/components/ui/Section.astro';
   </Section>
 
   <script>
-    import { cadastrar, urlDashboard } from '~/lib/api';
+    import { cadastrar } from '~/lib/api';
     import { resolverDestinoPosLogin } from '~/lib/redirect';
-    import { API_URL, POS_LOGIN_URL } from '~/config';
+    import { API_URL } from '~/config';
+
+    // Cadastro novo direciona pro /cliente/onboarding (wizard guiado)
+    // em vez do POS_LOGIN_URL — onboarding cobre os primeiros 3 passos
+    // (copy key, snippet, esperar primeiro evento). Login existente
+    // segue caindo em POS_LOGIN_URL via login.astro.
+    const ONBOARDING_URL = '/cliente/onboarding';
 
     const form = document.getElementById('form-cadastro') as HTMLFormElement | null;
     const erroBox = document.getElementById('erro')!;
@@ -96,13 +102,13 @@ import Section from '~/components/ui/Section.astro';
         sdk?.enviarEvento?.('cadastro_concluido', {
           site_id: r.user.site_id, plano: r.site.plano,
         });
+        sdk?.trackSignup?.(r.site.plano || 'free', { source: 'cadastro' });
         // Respeita ?next= se valido (cliente veio de pagina protegida).
-        // Fallback e POS_LOGIN_URL com ?welcome=true pra onboarding inicial
-        // (default = /cliente/configuracoes/, mostra publishable_key + plano
-        // antes de levar pro Painel analitico).
+        // Fallback default e' o wizard de onboarding — cobre key+snippet+
+        // primeiro evento. Cliente que ja sabe usar pula via "Pular onboarding".
         const dest = resolverDestinoPosLogin(
           new URL(window.location.href).searchParams,
-          urlDashboard(POS_LOGIN_URL, { welcome: 'true' }),
+          ONBOARDING_URL,
         );
         window.location.href = dest;
         return;

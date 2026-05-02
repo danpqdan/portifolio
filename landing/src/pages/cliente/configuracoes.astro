@@ -14,16 +14,20 @@
  * na aba certa (link compartilhável dentro do dashboard).
  */
 import Base from '~/layouts/Base.astro';
+import Breadcrumbs from '~/components/ui/Breadcrumbs.astro';
 import Tabs from '~/components/ui/Tabs.astro';
 import Card from '~/components/ui/Card.astro';
 import MetricCard from '~/components/ui/MetricCard.astro';
 import EmptyState from '~/components/ui/EmptyState.astro';
 
 const tabs = [
-  { id: 'visao',  label: 'Visão geral' },
-  { id: 'chaves', label: 'Chaves de API' },
-  { id: 'plano',  label: 'Plano & uso' },
-  { id: 'perfil', label: 'Perfil & segurança' },
+  { id: 'visao',       label: 'Visão geral' },
+  { id: 'chaves',      label: 'Chaves de API' },
+  { id: 'plano',       label: 'Plano & uso' },
+  { id: 'embeds',      label: 'Embeds' },
+  { id: 'faturamento', label: 'Faturamento' },
+  { id: 'time',        label: 'Time' },
+  { id: 'perfil',      label: 'Perfil & segurança' },
 ];
 ---
 <Base
@@ -32,6 +36,13 @@ const tabs = [
   noindex={true}
 >
   <section class="mx-auto max-w-5xl px-4 py-10 sm:px-6">
+    <Breadcrumbs
+      items={[
+        { href: '/cliente/painel', label: 'Painel' },
+        { label: 'Configurações' },
+      ]}
+      class="mb-4"
+    />
     <header class="flex flex-wrap items-end justify-between gap-4">
       <div>
         <h1 class="text-3xl font-bold text-white">Configurações</h1>
@@ -201,7 +212,69 @@ const tabs = [
           </div>
         </Fragment>
 
-        <!-- ABA 4: PERFIL & SEGURANCA -->
+        <!-- ABA 4: EMBEDS (placeholder Fase 2) -->
+        <Fragment slot="embeds">
+          <Card>
+            <h2 class="text-lg font-semibold text-white">Embeds de gráfico</h2>
+            <p class="mt-1 text-sm text-slate-400">
+              Pegue um <code class="rounded bg-slate-800 px-1 py-0.5 font-mono text-xs">&lt;iframe&gt;</code>
+              pronto pra mostrar seus gráficos no seu próprio site. Cada
+              embed roda em <code class="rounded bg-slate-800 px-1 py-0.5 font-mono text-xs">embed.dsplayground.com.br</code>
+              autenticado por JWT curto, sem expor sua publishable key.
+            </p>
+            <div class="mt-6">
+              <EmptyState
+                variant="warning"
+                icon="🖼️"
+                title="Em breve no plano Pro"
+                description="Self-service de embed (gerar iframe + gerenciar domínios autorizados) chega na próxima onda. Hoje rodamos a Fase 1 dogfood internamente. Se você quer ser piloto, fale com a gente."
+                action={{ href: '/precos#pro', label: 'Ver plano Pro', 'data-cta': 'config-embeds-pro' }}
+              />
+            </div>
+          </Card>
+        </Fragment>
+
+        <!-- ABA 5: FATURAMENTO (placeholder ate Stripe/Pagar.me) -->
+        <Fragment slot="faturamento">
+          <Card>
+            <h2 class="text-lg font-semibold text-white">Faturamento</h2>
+            <p class="mt-1 text-sm text-slate-400">
+              Histórico de cobranças, método de pagamento, downgrade/upgrade
+              de plano. Hoje, mudanças passam por contato direto enquanto
+              integramos provedor de pagamento.
+            </p>
+            <div class="mt-6">
+              <EmptyState
+                icon="💳"
+                title="Self-service em construção"
+                description="A integração com Pagar.me/Stripe está sendo finalizada. Enquanto isso, pra trocar de plano ou ajustar cobrança, abra issue ou mande email pra contato@dsplayground.com.br."
+                action={{ href: 'https://github.com/danpqdan/portifolio/issues/new?title=Mudanca+de+plano&labels=comercial', label: 'Abrir solicitação', 'data-cta': 'config-faturamento-issue' }}
+              />
+            </div>
+          </Card>
+        </Fragment>
+
+        <!-- ABA 6: TIME (placeholder Fase 3) -->
+        <Fragment slot="time">
+          <Card>
+            <h2 class="text-lg font-semibold text-white">Time</h2>
+            <p class="mt-1 text-sm text-slate-400">
+              Convide membros pra ver/editar o painel da sua conta. Papéis
+              previstos: <strong class="text-slate-200">Owner</strong> (controle total),
+              <strong class="text-slate-200">Editor</strong> (configura) e
+              <strong class="text-slate-200">Viewer</strong> (só leitura).
+            </p>
+            <div class="mt-6">
+              <EmptyState
+                icon="👥"
+                title="Convite de time vem na Fase 3"
+                description="Hoje cada conta tem um único usuário. Convites com papéis e auditoria por membro chegam quando virarmos GA. Se sua empresa precisa antes, fala com a gente — caso a caso a gente flexibiliza."
+              />
+            </div>
+          </Card>
+        </Fragment>
+
+        <!-- ABA 7: PERFIL & SEGURANCA -->
         <Fragment slot="perfil">
           <div class="grid gap-6 md:grid-cols-2">
             <Card>
