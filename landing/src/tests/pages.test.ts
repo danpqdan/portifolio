@@ -11,6 +11,8 @@ import { experimental_AstroContainer as AstroContainer } from 'astro/container';
 import { describe, expect, test } from 'vitest';
 
 import Configuracoes from '~/pages/cliente/configuracoes.astro';
+import Erro404 from '~/pages/404.astro';
+import Erro500 from '~/pages/500.astro';
 import Index from '~/pages/index.astro';
 import Onboarding from '~/pages/cliente/onboarding.astro';
 import Painel from '~/pages/cliente/painel.astro';
@@ -362,5 +364,45 @@ describe('sobre.astro', () => {
     const html = await render(Sobre);
     expect(html).toMatch(/data-cta="sobre-cadastro"/);
     expect(html).toMatch(/data-cta="sobre-recursos"/);
+  });
+});
+
+describe('404.astro', () => {
+  test('mostra 404 grande + h1 + CTA pra home', async () => {
+    const html = await render(Erro404);
+    expect(html).toContain('404');
+    expect(html).toContain('Essa página não existe');
+    expect(html).toMatch(/data-cta="404-home"/);
+  });
+
+  test('marcado noindex', async () => {
+    const html = await render(Erro404);
+    expect(html).toContain('noindex');
+  });
+
+  test('lista links de navegacao alternativa', async () => {
+    const html = await render(Erro404);
+    expect(html).toMatch(/href="\/recursos"/);
+    expect(html).toMatch(/href="\/seguranca"/);
+    expect(html).toMatch(/href="\/sobre"/);
+  });
+});
+
+describe('500.astro', () => {
+  test('mostra 500 + h1 + botao recarregar', async () => {
+    const html = await render(Erro500);
+    expect(html).toContain('500');
+    expect(html).toContain('Algo travou aqui');
+    expect(html).toMatch(/id="recarregar"/);
+  });
+
+  test('marcado noindex', async () => {
+    const html = await render(Erro500);
+    expect(html).toContain('noindex');
+  });
+
+  test('disclosure de issue tracker', async () => {
+    const html = await render(Erro500);
+    expect(html).toContain('github.com/danpqdan/portifolio/issues');
   });
 });
