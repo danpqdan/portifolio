@@ -14,6 +14,7 @@ nao puxar dependencia (MaxMind ~70MB).
 """
 from __future__ import annotations
 
+import hashlib
 import re
 from typing import Optional
 from urllib.parse import urlparse
@@ -107,3 +108,53 @@ def extrair_pais(cf_ipcountry: Optional[str]) -> str:
     if not valor or not _RE_PAIS.match(valor):
         return "unknown"
     return valor
+
+
+# --------------------- user_bucket / group_bucket ---------------------
+
+# Decisao D1 (roadmap SDK v0.4 — opcao C hibrida):
+#   user_id explode cardinalidade se virar tag (1M users = 1M series, mata
+#   bucket Influx OSS). Como field nao filtra eficiente. Solucao: bucket
+#   finito (256) como tag + user_id real como field.
+#
+#   Retention/cohort query: filter(r.user_bucket == "X") faz pre-filter
+#   barato, depois group(columns: ["user_id"]) resolve colisoes.
+#
+#   Namespace separado pra group_bucket (sufixo no input) garante que
+#   user_id "X" e group_id "X" caem em buckets diferentes — evita
+#   correlacao falsa entre user e org de mesmo nome.
+
+_BUCKET_TOTAL = 256
+
+
+def _calcular_bucket(valor: Optional[str], namespace: str) -> Optional[str]:
+    """sha256(namespace:valor) -> int -> mod 256 -> 'b000'..'b255'.
+
+    Retorna None se valor ausente/vazio/whitespace — backend usa None pra
+    decidir nao adicionar a tag no Point Influx (nao mandar 'bnone' tag).
+    """
+    if valor is None:
+        return None
+    limpo = valor.strip()
+    if not limpo:
+        return None
+    chave = f"{namespace}:{limpo}".encode("utf-8")
+    digest = hashlib.sha256(chave).digest()
+    # Pegamos os primeiros 8 bytes como inteiro big-endian. Mod 256 e
+    # equivalente ao ultimo byte, mas usar 8 bytes torna a substituicao
+    # do divisor (ex.: 1024 buckets) trivial sem perda de uniformidade.
+    n = int.from_bytes(digest[:8], "big") % _BUCKET_TOTAL
+    return f"b{n:03d}"
+
+
+def derivar_user_bucket(user_id: Optional[str]) -> Optional[str]:
+    """Bucket determinístico do user_id pra retention/cohort.
+
+    Ver _calcular_bucket pra detalhes do algoritmo.
+    """
+    return _calcular_bucket(user_id, namespace="user")
+
+
+def derivar_group_bucket(group_id: Optional[str]) -> Optional[str]:
+    """Bucket determinístico do group_id (org B2B) pra pivot por organizacao."""
+    return _calcular_bucket(group_id, namespace="group")
