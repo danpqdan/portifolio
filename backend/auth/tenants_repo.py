@@ -71,6 +71,7 @@ class TenantsRepo(Protocol):
     def obter_site_por_bucket(self, bucket_name: str) -> Optional[Site]: ...
     def listar_sites(self) -> list[Site]: ...
     def atualizar_status_site(self, site_id: str, status: str) -> None: ...
+    def atualizar_plano(self, site_id: str, plano: str) -> None: ...
     def definir_bucket_name(self, site_id: str, bucket_name: str) -> None: ...
 
     # dominios
@@ -194,6 +195,13 @@ class SqliteTenantsRepo:
             conn.execute(
                 "UPDATE sites SET status = ?, atualizado_em = datetime('now') WHERE id = ?",
                 (status, site_id),
+            )
+
+    def atualizar_plano(self, site_id, plano):
+        with self._lock, self._connect() as conn:
+            conn.execute(
+                "UPDATE sites SET plano = ?, atualizado_em = datetime('now') WHERE id = ?",
+                (plano, site_id),
             )
 
     def definir_bucket_name(self, site_id, bucket_name):
@@ -462,6 +470,13 @@ class PostgresTenantsRepo:
             cur.execute(
                 "UPDATE sites SET status = %s, atualizado_em = NOW() WHERE id = %s",
                 (status, site_id),
+            )
+
+    def atualizar_plano(self, site_id, plano):
+        with self._conn() as conn, conn.cursor() as cur:
+            cur.execute(
+                "UPDATE sites SET plano = %s, atualizado_em = NOW() WHERE id = %s",
+                (plano, site_id),
             )
 
     def definir_bucket_name(self, site_id, bucket_name):
