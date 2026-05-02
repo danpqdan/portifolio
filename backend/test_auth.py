@@ -197,7 +197,7 @@ class AuthRouteTests(unittest.TestCase):
         self.assertEqual(data["status"], "success")
         self.assertIn("token", data)
         self.assertEqual(data["expires_in"], 300)
-        self.assertEqual(data["server_schema_version"], "1.1")
+        self.assertEqual(data["server_schema_version"], "1.2")
 
         # token emitido e valido
         claims = self.jwt_service.verificar(data["token"])

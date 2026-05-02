@@ -23,6 +23,8 @@ from auth.sites_cache import SitesCache  # noqa: E402
 from auth.tenants_repo import SqliteTenantsRepo  # noqa: E402
 from ingestao.cardinalidade import TrackerCardinalidade  # noqa: E402
 from ingestao.derivacoes import (  # noqa: E402
+    derivar_group_bucket,
+    derivar_user_bucket,
     detectar_device_type,
     extrair_pais,
     extrair_referrer_dominio,
@@ -152,6 +154,82 @@ class ExtrairPaisTests(unittest.TestCase):
         self.assertEqual(extrair_pais(None), "unknown")
         self.assertEqual(extrair_pais(""), "unknown")
         self.assertEqual(extrair_pais("  "), "unknown")
+
+
+# =============================================================
+# derivar_user_bucket / derivar_group_bucket
+# =============================================================
+
+class DerivarUserBucketTests(unittest.TestCase):
+    """Bucket finito (256) que viaja como tag pra retention/cohort sem
+    estourar cardinalidade. Hash sha256 mod 256, formatado b000..b255.
+    Decisao D1 — opcao C hibrida (sec roadmap SDK v0.4)."""
+
+    def test_deterministico(self):
+        # Mesmo input -> mesmo bucket. Garantia core: queries Flux que
+        # filtram por user_bucket precisam achar todos os pontos do user.
+        a = derivar_user_bucket("user-42")
+        b = derivar_user_bucket("user-42")
+        self.assertEqual(a, b)
+
+    def test_formato_b000_b255(self):
+        bucket = derivar_user_bucket("alguem")
+        self.assertIsNotNone(bucket)
+        self.assertRegex(bucket, r"^b\d{3}$")
+        n = int(bucket[1:])
+        self.assertGreaterEqual(n, 0)
+        self.assertLessEqual(n, 255)
+
+    def test_none_retorna_none(self):
+        # Envelope sem user_id -> bucket None (nao str "bnone" ou "b000").
+        # Backend usa None pra decidir nao adicionar a tag no Point.
+        self.assertIsNone(derivar_user_bucket(None))
+
+    def test_string_vazia_retorna_none(self):
+        self.assertIsNone(derivar_user_bucket(""))
+
+    def test_apenas_whitespace_retorna_none(self):
+        # Defensiva: cliente pode mandar "   " — tratamos como ausente.
+        self.assertIsNone(derivar_user_bucket("   "))
+
+    def test_unicode_aceito(self):
+        # user_id pode conter qualquer string opaca (cliente pode hashear).
+        bucket = derivar_user_bucket("usuário-açaí-🍓")
+        self.assertIsNotNone(bucket)
+        self.assertRegex(bucket, r"^b\d{3}$")
+
+    def test_distribuicao_uniforme(self):
+        # 1000 ids sequenciais -> nenhum bucket fica >2x a media (4 esperado).
+        # Sanity check do hash, nao prova rigorosa — falsos negativos sao raros.
+        from collections import Counter
+        contagem = Counter(derivar_user_bucket(f"user-{i}") for i in range(1000))
+        media = 1000 / 256
+        maior = max(contagem.values())
+        self.assertLess(maior, media * 4,
+                        f"bucket mais cheio: {maior}, esperado <{media * 4:.1f}")
+        # Pelo menos 200 buckets distintos em 1000 amostras.
+        self.assertGreater(len(contagem), 200)
+
+
+class DerivarGroupBucketTests(unittest.TestCase):
+    """Espelho de derivar_user_bucket pra org_id. Mesmo algoritmo, namespace
+    separado — group_id 'X' nao precisa cair no mesmo bucket que user_id 'X'."""
+
+    def test_deterministico(self):
+        a = derivar_group_bucket("acme-corp")
+        b = derivar_group_bucket("acme-corp")
+        self.assertEqual(a, b)
+
+    def test_formato_b000_b255(self):
+        bucket = derivar_group_bucket("alguma-org")
+        self.assertIsNotNone(bucket)
+        self.assertRegex(bucket, r"^b\d{3}$")
+
+    def test_none_retorna_none(self):
+        self.assertIsNone(derivar_group_bucket(None))
+
+    def test_string_vazia_retorna_none(self):
+        self.assertIsNone(derivar_group_bucket(""))
 
 
 # =============================================================
