@@ -69,7 +69,7 @@ class CheckoutTests(unittest.TestCase):
                     sess["site_id"] = "site-abc"
                 resp = self.client.post(
                     "/billing/checkout",
-                    data=json.dumps({"plano": "pequeno"}),
+                    data=json.dumps({"plano": "pro"}),
                     content_type="application/json",
                 )
         self.assertEqual(resp.status_code, 503)
@@ -80,7 +80,7 @@ class CheckoutTests(unittest.TestCase):
         with patch.dict(os.environ, {"STRIPE_API_KEY": "sk_test_xxx"}, clear=False):
             resp = self.client.post(
                 "/billing/checkout",
-                data=json.dumps({"plano": "pequeno"}),
+                data=json.dumps({"plano": "pro"}),
                 content_type="application/json",
             )
         self.assertEqual(resp.status_code, 401)
@@ -120,7 +120,7 @@ class CheckoutTests(unittest.TestCase):
                 sess["site_id"] = "site-abc"
             resp = self.client.post(
                 "/billing/checkout",
-                data=json.dumps({"plano": "pequeno"}),
+                data=json.dumps({"plano": "pro"}),
                 content_type="application/json",
             )
         self.assertEqual(resp.status_code, 503)
@@ -128,7 +128,7 @@ class CheckoutTests(unittest.TestCase):
 
     # 6. Sucesso -> 200 com checkout_url
     def test_200_checkout_url_retornado(self):
-        price_ids = json.dumps({"pequeno": "price_pq", "medio": "price_md", "grande": "price_gd"})
+        price_ids = json.dumps({"pro": "price_pro"})
         env = {k: v for k, v in os.environ.items()}
         env["STRIPE_API_KEY"] = "sk_test_xxx"
         env["STRIPE_PRICE_IDS"] = price_ids
@@ -141,7 +141,7 @@ class CheckoutTests(unittest.TestCase):
                     sess["site_id"] = "site-abc"
                 resp = self.client.post(
                     "/billing/checkout",
-                    data=json.dumps({"plano": "pequeno"}),
+                    data=json.dumps({"plano": "pro"}),
                     content_type="application/json",
                 )
 
@@ -153,13 +153,13 @@ class CheckoutTests(unittest.TestCase):
         mock_fn.assert_called_once()
         call_kwargs = mock_fn.call_args
         self.assertEqual(call_kwargs[0][0], "sk_test_xxx")   # api_key
-        self.assertEqual(call_kwargs[0][1], "price_pq")      # price_id
+        self.assertEqual(call_kwargs[0][1], "price_pro")     # price_id
         self.assertEqual(call_kwargs[0][2], "site-abc")       # site_id
-        self.assertEqual(call_kwargs[0][3], "pequeno")        # plano
+        self.assertEqual(call_kwargs[0][3], "pro")            # plano
 
     # 7. _criar_stripe_session lanca HTTPError -> 502
     def test_502_stripe_erro(self):
-        price_ids = json.dumps({"pequeno": "price_pq", "medio": "price_md", "grande": "price_gd"})
+        price_ids = json.dumps({"pro": "price_pro"})
         env = {k: v for k, v in os.environ.items()}
         env["STRIPE_API_KEY"] = "sk_test_xxx"
         env["STRIPE_PRICE_IDS"] = price_ids
@@ -178,7 +178,7 @@ class CheckoutTests(unittest.TestCase):
                     sess["site_id"] = "site-abc"
                 resp = self.client.post(
                     "/billing/checkout",
-                    data=json.dumps({"plano": "pequeno"}),
+                    data=json.dumps({"plano": "pro"}),
                     content_type="application/json",
                 )
 
