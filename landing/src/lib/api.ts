@@ -233,6 +233,56 @@ export function solicitarMagicLink(
   );
 }
 
+/**
+ * Solicita link de recuperacao de senha (tipo='reset'). Diferente do magic-link
+ * de login: o link no email nao entra direto — abre form de nova senha que
+ * chama `confirmarRecuperarSenha` quando submetido.
+ *
+ * Resposta anti-enum identica a solicitarMagicLink (sempre 200 / 429).
+ */
+export function solicitarRecuperarSenha(
+  payload: SolicitarMagicLinkPayload,
+  opts: ApiOptions,
+): Promise<Result<MagicLinkOk, MagicLinkErrorCode>> {
+  return postJson<MagicLinkOk, MagicLinkErrorCode>(
+    `${opts.apiUrl}/cliente/auth/recuperar-senha/solicitar`,
+    payload,
+    opts.fetchImpl ?? fetch,
+  );
+}
+
+export interface ConfirmarRecuperarSenhaPayload {
+  token: string;
+  nova_senha: string;
+}
+
+export type RecuperarSenhaErrorCode =
+  | 'TOKEN_AUSENTE'
+  | 'TOKEN_INVALIDO'
+  | 'SENHA_CURTA'
+  | 'REDE'
+  | 'INESPERADO';
+
+export interface RecuperarSenhaOk {
+  user: { id: string; site_id: string; email: string; papel: string } | null;
+  redirect: string;
+}
+
+/**
+ * Confirma recuperacao de senha: consome token + troca senha + cria sessao.
+ * Body: { token, nova_senha }. Cookie de sessao vem no Set-Cookie.
+ */
+export function confirmarRecuperarSenha(
+  payload: ConfirmarRecuperarSenhaPayload,
+  opts: ApiOptions,
+): Promise<Result<RecuperarSenhaOk, RecuperarSenhaErrorCode>> {
+  return postJson<RecuperarSenhaOk, RecuperarSenhaErrorCode>(
+    `${opts.apiUrl}/cliente/auth/recuperar-senha/confirmar`,
+    payload,
+    opts.fetchImpl ?? fetch,
+  );
+}
+
 async function patchJson<TOk, TErr extends string>(
   url: string,
   body: unknown,

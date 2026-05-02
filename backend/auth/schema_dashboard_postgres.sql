@@ -44,7 +44,24 @@ CREATE TABLE IF NOT EXISTS clientes_magic_links (
     expira_em       TIMESTAMPTZ NOT NULL,   -- 15min apos criacao
     consumido_em    TIMESTAMPTZ,
     ip_solicitacao  TEXT,
+    -- tipo: 'login' (entra direto, comportamento legado) ou 'reset' (redireciona
+    -- pra form de nova senha; consumir nao cria sessao). Default 'login' por
+    -- compat com magic-links pre-2026-05-02.
+    tipo            TEXT NOT NULL DEFAULT 'login' CHECK (tipo IN ('login','reset')),
     criada_em       TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+-- Migracao idempotente: adiciona coluna se DB legado nao tem.
+ALTER TABLE clientes_magic_links ADD COLUMN IF NOT EXISTS tipo TEXT NOT NULL DEFAULT 'login';
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.check_constraints
+        WHERE constraint_name LIKE '%clientes_magic_links_tipo%'
+    ) THEN
+        ALTER TABLE clientes_magic_links
+            ADD CONSTRAINT clientes_magic_links_tipo_check CHECK (tipo IN ('login','reset'));
+    END IF;
+END$$;
 
 CREATE INDEX IF NOT EXISTS idx_clientes_magic_user ON clientes_magic_links(user_id);
