@@ -4,6 +4,7 @@ import SeoHead from '~/components/SeoHead.astro';
 import Nav from '~/components/Nav.astro';
 import Footer from '~/components/Footer.astro';
 import ToastContainer from '~/components/ui/ToastContainer.astro';
+import CommandPalette from '~/components/ui/CommandPalette.astro';
 import { PUBLISHABLE_KEY, API_URL, DEBUG } from '~/config';
 
 interface Props {
@@ -29,12 +30,8 @@ const sdkConfig = {
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="theme-color" content="#020617" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <link rel="apple-touch-icon" href="/favicon.svg" />
-    <link rel="manifest" href="/manifest.json" />
-    <link rel="preconnect" href={API_URL} crossorigin />
-    <link rel="dns-prefetch" href={API_URL} />
+    <link rel="preconnect" href={API_URL} />
     <SeoHead title={title} description={description} canonical={canonical} noindex={noindex} />
   </head>
   <body class="min-h-screen bg-slate-950 text-slate-100 font-sans antialiased">
@@ -45,6 +42,7 @@ const sdkConfig = {
     <Footer />
 
     <ToastContainer />
+    <CommandPalette />
 
     <script is:inline type="application/json" id="ds-config" set:html={JSON.stringify(sdkConfig)} />
 
