@@ -187,5 +187,125 @@ class ValidadorPayloadTest(unittest.TestCase):
         self.assertIn("ambiente", erros)
 
 
+class ValidadorUserIdGroupIdTests(unittest.TestCase):
+    """Schema 1.2 (SDK v0.4): user_id e group_id sao opcionais no envelope.
+
+    Se presentes:
+      - tipo string
+      - 1..256 chars
+      - charset: alfanum + `_-:.@` (`@` aceito porque cliente pode hashear
+        email parcial; nao validamos PII server-side, so charset).
+    Se ausentes ou null: payload aceito (forward-compat — SDK 1.1 nao manda).
+    """
+
+    def test_aceita_user_id_valido(self):
+        data = payload_valido()
+        data["user_id"] = "u-42"
+        ok, erros = validar_payload(data)
+        self.assertTrue(ok)
+        self.assertEqual(erros, [])
+
+    def test_aceita_group_id_valido(self):
+        data = payload_valido()
+        data["group_id"] = "acme-corp"
+        ok, erros = validar_payload(data)
+        self.assertTrue(ok)
+        self.assertEqual(erros, [])
+
+    def test_aceita_ambos(self):
+        data = payload_valido()
+        data["user_id"] = "u-42"
+        data["group_id"] = "acme-corp"
+        ok, erros = validar_payload(data)
+        self.assertTrue(ok)
+        self.assertEqual(erros, [])
+
+    def test_aceita_user_id_ausente(self):
+        # Forward-compat — SDK 1.1 nao manda user_id; nao deve quebrar.
+        data = payload_valido()
+        ok, erros = validar_payload(data)
+        self.assertTrue(ok)
+        self.assertNotIn("user_id", erros)
+
+    def test_aceita_user_id_null(self):
+        # SDK pode mandar null explicito apos reset() — equivalente a ausente.
+        data = payload_valido()
+        data["user_id"] = None
+        ok, erros = validar_payload(data)
+        self.assertTrue(ok)
+
+    def test_aceita_user_id_max_256_chars(self):
+        data = payload_valido()
+        data["user_id"] = "u" * 256
+        ok, erros = validar_payload(data)
+        self.assertTrue(ok)
+
+    def test_rejeita_user_id_acima_de_256(self):
+        data = payload_valido()
+        data["user_id"] = "u" * 257
+        ok, erros = validar_payload(data)
+        self.assertFalse(ok)
+        self.assertIn("user_id", erros)
+
+    def test_rejeita_user_id_string_vazia(self):
+        # String vazia explicita e diferente de ausente — sinaliza bug do
+        # cliente. Rejeita pra detectar cedo.
+        data = payload_valido()
+        data["user_id"] = ""
+        ok, erros = validar_payload(data)
+        self.assertFalse(ok)
+        self.assertIn("user_id", erros)
+
+    def test_rejeita_user_id_nao_string(self):
+        data = payload_valido()
+        data["user_id"] = 42
+        ok, erros = validar_payload(data)
+        self.assertFalse(ok)
+        self.assertIn("user_id", erros)
+
+    def test_rejeita_user_id_com_quebra_de_linha(self):
+        # Defesa contra log injection (\n no meio do user_id quebra parsing
+        # de logs estruturados).
+        data = payload_valido()
+        data["user_id"] = "user\n42"
+        ok, erros = validar_payload(data)
+        self.assertFalse(ok)
+        self.assertIn("user_id", erros)
+
+    def test_rejeita_user_id_com_caractere_proibido(self):
+        # Charset: [A-Za-z0-9_\-:.@]. Espaco/acento/symbol fora.
+        data = payload_valido()
+        for invalido in ["user 42", "us€r", "u/42", "u<42>"]:
+            with self.subTest(valor=invalido):
+                data["user_id"] = invalido
+                ok, erros = validar_payload(data)
+                self.assertFalse(ok)
+                self.assertIn("user_id", erros)
+
+    def test_aceita_user_id_charset_completo(self):
+        # Cobre as classes permitidas: alfanum + _ - : . @
+        data = payload_valido()
+        for valido in ["abc", "ABC", "123", "u_42", "u-42", "u:42", "u.42",
+                       "user@hash.local", "0aF_-:.@"]:
+            with self.subTest(valor=valido):
+                data["user_id"] = valido
+                ok, erros = validar_payload(data)
+                self.assertTrue(ok, f"esperado aceitar {valido!r}, erros={erros}")
+
+    def test_rejeita_group_id_acima_de_256(self):
+        data = payload_valido()
+        data["group_id"] = "g" * 257
+        ok, erros = validar_payload(data)
+        self.assertFalse(ok)
+        self.assertIn("group_id", erros)
+
+    def test_rejeita_group_id_charset(self):
+        data = payload_valido()
+        data["group_id"] = "org com espaco"
+        ok, erros = validar_payload(data)
+        self.assertFalse(ok)
+        self.assertIn("group_id", erros)
+
+
 if __name__ == "__main__":
     unittest.main()
