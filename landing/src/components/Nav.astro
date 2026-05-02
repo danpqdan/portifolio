@@ -53,18 +53,27 @@ const publicos = [
         </div>
       </div>
 
-      {/* Logado: Painel + Configuracoes + Sair. Comeca hidden pra nao
-          piscar pro visitante deslogado (caso dominante). */}
+      {/* Logado: Painel (interno) + Configuracoes + Sair. Comeca hidden pra
+          nao piscar pro visitante deslogado (caso dominante). DASHBOARD_URL
+          (Grafana externo) sai como botao primario; /cliente/painel e' o
+          home interno. */}
       <div id="nav-logado" class="hidden">
         <div class="flex items-center gap-1 sm:gap-3">
           <a
-            href="/cliente/configuracoes/"
+            href="/cliente/painel"
             class:list={[
               'rounded-md px-3 py-1.5 text-sm transition',
+              path === '/cliente/painel' ? 'text-white' : 'text-slate-300 hover:text-white',
+            ]}
+          >Painel</a>
+          <a
+            href="/cliente/configuracoes"
+            class:list={[
+              'hidden rounded-md px-3 py-1.5 text-sm transition sm:inline-block',
               path.startsWith('/cliente/configuracoes') ? 'text-white' : 'text-slate-300 hover:text-white',
             ]}
           >Configurações</a>
-          <a href={DASHBOARD_URL} class="btn-primary !py-1.5 !px-4 ml-1" data-cta="nav-painel">Painel</a>
+          <a href={DASHBOARD_URL} class="btn-primary !py-1.5 !px-4 ml-1" data-cta="nav-grafana">Métricas</a>
           <button
             id="nav-logout"
             type="button"
