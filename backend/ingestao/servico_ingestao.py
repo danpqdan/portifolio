@@ -11,6 +11,7 @@ from typing import Any, Dict, List, Optional
 
 from dto.Dados import HeatmapDados
 from influxdb_service import (
+    create_conversion_events_from_heatmap,
     create_custom_events_from_heatmap,
     create_temporal_metric_from_heatmap,
     create_web_vitals_from_heatmap,
@@ -613,6 +614,20 @@ class ServicoIngestao:
                 emitir_log(logger, logging.INFO, 'persistido_customevent',
                            session_id=session_id, id_registro=id_registro, app_id=app_id,
                            nome=custom.nome, bucket=bucket)
+
+            conversoes = create_conversion_events_from_heatmap(
+                session_id=session_id,
+                heatmap_data=data,
+                user_agent=user_agent,
+                ip_address=ip_address,
+                **derivadas,
+            )
+            for conv in conversoes:
+                self.influxdb_service.write_conversion_event_async(conv, **kw)
+                _registrar_metric_evento_recebido("conversion_event")
+                emitir_log(logger, logging.INFO, 'persistido_conversion',
+                           session_id=session_id, id_registro=id_registro, app_id=app_id,
+                           nome=conv.nome, tipo=conv.tipo, bucket=bucket)
         except Exception as erro:
             emitir_log(logger, logging.ERROR, 'erro_persistencia',
                        session_id=session_id, id_registro=id_registro, app_id=app_id,

@@ -6,17 +6,22 @@
     <priority>1.0</priority>
   </url>
   <url>
+    <loc>https://dsplayground.com.br/recursos</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.9</priority>
+  </url>
+  <url>
     <loc>https://dsplayground.com.br/precos</loc>
     <changefreq>monthly</changefreq>
-    <priority>0.8</priority>
+    <priority>0.9</priority>
   </url>
   <url>
-    <loc>https://dsplayground.com.br/cliente/cadastro</loc>
+    <loc>https://dsplayground.com.br/seguranca</loc>
     <changefreq>monthly</changefreq>
-    <priority>0.6</priority>
+    <priority>0.7</priority>
   </url>
   <url>
-    <loc>https://dsplayground.com.br/cliente/login</loc>
+    <loc>https://dsplayground.com.br/sobre</loc>
     <changefreq>monthly</changefreq>
     <priority>0.6</priority>
   </url>
