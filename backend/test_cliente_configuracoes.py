@@ -210,9 +210,12 @@ class BillingPlanosIntegracaoTests(unittest.TestCase):
         self.assertEqual(r.status_code, 200)
         body = r.get_json()
         self.assertIn("planos", body)
-        self.assertEqual(len(body["planos"]), 4)
+        # PLANO_DEFAULTS expoe 2 planos (free, pro). Os legados
+        # pequeno/medio/grande foram consolidados em pro durante o
+        # refactor da Stripe billing.
+        self.assertEqual(len(body["planos"]), 2)
         ids = [p["id"] for p in body["planos"]]
-        self.assertEqual(ids, ["free", "pequeno", "medio", "grande"])
+        self.assertEqual(ids, ["free", "pro"])
 
 
 if __name__ == "__main__":
