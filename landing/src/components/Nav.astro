@@ -2,10 +2,13 @@
 import { SITE_NAME, DASHBOARD_URL } from '~/config';
 const path = Astro.url.pathname;
 
-// Items "publicos" — sempre aparecem.
+// Items "publicos" — sempre aparecem. Em mobile, alguns ficam escondidos
+// (overflow nao cabe — Recursos/Segurança aparecem em sm+ apenas).
 const publicos = [
-  { href: '/', label: 'Início' },
-  { href: '/precos', label: 'Preços' },
+  { href: '/', label: 'Início', mobileHidden: false },
+  { href: '/recursos', label: 'Recursos', mobileHidden: true },
+  { href: '/precos', label: 'Preços', mobileHidden: false },
+  { href: '/seguranca', label: 'Segurança', mobileHidden: true },
 ];
 
 // Items mostrados condicionalmente — Nav comeca com `nav-deslogado` visivel
@@ -25,6 +28,7 @@ const publicos = [
           href={item.href}
           class:list={[
             'rounded-md px-3 py-1.5 text-sm transition',
+            item.mobileHidden && 'hidden sm:inline-block',
             path === item.href ? 'text-white' : 'text-slate-300 hover:text-white',
           ]}
         >
