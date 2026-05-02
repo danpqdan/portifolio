@@ -163,9 +163,14 @@ class SessaoService:
     # ---------- magic-links ----------
 
     def solicitar_magic_link(
-        self, email: str, *, ip: Optional[str] = None,
+        self, email: str, *, ip: Optional[str] = None, tipo: str = "login",
     ) -> Optional[MagicLinkCriado]:
         """Gera magic-link se o email existir e rate-limit permitir.
+
+        `tipo`:
+          - 'login' (default, legado): magic-link entra direto no dashboard.
+          - 'reset': magic-link redireciona pra form de nova senha.
+                     Sessao so e criada apos POST /confirmar com nova_senha.
 
         Retorna `None` se o email nao existe (para nao vazar existencia — o
         endpoint sempre responde 200). Se rate-limit estourar, levanta
@@ -176,7 +181,8 @@ class SessaoService:
         if user is None or not user.ativo:
             return None
 
-        # rate-limit por user
+        # rate-limit por user (compartilhado entre tipos: brute force pra
+        # 'reset' tambem cega rate-limit de 'login' e vice-versa)
         qtd_user = self._repo.contar_magic_links_recentes(user.id, self._janela)
         if qtd_user >= self._max_magic_user:
             raise RateLimitExcedido(f"max_por_user={self._max_magic_user}")
@@ -190,33 +196,93 @@ class SessaoService:
         token_plaintext = secrets.token_urlsafe(TOKEN_BYTES)
         token_hash_ = hash_token(token_plaintext)
         expira_em = datetime.now(timezone.utc) + timedelta(seconds=self._magic_ttl)
-        magic = self._repo.criar_magic_link(user.id, token_hash_, expira_em=expira_em, ip=ip)
+        magic = self._repo.criar_magic_link(
+            user.id, token_hash_, expira_em=expira_em, ip=ip, tipo=tipo,
+        )
         return MagicLinkCriado(token_plaintext=token_plaintext, magic_link=magic)
 
     def consumir_magic_link(
         self, token_plaintext: str, *, ip: Optional[str] = None,
         user_agent: Optional[str] = None,
     ) -> Optional[SessaoCriada]:
-        """Consome magic-link e cria sessao. `None` se token invalido/expirado/ja consumido."""
+        """Consome magic-link de tipo='login' e cria sessao.
+
+        `None` se token invalido/expirado/ja consumido OU se tipo!='login'
+        (recuperacao de senha precisa usar consumir_magic_link_reset +
+        password change explicito antes de criar sessao).
+        """
+        magic = self._validar_magic_link_disponivel(token_plaintext)
+        if magic is None or magic.tipo != "login":
+            return None
+
+        # atomico: so prossegue se consumir realmente marcou o link
+        if not self._repo.consumir_magic_link(hash_token(token_plaintext)):
+            return None
+
+        self._repo.registrar_login(magic.user_id)
+        return self.criar_sessao(magic.user_id, ip=ip, user_agent=user_agent)
+
+    def validar_magic_link_reset(self, token_plaintext: str) -> Optional[MagicLink]:
+        """Valida (sem consumir) um magic-link de tipo='reset'.
+
+        Usado pelo endpoint GET /recuperar-senha/verificar pra checar se o
+        token e valido antes de mostrar o form de nova senha. NAO consome
+        — consumir so acontece no POST /recuperar-senha/confirmar com a
+        nova senha definida.
+
+        Retorna o MagicLink se valido + tipo='reset', else None.
+        """
+        magic = self._validar_magic_link_disponivel(token_plaintext)
+        if magic is None or magic.tipo != "reset":
+            return None
+        return magic
+
+    def consumir_magic_link_reset(
+        self, token_plaintext: str, nova_senha: str, *,
+        ip: Optional[str] = None, user_agent: Optional[str] = None,
+    ) -> Optional[SessaoCriada]:
+        """Consome magic-link de tipo='reset', troca senha, cria sessao.
+
+        Retorna `None` se token invalido/expirado/ja consumido/tipo errado
+        OU se nova_senha for muito curta. Atomico no sentido pratico: token
+        e marcado consumido ANTES da troca de senha — se a troca falhar,
+        token nao serve mais (operador pede novo). Trade-off por simplicidade.
+
+        O token e a prova de identidade (so quem tem o link no email
+        chegou aqui), entao NAO exige senha atual — esse e o ponto do
+        fluxo de "esqueci minha senha".
+        """
+        if not nova_senha or len(nova_senha) < self._SENHA_MIN:
+            return None
+
+        magic = self._validar_magic_link_disponivel(token_plaintext)
+        if magic is None or magic.tipo != "reset":
+            return None
+
+        if not self._repo.consumir_magic_link(hash_token(token_plaintext)):
+            return None
+
+        novo_hash = generate_password_hash(nova_senha)
+        self._repo.atualizar_senha_hash(magic.user_id, novo_hash)
+        self._repo.registrar_login(magic.user_id)
+        return self.criar_sessao(magic.user_id, ip=ip, user_agent=user_agent)
+
+    # ---------- helpers ----------
+    def _validar_magic_link_disponivel(self, token_plaintext: str):
+        """Carrega o magic-link e retorna se ainda valido (nao consumido,
+        nao expirado). NAO marca como consumido."""
         if not token_plaintext:
             return None
         token_hash_ = hash_token(token_plaintext)
         magic = self._repo.obter_magic_link_por_hash(token_hash_)
         if magic is None or magic.consumido_em is not None:
             return None
-
         expira = magic.expira_em
         if expira.tzinfo is None:
             expira = expira.replace(tzinfo=timezone.utc)
         if expira <= datetime.now(timezone.utc):
             return None
-
-        # atomico: so prossegue se consumir realmente marcou o link
-        if not self._repo.consumir_magic_link(token_hash_):
-            return None
-
-        self._repo.registrar_login(magic.user_id)
-        return self.criar_sessao(magic.user_id, ip=ip, user_agent=user_agent)
+        return magic
 
 
 # Exposto para teste / utilidades administrativas

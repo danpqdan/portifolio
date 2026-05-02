@@ -28,6 +28,8 @@ CREATE TABLE IF NOT EXISTS clientes_users_sessoes (
 
 CREATE INDEX IF NOT EXISTS idx_clientes_sessoes_user ON clientes_users_sessoes(user_id);
 
+-- tipo: 'login' (legado, entra direto) ou 'reset' (consumir nao cria sessao,
+-- redireciona pra form de nova senha). Default 'login' por compat.
 CREATE TABLE IF NOT EXISTS clientes_magic_links (
     id              TEXT PRIMARY KEY,
     user_id         TEXT NOT NULL REFERENCES clientes_users(id) ON DELETE CASCADE,
@@ -35,6 +37,7 @@ CREATE TABLE IF NOT EXISTS clientes_magic_links (
     expira_em       TEXT NOT NULL,
     consumido_em    TEXT,
     ip_solicitacao  TEXT,
+    tipo            TEXT NOT NULL DEFAULT 'login' CHECK (tipo IN ('login','reset')),
     criada_em       TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 

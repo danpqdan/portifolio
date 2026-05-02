@@ -603,4 +603,158 @@ def _construir_link_verificar(token: str) -> str:
     return f"{base.rstrip('/')}/cliente/auth/magic-link/verificar?{urlencode({'t': token})}"
 
 
+def _construir_link_recuperar(token: str) -> str:
+    """URL no apex (CF Pages serve a pagina de redefinir senha) com token na
+    query string. O backend so valida e expira o token; a pagina e estatica."""
+    base = os.environ.get("DASHBOARD_BASE_URL", "https://dsplayground.com.br")
+    return f"{base.rstrip('/')}/cliente/auth/recuperar-senha/verificar?{urlencode({'t': token})}"
+
+
+# ============================================================================
+# RECUPERACAO DE SENHA — fluxo separado de magic-link de login
+# ============================================================================
+# Magic-link de login (acima) entra direto no dashboard. Esses 3 endpoints
+# fazem o fluxo de "esqueci minha senha" proper:
+#   1. solicitar  → gera magic-link tipo='reset', envia email
+#   2. verificar  → valida sem consumir; redireciona pra form na landing
+#                   /cliente/redefinir-senha?t=<token>
+#   3. confirmar  → POST com {token, nova_senha} — consome token, troca
+#                   senha (sem exigir senha atual), cria sessao
+#
+# Por que separado: token de 'reset' nao deve criar sessao por si so. Se
+# email do user vazar, atacante NAO entra direto — precisa SETAR uma nova
+# senha (que invalida a antiga em qualquer outra sessao). Endereca achado
+# SEC-CRIT da auditoria 2026-05-02.
+
+@cliente_auth_bp.route("/recuperar-senha/solicitar", methods=["POST"])
+def solicitar_recuperar_senha():
+    """Body: {email}. Sempre retorna 200 (anti-enumeracao). Envia email com
+    link pra `/cliente/auth/recuperar-senha/verificar?t=<token>`."""
+    body = request.get_json(silent=True) or {}
+    email = (body.get("email") or "").strip()
+    if not email:
+        return jsonify({"status": "success", "ok": True})
+
+    ip = _ip_cliente()
+    svc = _obter_svc()
+    try:
+        criado = svc.solicitar_magic_link(email, ip=ip, tipo="reset")
+    except RateLimitExcedido as e:
+        security_logger.info(
+            "evento=auth_cliente_reset_rate_limit ip=%s motivo=%s", ip, e,
+        )
+        return _erro(
+            "RATE_LIMIT_EXCEDIDO",
+            "muitas solicitacoes — tente novamente em 15min",
+            429,
+        )
+
+    if criado is None:
+        security_logger.info("evento=auth_cliente_reset_solicitado_fantasma ip=%s", ip)
+        return jsonify({"status": "success", "ok": True})
+
+    link = _construir_link_recuperar(criado.token_plaintext)
+    _obter_email_sender().enviar(
+        destinatario=email,
+        assunto="Redefinir sua senha",
+        corpo_texto=(
+            "Voce solicitou redefinir sua senha. Clique no link abaixo nos "
+            "proximos 15 minutos pra escolher uma senha nova.\n\n"
+            f"{link}\n\n"
+            "Se voce NAO solicitou, ignore este email — sua senha atual "
+            "continua valida e nada muda."
+        ),
+    )
+    security_logger.info(
+        "evento=auth_cliente_reset_solicitado user_id=%s ip=%s",
+        criado.magic_link.user_id, ip,
+    )
+    return jsonify({"status": "success", "ok": True})
+
+
+@cliente_auth_bp.route("/recuperar-senha/verificar", methods=["GET"])
+def verificar_recuperar_senha():
+    """GET com `?t=<token>`. NAO consome o token — so valida + redireciona
+    pra pagina estatica de form de nova senha (na landing CF Pages).
+    Form vai chamar POST /confirmar com o mesmo token + nova senha."""
+    token = request.args.get("t", "")
+    if not token:
+        return _erro("TOKEN_AUSENTE", "parametro t obrigatorio", 400)
+
+    svc = _obter_svc()
+    magic = svc.validar_magic_link_reset(token)
+    ip = _ip_cliente()
+    if magic is None:
+        security_logger.info(
+            "evento=auth_cliente_reset_token_invalido ip=%s", ip,
+        )
+        # Redireciona pra landing com flag de erro pra UX consistente
+        # (pagina mostra "link expirado, peca um novo").
+        base = os.environ.get(
+            "DASHBOARD_BASE_URL", "https://dsplayground.com.br",
+        ).rstrip("/")
+        return redirect(f"{base}/cliente/redefinir-senha?erro=token_invalido", code=302)
+
+    # Token valido. Redireciona pra form passando o token (vai virar
+    # POST /confirmar quando user submeter).
+    base = os.environ.get(
+        "DASHBOARD_BASE_URL", "https://dsplayground.com.br",
+    ).rstrip("/")
+    destino = f"{base}/cliente/redefinir-senha?{urlencode({'t': token})}"
+    security_logger.info(
+        "evento=auth_cliente_reset_form_aberto user_id=%s ip=%s",
+        magic.user_id, ip,
+    )
+    return redirect(destino, code=302)
+
+
+@cliente_auth_bp.route("/recuperar-senha/confirmar", methods=["POST"])
+def confirmar_recuperar_senha():
+    """Body: {token, nova_senha}. Consome token, troca senha, cria sessao."""
+    body = request.get_json(silent=True) or {}
+    token = (body.get("token") or "").strip()
+    nova_senha = body.get("nova_senha") or ""
+
+    if not token:
+        return _erro("TOKEN_AUSENTE", "campo `token` obrigatorio", 400)
+    if not nova_senha or len(nova_senha) < _SENHA_MIN:
+        return _erro(
+            "SENHA_CURTA",
+            f"nova_senha precisa ter pelo menos {_SENHA_MIN} caracteres",
+            400,
+        )
+
+    svc = _obter_svc()
+    ip = _ip_cliente()
+    ua = request.headers.get("User-Agent")
+    sessao = svc.consumir_magic_link_reset(token, nova_senha, ip=ip, user_agent=ua)
+    if sessao is None:
+        security_logger.info(
+            "evento=auth_cliente_reset_confirm_invalido ip=%s", ip,
+        )
+        return _erro(
+            "TOKEN_INVALIDO",
+            "link expirado, ja utilizado ou senha muito curta",
+            400,
+        )
+
+    # Sucesso — cria cookie de sessao + retorna 200 (frontend redireciona
+    # via JS apos receber a resposta).
+    user = _obter_svc()._repo.obter_user(sessao.sessao.user_id)  # noqa: SLF001
+    resp = make_response(jsonify({
+        "status": "success",
+        "user": {
+            "id": user.id, "site_id": user.site_id,
+            "email": user.email, "papel": user.papel,
+        } if user else None,
+        "redirect": os.environ.get("DASHBOARD_REDIRECT", "/cliente/metricas"),
+    }))
+    _set_cookie(resp, sessao.cookie_plaintext, max_age=svc._sessao_ttl)  # noqa: SLF001
+    security_logger.info(
+        "evento=auth_cliente_reset_confirmado user_id=%s ip=%s",
+        sessao.sessao.user_id, ip,
+    )
+    return resp
+
+
 __all__ = ["cliente_auth_bp", "configurar", "COOKIE_NAME"]
