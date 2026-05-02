@@ -10,10 +10,8 @@ from __future__ import annotations
 
 # Defaults por plano. Manter sincronizado com scripts/provisionar_cliente.py.
 PLANO_DEFAULTS: dict = {
-    "free":    {"retencao_dias":   7, "eventos_por_dia":    10_000, "eventos_por_minuto":   600},
-    "pequeno": {"retencao_dias":  30, "eventos_por_dia":   100_000, "eventos_por_minuto":   600},
-    "medio":   {"retencao_dias":  90, "eventos_por_dia": 1_000_000, "eventos_por_minuto":  6_000},
-    "grande":  {"retencao_dias": 365, "eventos_por_dia":10_000_000, "eventos_por_minuto": 60_000},
+    "free": {"retencao_dias":  7, "eventos_por_dia":    100_000, "eventos_por_minuto":    600},
+    "pro":  {"retencao_dias": 90, "eventos_por_dia":  5_000_000, "eventos_por_minuto": 10_000},
 }
 
 
