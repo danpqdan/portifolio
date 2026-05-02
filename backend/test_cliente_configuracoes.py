@@ -193,5 +193,27 @@ class ClienteConfiguracoesTests(unittest.TestCase):
         self.assertGreater(body["quota"]["retencao_dias"], 0)
 
 
+class BillingPlanosIntegracaoTests(unittest.TestCase):
+    """Integracao: GET /billing/planos acessivel sem auth e retorna lista de planos."""
+
+    def setUp(self):
+        from flask import Flask
+        from billing.routes import billing_routes_bp
+
+        app = Flask(__name__)
+        app.register_blueprint(billing_routes_bp)
+        app.testing = True
+        self.client = app.test_client()
+
+    def test_billing_planos_retorna_200_com_lista_de_planos(self):
+        r = self.client.get("/billing/planos")
+        self.assertEqual(r.status_code, 200)
+        body = r.get_json()
+        self.assertIn("planos", body)
+        self.assertEqual(len(body["planos"]), 4)
+        ids = [p["id"] for p in body["planos"]]
+        self.assertEqual(ids, ["free", "pequeno", "medio", "grande"])
+
+
 if __name__ == "__main__":
     unittest.main()
