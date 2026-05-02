@@ -52,23 +52,27 @@ Pegadinhas descobertas durante o dogfood — registrar pra Fase 2 nao repetir:
 | Pagina dogfood `/embed-test` | `landing/src/pages/embed-test.astro` | ✅ |
 | vhost nginx `embed.{{ dominio }}` | `ark/ansible/roles/nginx/templates/portifolio.conf.j2` + espelho `ark/nginx/portifolio.conf` | ✅ |
 
-**Pendente pra ativar em prod:**
+**Pendencias de ativacao — TODAS resolvidas em 2026-05-01:**
 
-1. **DNS Cloudflare**: criar `embed.dsplayground.com.br` como CNAME proxiado
-   (laranja) apontando pro mesmo target do `api`/`portifolio` — TLS coberto
-   pelo Origin Cert wildcard.
-2. **CORS**: adicionar `https://embed.dsplayground.com.br` em `cors_origins`
-   no `ark/ansible/group_vars/all.yml` (vault). Roda
-   `ansible-vault edit` + `make ansible-apply`.
-3. **`PUBLIC_PORTIFOLIO_SITE_ID`**: definir no build do landing (CF Pages env)
-   apontando pro `site_id` do `portifolio.dsplayground.com.br`. Sem isso a
-   pagina `/embed-test` mostra erro pedindo a env.
-4. **`PUBLIC_EMBED_URL`**: opcional (default `https://embed.dsplayground.com.br`)
-   no build do landing.
-5. **`make ansible-apply`** com playbook nginx atualizado pra subir o vhost.
-6. **Deploy backend + frontend**: CD automatico pega quando a PR mergeia em
-   `main` (workflow `deploy.yml`). Volume `portifolio_backend_keys` ja tem o
-   keypair RSA — `EmbedJwtService` reusa.
+- ✅ DNS Cloudflare `embed.dsplayground.com.br` (proxiado)
+- ✅ CORS `https://embed.dsplayground.com.br` em `cors_origins` do vault
+- ✅ `PUBLIC_PORTIFOLIO_SITE_ID=9f35343c-2480-4e2f-910a-ad325af2eee2` no CF Pages
+- ✅ vhost nginx aplicado via `make ansible-apply`
+- ✅ Backend + frontend deployados via CD (`deploy.yml`)
+- ✅ Espelho da pagina `/embed-test` aplicado no repo `danpqdan/comercial`
+- ✅ Smoke ponta-a-ponta validado: widget renderiza Chart.js em ~120ms
+
+**Pendencias residuais (nao bloqueantes):**
+
+- 🟡 Cloudflare Web Analytics injeta beacon que viola CSP `script-src` do
+  `embed.X`. Solucao opcional: adicionar `https://static.cloudflareinsights.com`
+  no `script-src` do vhost ou desabilitar Web Analytics no projeto CF Pages.
+  Nao bloqueia widget.
+- 🟡 Bundle do `frontend` ainda contem chamada `iniciarAnalytics()` em
+  top-level que vaza pra rota `/widget/`, causando 403 em `/auth/sdk-token`
+  + violacao `connect-src` (wss). Guard em `frontend/src/App.jsx` foi
+  adicionado em PR mas precisa CD redeploy pra hash novo do bundle. Nao
+  bloqueia widget — so polui console.
 
 **Smoke test pos-deploy:**
 
