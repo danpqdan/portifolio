@@ -14,17 +14,25 @@ import { WEBSOCKET_URL, DEBUG_ENABLED, NODE_ENV, PUBLISHABLE_KEY } from './confi
 const AMBIENTES_SUPORTADOS = ['development', 'test', 'staging', 'production'];
 const ambiente = AMBIENTES_SUPORTADOS.includes(NODE_ENV) ? NODE_ENV : 'development';
 
-iniciarAnalytics({
-  websocketUrl: WEBSOCKET_URL,
-  appId: 'portfolio-local',
-  ambiente,
-  debug: DEBUG_ENABLED,
-  intervaloEnvioMs: 5000,
-  // Em dev local pode ficar vazio (SDK roda sem auth, dados no bucket default).
-  // Pra rotear pra um bucket de cliente real, defina VITE_PUBLISHABLE_KEY no
-  // .env ou docker-compose com a key gerada por scripts.tenant_admin create-key.
-  ...(PUBLISHABLE_KEY ? { publishableKey: PUBLISHABLE_KEY } : {}),
-});
+// /widget/* serve o widget de embed (consumidor de dados). SDK de analytics
+// nao deve rodar la — nao tem o que medir e dispara 403 em /auth/sdk-token
+// + viola CSP connect-src do vhost embed.X. Guard antes do init.
+const ehRotaWidget = typeof window !== 'undefined'
+  && window.location.pathname.startsWith('/widget/');
+
+if (!ehRotaWidget) {
+  iniciarAnalytics({
+    websocketUrl: WEBSOCKET_URL,
+    appId: 'portfolio-local',
+    ambiente,
+    debug: DEBUG_ENABLED,
+    intervaloEnvioMs: 5000,
+    // Em dev local pode ficar vazio (SDK roda sem auth, dados no bucket default).
+    // Pra rotear pra um bucket de cliente real, defina VITE_PUBLISHABLE_KEY no
+    // .env ou docker-compose com a key gerada por scripts.tenant_admin create-key.
+    ...(PUBLISHABLE_KEY ? { publishableKey: PUBLISHABLE_KEY } : {}),
+  });
+}
 
 function Portfolio() {
   const [showUi, setShowUi] = useState(false);
