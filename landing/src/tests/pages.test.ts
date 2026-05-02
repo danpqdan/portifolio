@@ -176,11 +176,33 @@ describe('cliente/configuracoes.astro', () => {
     const html = await render(Configuracoes);
     expect(html).toContain('Configurações');
     expect(html).toMatch(/role="tablist"/);
-    // 4 abas
+    // 7 abas (4 ativas + 3 placeholder Fase 2/3)
     expect(html).toMatch(/data-tab-id="visao"/);
     expect(html).toMatch(/data-tab-id="chaves"/);
     expect(html).toMatch(/data-tab-id="plano"/);
+    expect(html).toMatch(/data-tab-id="embeds"/);
+    expect(html).toMatch(/data-tab-id="faturamento"/);
+    expect(html).toMatch(/data-tab-id="time"/);
     expect(html).toMatch(/data-tab-id="perfil"/);
+  });
+
+  test('aba embeds tem CTA pra plano Pro', async () => {
+    const html = await render(Configuracoes);
+    expect(html).toContain('Embeds de gráfico');
+    expect(html).toMatch(/data-cta="config-embeds-pro"/);
+  });
+
+  test('aba faturamento aponta pra issue tracker enquanto Stripe nao integra', async () => {
+    const html = await render(Configuracoes);
+    expect(html).toContain('Self-service em construção');
+    expect(html).toMatch(/data-cta="config-faturamento-issue"/);
+  });
+
+  test('aba time descreve papéis previstos (Owner/Editor/Viewer)', async () => {
+    const html = await render(Configuracoes);
+    expect(html).toContain('Owner');
+    expect(html).toContain('Editor');
+    expect(html).toContain('Viewer');
   });
 
   test('aba visao tem 3 MetricCards (eventos hoje, quota, cardinalidade)', async () => {
