@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1.7
 
 # ============== Stage 1: build do bundle Astro ==============
-FROM node:22-bookworm-slim AS build
+FROM node:25-bookworm-slim AS build
 
 ARG PUBLIC_SITE_URL=https://dsplayground.com.br
 ARG PUBLIC_API_URL=https://api.dsplayground.com.br
