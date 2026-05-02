@@ -149,6 +149,22 @@ def obter_dados(site_id: str, grafico_id: str):
         )
         return _erro("TOKEN_INVALIDO", "token invalido ou expirado", 401)
 
+    # Revogacao: TTL curto e a primeira defesa, mas tokens podem ser revogados
+    # explicitamente (leak, banimento de site, remocao de widget). Tabela
+    # `embed_jwt_revogados` nao limita escala porque so cresce ate exp+TTL_MAX
+    # (housekeeping em background limpa entradas com >24h de idade).
+    try:
+        if _tenants.jti_embed_esta_revogado(claims.jti):
+            security_logger.warning(
+                "evento=embed_dados_jti_revogado site_id=%s grafico_id=%s jti=%s user_id=%s",
+                site_id, grafico_id, claims.jti, claims.user_id,
+            )
+            return _erro("TOKEN_REVOGADO", "token revogado", 401)
+    except AttributeError:
+        # Repo legado sem o metodo — abortar verificacao silenciosamente seria
+        # perigoso; melhor deixar passar e logar pra alertar deploy mismatch.
+        security_logger.error("evento=embed_dados_repo_sem_revocacao jti=%s", claims.jti)
+
     if claims.site_id != site_id or claims.grafico_id != grafico_id:
         security_logger.warning(
             "evento=embed_dados_path_divergente token_site=%s token_grafico=%s "

@@ -84,6 +84,22 @@ def stripe_webhook():
         return jsonify({"error": "invalid_payload"}), 400
 
     event_type = event.get("type", "")
+    event_id = event.get("id")
+
+    # Idempotencia: Stripe re-entrega webhooks em retries (timeout, 5xx).
+    # Sem o gate abaixo, aplicar_plano() rodava N vezes pro mesmo evento e podia
+    # bagunçar transicoes (ex: created+updated chegando fora de ordem).
+    # marcar_evento_stripe_processado retorna False quando ja processamos antes.
+    if event_id:
+        try:
+            repo = obter_tenants_repo()
+            if not repo.marcar_evento_stripe_processado(event_id):
+                logger.info("billing webhook duplicado event_id=%s tipo=%s — ignorando", event_id, event_type)
+                return jsonify({"received": True, "duplicate": True}), 200
+        except Exception as exc:
+            # Erro pra marcar idempotencia nao pode derrubar o webhook (Stripe
+            # retentaria mesmo assim). Loga e segue — pior caso, processamos 2x.
+            logger.error("billing webhook idempotencia falhou event_id=%s: %s", event_id, exc)
 
     if event_type in (
         "customer.subscription.created",
