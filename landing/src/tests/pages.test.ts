@@ -675,10 +675,12 @@ describe('changelog.astro', () => {
     expect(html).toContain('manutenção');
   });
 
-  test('CTA pra GitHub commits + sugerir feature', async () => {
+  test('CTA pra sugerir feature (sem link GitHub — repo privado)', async () => {
     const html = await render(Changelog);
-    expect(html).toMatch(/data-cta="changelog-github"/);
     expect(html).toMatch(/data-cta="changelog-sugerir"/);
+    // Repositorio e' privado — link pra commits publicos foi removido.
+    expect(html).not.toContain('changelog-github');
+    expect(html).not.toMatch(/github\.com\/[^/]+\/portifolio\/commits/);
   });
 
   test('lista features dos PRs recentes (Onboarding, abas, embed)', async () => {
