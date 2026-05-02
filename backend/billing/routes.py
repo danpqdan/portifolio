@@ -1,7 +1,7 @@
 """Blueprint Flask com rotas publicas do billing.
 
 Endpoints:
-  GET  /billing/planos    — lista os 4 planos disponiveis com quotas e preco (null por ora).
+  GET  /billing/planos    — lista os planos disponiveis (free e pro) com quotas e preco.
                             Publico (sem auth) — consumido pelo frontend para renderizar comparacao.
   POST /billing/checkout  — cria sessao Stripe Checkout para upgrade de plano.
                             Requer sessao autenticada (cookie cliente_session com site_id).
@@ -26,19 +26,22 @@ logger = logging.getLogger(__name__)
 billing_routes_bp = Blueprint("billing_routes", __name__, url_prefix="/billing")
 
 # Ordem canonica de exibicao dos planos
-_ORDEM_PLANOS = ("free", "pequeno", "medio", "grande")
+_ORDEM_PLANOS = ("free", "pro")
 
 # Mapa de IDs para nomes de exibicao
 _NOMES = {
-    "free":    "Free",
-    "pequeno": "Pequeno",
-    "medio":   "Médio",
-    "grande":  "Grande",
+    "free": "Free",
+    "pro":  "Pro",
 }
 
+# Preco mensal por plano (None = gratuito)
+_PRECOS: dict[str, float | None] = {
+    "free": None,
+    "pro":  99.0,
+}
 
 # Planos que podem ser comprados via Checkout (free nao tem preco)
-_PLANOS_PAGOS = {"pequeno", "medio", "grande"}
+_PLANOS_PAGOS = {"pro"}
 
 _DEFAULT_SUCCESS_URL = (
     "https://dsplayground.com.br/cliente/configuracoes?tab=faturamento&checkout=success"
@@ -88,7 +91,7 @@ def criar_checkout():
     """Cria uma sessao Stripe Checkout para upgrade de plano.
 
     POST /billing/checkout
-    Body JSON: {"plano": "pequeno"|"medio"|"grande"}
+    Body JSON: {"plano": "pro"}
     Requer: sessao autenticada (site_id em Flask session).
 
     Retorna:
@@ -108,6 +111,8 @@ def criar_checkout():
 
     body = request.get_json(silent=True) or {}
     plano = body.get("plano", "")
+    if plano == "free":
+        return jsonify({"erro": "plano_invalido"}), 422
     if plano not in _PLANOS_PAGOS:
         return jsonify({"erro": "plano_invalido"}), 422
 
@@ -181,6 +186,6 @@ def listar_planos():
             "eventos_por_dia": defaults["eventos_por_dia"],
             "eventos_por_minuto": defaults["eventos_por_minuto"],
             "retencao_dias": defaults["retencao_dias"],
-            "preco_mensal": None,
+            "preco_mensal": _PRECOS[plano_id],
         })
     return jsonify({"planos": planos}), 200
