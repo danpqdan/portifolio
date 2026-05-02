@@ -103,6 +103,20 @@
   become_user: "{{ deploy_user }}"
   changed_when: false
 
+# Cleanup de containers parados antes de subir a stack.
+#
+# Bug observado em 2026-05-02: `community.docker.docker_compose_v2` chama
+# `docker compose images --format json` pra detectar mudancas, mas se algum
+# container parado aponta pra imagem que foi removida (rebuild anterior +
+# image prune), o subprocess retorna "No such image: sha256:<id>" no stderr
+# e quebra o parser JSON. Erro: "Expecting value: line 1 column 1 (char 0)".
+# Prune antes de subir cura — remove containers parados orfaos sem afetar
+# os em execucao.
+- name: Limpar containers parados orfaos (evita bug compose images JSON)
+  command: docker container prune -f
+  become_user: "{{ deploy_user }}"
+  changed_when: false
+
 - name: Subir stack com docker compose
   # NODE_AUTH_TOKEN vem do .env gerado acima — compose le e propaga via
   # `secrets.NODE_AUTH_TOKEN.environment` em docker-compose.yml para os
@@ -111,6 +125,7 @@
     project_src: "{{ repo_dir }}"
     state: present
     build: always
+    recreate: auto
   become_user: "{{ deploy_user }}"
 
 # ---- Rotacao de credenciais Postgres ----
