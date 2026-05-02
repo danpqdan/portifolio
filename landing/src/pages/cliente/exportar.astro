@@ -102,6 +102,11 @@ import Breadcrumbs from '~/components/ui/Breadcrumbs.astro';
         link.textContent = 'Baixar';
         // Sem target=_blank: o backend retorna 302 pra signed URL R2 — o
         // browser segue o redirect e o R2 manda o blob com o filename certo.
+        link.addEventListener('click', () => {
+          (window as any).__dsplayground?.enviarEvento?.('exportar_iniciado', {
+            dia: arq.dia,
+          });
+        });
 
         li.appendChild(label);
         li.appendChild(link);
