@@ -51,6 +51,19 @@ jobs:
           echo "==> git state antes"
           git rev-parse --short HEAD
 
+          echo "==> pre-flight: tree limpa? (proteção vs reset --hard sobrescrever ops manual)"
+          if ! git diff --quiet HEAD || ! git diff --cached --quiet; then
+            echo "::error::Working tree em /opt/portifolio tem mudanças não-comitadas."
+            echo "::error::Operador deve commitar/stashar antes do deploy automatico."
+            git status -sb
+            exit 1
+          fi
+          # Untracked files: tolerar (volumes/dump/log temporarios), mas listar.
+          if [ -n "$(git ls-files --others --exclude-standard)" ]; then
+            echo "::warning::Arquivos untracked detectados (nao bloqueiam deploy):"
+            git ls-files --others --exclude-standard
+          fi
+
           echo "==> fetch + reset para origin/main"
           git fetch --prune origin main
           git reset --hard origin/main

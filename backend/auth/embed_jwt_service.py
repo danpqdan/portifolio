@@ -7,11 +7,12 @@ nao serve pra autenticar SDK e vice-versa.
 
 Claims:
   iss=dsplayground.com.br, aud=embed.dsplayground.com.br, scope=embed:read,
-  site_id, grafico_id, user_id, iat, exp.
+  site_id, grafico_id, user_id, iat, exp, jti.
 
-Sem `jti` por enquanto — TTL curto + emissao por (user, site, grafico) torna
-revogacao desnecessaria pra Fase 1. Se Fase 3 trouxer revogacao explicita,
-adicionar tabela `embed_tokens_revogados` aqui.
+Revogacao: cada token tem `jti` (UUID4); tabela `embed_jwt_revogados` no Postgres
+permite invalidar antes do exp (compliance, banimento, leak detectado). Verificacao
+em /embed/dados consulta a tabela e rejeita 401 se jti revogado. TTL curto continua
+sendo a primeira linha de defesa — revogacao e uma rede de seguranca.
 
 Referencia: ark/docs/embed-iframe.md (Fase 1 — contratos tecnicos).
 """
@@ -19,6 +20,7 @@ Referencia: ark/docs/embed-iframe.md (Fase 1 — contratos tecnicos).
 from __future__ import annotations
 
 import threading
+import uuid
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -48,6 +50,7 @@ class EmbedClaims:
     scope: str
     iat: int
     exp: int
+    jti: str
 
 
 class EmbedJwtService:
@@ -112,6 +115,7 @@ class EmbedJwtService:
         ttl = max(TTL_MIN, min(TTL_MAX, ttl_segundos))
         agora = datetime.now(timezone.utc)
         exp = agora + timedelta(seconds=ttl)
+        jti = uuid.uuid4().hex
         payload = {
             "iss": EMBED_ISSUER,
             "aud": EMBED_AUDIENCE,
@@ -122,23 +126,29 @@ class EmbedJwtService:
             "user_id": user_id,
             "iat": int(agora.timestamp()),
             "exp": int(exp.timestamp()),
+            "jti": jti,
         }
         token = pyjwt.encode(payload, self._private_pem, algorithm=ALGORITHM)
         claims = EmbedClaims(
             site_id=site_id, grafico_id=grafico_id, user_id=user_id,
-            scope=EMBED_SCOPE, iat=payload["iat"], exp=payload["exp"],
+            scope=EMBED_SCOPE, iat=payload["iat"], exp=payload["exp"], jti=jti,
         )
         return token, claims
 
     def verificar(self, token: str) -> EmbedClaims:
-        """Valida assinatura, aud, exp e scope. Levanta pyjwt.PyJWTError em falha."""
+        """Valida assinatura, aud, exp e scope. Levanta pyjwt.PyJWTError em falha.
+
+        Nao consulta tabela de revogacao — caller (rota /embed/dados) faz isso
+        apos a verificacao de assinatura para manter este servico desacoplado
+        do TenantsRepo (testavel sem DB).
+        """
         decoded = pyjwt.decode(
             token,
             self._public_pem,
             algorithms=[ALGORITHM],
             audience=EMBED_AUDIENCE,
             options={"require": ["exp", "iat", "aud", "iss", "scope",
-                                 "site_id", "grafico_id", "user_id"]},
+                                 "site_id", "grafico_id", "user_id", "jti"]},
         )
         if decoded.get("scope") != EMBED_SCOPE:
             raise pyjwt.InvalidTokenError(
@@ -151,4 +161,5 @@ class EmbedJwtService:
             scope=decoded["scope"],
             iat=int(decoded["iat"]),
             exp=int(decoded["exp"]),
+            jti=decoded["jti"],
         )
