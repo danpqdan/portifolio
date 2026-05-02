@@ -411,11 +411,19 @@ const tabs = [
         btnCopiar.setAttribute('data-cta', 'copiar-publishable-key');
         btnCopiar.textContent = 'Copiar';
         btnCopiar.addEventListener('click', async () => {
+          const sdk = (window as any).__dsplayground;
           try {
             await navigator.clipboard.writeText(k.valor);
             showToast('Key copiada — cole no SDK', { variant: 'success' });
+            sdk?.enviarEvento?.('publishable_key_copiada', {
+              ambiente: k.ambiente,
+              key_id: k.key_id,
+            });
           } catch {
             showToast('Não consegui acessar a área de transferência', { variant: 'error' });
+            sdk?.enviarEvento?.('publishable_key_copia_falhou', {
+              ambiente: k.ambiente,
+            });
           }
         });
         linha1.append(labelBox, btnCopiar);

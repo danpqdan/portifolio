@@ -198,10 +198,11 @@ describe('cliente/configuracoes.astro', () => {
     expect(html).toMatch(/data-cta="config-embeds-pro"/);
   });
 
-  test('aba faturamento aponta pra issue tracker enquanto Stripe nao integra', async () => {
+  test('aba faturamento exibe secao de plano atual e comparacao de planos', async () => {
     const html = await render(Configuracoes);
-    expect(html).toContain('Self-service em construção');
-    expect(html).toMatch(/data-cta="config-faturamento-issue"/);
+    expect(html).toContain('Plano atual');
+    expect(html).toContain('Comparar planos');
+    expect(html).toMatch(/id="fat-planos-grid"/);
   });
 
   test('aba time descreve papéis previstos (Owner/Editor/Viewer)', async () => {
