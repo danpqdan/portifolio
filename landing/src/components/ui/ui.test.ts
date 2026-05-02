@@ -10,9 +10,11 @@ import { experimental_AstroContainer as AstroContainer } from 'astro/container';
 import { describe, expect, test } from 'vitest';
 
 import Badge from './Badge.astro';
+import Breadcrumbs from './Breadcrumbs.astro';
 import Button from './Button.astro';
 import Card from './Card.astro';
 import ChartCard from './ChartCard.astro';
+import CommandPalette from './CommandPalette.astro';
 import EmptyState from './EmptyState.astro';
 import FormError from './FormError.astro';
 import Input from './Input.astro';
@@ -528,5 +530,138 @@ describe('Stepper', () => {
     const html = await render(Stepper, { steps, current: 'a' });
     // b e c sao pending → text-slate-400
     expect(html).toContain('text-slate-400');
+  });
+});
+
+describe('Breadcrumbs', () => {
+  test('renderiza nav com aria-label de trilha', async () => {
+    const html = await render(Breadcrumbs, {
+      items: [
+        { href: '/cliente/painel', label: 'Painel' },
+        { label: 'Configurações' },
+      ],
+    });
+    expect(html).toMatch(/<nav[^>]*aria-label="Trilha de navegação"/);
+    expect(html).toMatch(/<ol/);
+  });
+
+  test('item intermediario com href vira <a>', async () => {
+    const html = await render(Breadcrumbs, {
+      items: [
+        { href: '/cliente/painel', label: 'Painel' },
+        { label: 'Atual' },
+      ],
+    });
+    expect(html).toMatch(/<a[^>]*href="\/cliente\/painel"[^>]*>Painel<\/a>/);
+  });
+
+  test('ultimo item sempre renderiza como span com aria-current=page', async () => {
+    const html = await render(Breadcrumbs, {
+      items: [
+        { href: '/cliente/painel', label: 'Painel' },
+        { label: 'Atual' },
+      ],
+    });
+    expect(html).toMatch(/<span[^>]*aria-current="page"[^>]*>Atual<\/span>/);
+  });
+
+  test('separador / aparece entre items mas nao antes do primeiro', async () => {
+    const html = await render(Breadcrumbs, {
+      items: [
+        { href: '/a', label: 'A' },
+        { href: '/b', label: 'B' },
+        { label: 'C' },
+      ],
+    });
+    // 3 items → 2 separadores
+    const separators = (html.match(/aria-hidden="true"[^>]*>\/</g) || []).length;
+    expect(separators).toBe(2);
+  });
+
+  test('inclui JSON-LD BreadcrumbList', async () => {
+    const html = await render(Breadcrumbs, {
+      items: [
+        { href: '/cliente/painel', label: 'Painel' },
+        { label: 'Configurações' },
+      ],
+    });
+    expect(html).toContain('"@type":"BreadcrumbList"');
+    expect(html).toContain('"@type":"ListItem"');
+    expect(html).toContain('"position":1');
+    expect(html).toContain('"position":2');
+  });
+
+  test('item sem href no JSON-LD nao tem campo item', async () => {
+    const html = await render(Breadcrumbs, {
+      items: [{ label: 'Sozinho' }],
+    });
+    expect(html).toContain('"name":"Sozinho"');
+    // ultimo nao tem href -> sem "item" no JSON-LD
+    expect(html).toContain('"position":1,"name":"Sozinho"}]');
+  });
+});
+
+describe('CommandPalette', () => {
+  test('dialog tem role + aria-modal + aria-label', async () => {
+    const html = await render(CommandPalette);
+    expect(html).toMatch(/<div[^>]*id="cmdk-dialog"[^>]*role="dialog"[^>]*aria-modal="true"/);
+    expect(html).toContain('aria-label="Busca rápida"');
+  });
+
+  test('input com label sr-only acessivel', async () => {
+    const html = await render(CommandPalette);
+    expect(html).toMatch(/<label[^>]*for="cmdk-input"[^>]*class="sr-only"/);
+    expect(html).toMatch(/<input[^>]*id="cmdk-input"[^>]*type="text"/);
+  });
+
+  test('listbox tem role + aria-label', async () => {
+    const html = await render(CommandPalette);
+    expect(html).toMatch(/<ul[^>]*id="cmdk-list"[^>]*role="listbox"/);
+  });
+
+  test('cada item tem role=option + aria-selected', async () => {
+    const html = await render(CommandPalette);
+    expect(html).toMatch(/role="option"[^>]*aria-selected="false"/);
+  });
+
+  test('lista comandos por grupo (navegar/cliente/externo)', async () => {
+    const html = await render(CommandPalette);
+    expect(html).toContain('data-group="navegar"');
+    expect(html).toContain('data-group="cliente"');
+    expect(html).toContain('data-group="externo"');
+    expect(html).toContain('Navegar');
+    expect(html).toContain('Área do cliente');
+    expect(html).toContain('Externo');
+  });
+
+  test('inclui comandos chave (Painel, Configurações, Recursos, Preços)', async () => {
+    const html = await render(CommandPalette);
+    expect(html).toContain('Ir pro painel');
+    expect(html).toContain('Configurações');
+    expect(html).toContain('Recursos');
+    expect(html).toContain('Preços');
+  });
+
+  test('comandos externos sinalizam externo', async () => {
+    const html = await render(CommandPalette);
+    expect(html).toMatch(/<span[^>]*>externo ↗<\/span>/);
+  });
+
+  test('hint de teclado com Esc + Cmd K visível no footer', async () => {
+    const html = await render(CommandPalette);
+    expect(html).toContain('Esc');
+    expect(html).toContain('⌘K');
+  });
+
+  test('backdrop e dialog escondidos no SSR (abre via JS)', async () => {
+    const html = await render(CommandPalette);
+    expect(html).toMatch(/id="cmdk-backdrop"[^>]*class="hidden/);
+    expect(html).toMatch(/id="cmdk-dialog"[^>]*class="hidden/);
+  });
+
+  test('estado vazio escondido por default', async () => {
+    const html = await render(CommandPalette);
+    expect(html).toMatch(/id="cmdk-empty"[^>]*class="hidden/);
+    expect(html).toContain('Nada encontrado');
   });
 });
