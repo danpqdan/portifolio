@@ -15,6 +15,9 @@ import Index from '~/pages/index.astro';
 import Onboarding from '~/pages/cliente/onboarding.astro';
 import Painel from '~/pages/cliente/painel.astro';
 import Precos from '~/pages/precos.astro';
+import Recursos from '~/pages/recursos.astro';
+import Seguranca from '~/pages/seguranca.astro';
+import Sobre from '~/pages/sobre.astro';
 
 async function render(component: any): Promise<string> {
   const container = await AstroContainer.create();
@@ -276,5 +279,88 @@ describe('cliente/onboarding.astro', () => {
   test('marcado noindex (area logada)', async () => {
     const html = await render(Onboarding);
     expect(html).toContain('noindex');
+  });
+});
+
+describe('recursos.astro', () => {
+  test('renderiza com h1 + Brasil-first', async () => {
+    const html = await render(Recursos);
+    expect(html).toContain('Pequeno');
+    expect(html).toContain('Brasileiro');
+  });
+
+  test('tem 3 grupos com IDs ancorados (coleta/painel/controle)', async () => {
+    const html = await render(Recursos);
+    expect(html).toMatch(/id="coleta"/);
+    expect(html).toMatch(/id="painel"/);
+    expect(html).toMatch(/id="controle"/);
+  });
+
+  test('FAQ com perguntas tecnicas', async () => {
+    const html = await render(Recursos);
+    expect(html).toMatch(/<details/);
+    expect(html).toContain('Tem SDK pra mobile?');
+  });
+
+  test('CTA final pra cadastro + precos', async () => {
+    const html = await render(Recursos);
+    expect(html).toMatch(/data-cta="recursos-cadastro"/);
+    expect(html).toMatch(/data-cta="recursos-precos"/);
+  });
+});
+
+describe('seguranca.astro', () => {
+  test('hero diz Privacidade primeiro', async () => {
+    const html = await render(Seguranca);
+    expect(html).toContain('Privacidade primeiro');
+  });
+
+  test('lista camadas com JWT RS256 + bcrypt + multi-tenant', async () => {
+    const html = await render(Seguranca);
+    expect(html).toContain('JWT RS256');
+    expect(html).toContain('bcrypt');
+    expect(html).toContain('Multi-tenant isolado');
+  });
+
+  test('seção LGPD lista direitos do titular', async () => {
+    const html = await render(Seguranca);
+    expect(html).toContain('Direito de exportação');
+    expect(html).toContain('Direito de exclusão');
+  });
+
+  test('disclosure de vulnerabilidade com email seguranca@', async () => {
+    const html = await render(Seguranca);
+    expect(html).toContain('seguranca@dsplayground.com.br');
+  });
+
+  test('CTA final pra cadastro', async () => {
+    const html = await render(Seguranca);
+    expect(html).toMatch(/data-cta="seguranca-cadastro"/);
+  });
+});
+
+describe('sobre.astro', () => {
+  test('hero com tom honesto Brasil-first', async () => {
+    const html = await render(Sobre);
+    expect(html).toContain('pequeno e contente');
+  });
+
+  test('seção história + valores + roadmap honesto', async () => {
+    const html = await render(Sobre);
+    expect(html).toContain('A história curta');
+    expect(html).toContain('Princípios que guiam');
+    expect(html).toContain('Pra onde vai');
+  });
+
+  test('lista princípios com Brasil-first', async () => {
+    const html = await render(Sobre);
+    expect(html).toContain('Brasil-first');
+    expect(html).toContain('Você é o cliente');
+  });
+
+  test('CTA pra cadastro + recursos', async () => {
+    const html = await render(Sobre);
+    expect(html).toMatch(/data-cta="sobre-cadastro"/);
+    expect(html).toMatch(/data-cta="sobre-recursos"/);
   });
 });
