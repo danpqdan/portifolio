@@ -506,6 +506,16 @@ except Exception as e:
     log_safe(security_logger, 'error', f"[ERROR] Falha ao inicializar embed: {str(e)}")
     raise
 
+# ==================== BILLING (Stripe webhook) ====================
+# Blueprint /billing — recebe webhooks do Stripe para upgrade/downgrade de plano.
+# Requer STRIPE_WEBHOOK_SECRET no env. Sem o env, endpoint responde 501.
+try:
+    from billing.stripe_webhook import billing_bp as _billing_bp  # noqa: E402
+    app.register_blueprint(_billing_bp)
+    log_safe(security_logger, 'info', "[SUCCESS] Billing webhook inicializado em /billing/stripe/webhook")
+except Exception as e:
+    log_safe(security_logger, 'warning', f"[WARNING] Falha ao inicializar billing: {str(e)}")
+
 # ==================== EXPORTACAO DE ARQUIVOS R2 (cliente) ====================
 # Blueprint `/cliente/exportar` — listagem + download via signed URL R2.
 # Best-effort: se R2 nao estiver configurado (env vazio), bp nao registra.
