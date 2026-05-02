@@ -1,10 +1,42 @@
 # Embed via iFrame — Roadmap e Design Doc
 
-> Status: **Fase 1 implementada na branch dev (2026-05-01)** — codigo + testes
-> verde, **nao aplicada em prod ainda**. Pendencias de deploy listadas no
-> final desta secao.
+> Status: **Fase 1 LIVE em prod (2026-05-01)** — backend `/embed/*` +
+> vhost `embed.dsplayground.com.br` + landing `/embed-test` deployados.
+> Validado ponta-a-ponta: widget renderiza Chart.js em ~120ms dentro de
+> iframe no apex. Proximos passos = Fase 2 (cliente piloto) quando houver
+> demanda real.
 > Escopo: permitir que clientes do `dsplayground` embarquem graficos nossos
 > em sites/dashboards proprios via `<iframe>`, virando feature de assinatura.
+
+## Gotchas conhecidos da Fase 1 (2026-05-01)
+
+Pegadinhas descobertas durante o dogfood — registrar pra Fase 2 nao repetir:
+
+1. **Sandbox do iframe precisa de `allow-same-origin`.** Sem ele, browser
+   trata o documento dentro do iframe como opaque origin (`null`) e
+   bloqueia o fetch dos proprios `/assets/*.js` + `.css` por CORS. CSP
+   `frame-ancestors` no `embed.X` ja garante isolamento contra parent;
+   `allow-same-origin` so libera o widget acessar seus proprios bundles.
+2. **Repo do landing e separado** (`danpqdan/comercial`, projeto CF Pages).
+   Mudancas em `landing/` aqui no `portifolio` sao espelho — precisa
+   replicar pro `comercial` pra chegar em prod. Considerar consolidar
+   na Fase 2.
+3. **`PUBLIC_SITE_URL` truncado quebra build CF Pages silenciosamente**
+   (`astro.config.mjs` valida `site:` como URL). Sintoma: deploys param
+   de aparecer em prod sem error visivel — verificar logs do CF Pages
+   se `/embed-test` ou similar nao subir.
+4. **SDK de analytics nao deve rodar em `/widget/`** — `App.jsx` chamava
+   `iniciarAnalytics()` em top-level. Resultado eram 403 `/auth/sdk-token`
+   + violacao `connect-src` no widget. Fix: guard `pathname.startsWith('/widget/')`.
+5. **Modelo de auth atual e "user dono do site_id"** — admin nao consegue
+   embedar graficos de outro site sem ser explicitamente adicionado como
+   user via `dashboard_user_admin.py add`. Funciona pra dogfood; pra
+   feature comercial (Fase 3) precisa de papel "owner global" ou
+   self-service.
+6. **Cloudflare Web Analytics injeta beacon** que viola CSP `script-src`
+   no `embed.X`. Nao bloqueia widget mas polui console. Solucao:
+   adicionar `https://static.cloudflareinsights.com` no `script-src`
+   ou desabilitar Web Analytics no projeto Pages. Nao urgente.
 
 ## Estado Fase 1 (implementado em dev)
 
