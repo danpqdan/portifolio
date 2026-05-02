@@ -31,8 +31,8 @@ logger = logging.getLogger("auth.routes")
 auth_bp = Blueprint("auth", __name__, url_prefix="/auth")
 
 
-SCHEMA_VERSION_SERVIDOR = "1.1"
-SCHEMA_VERSION_MINIMO_CLIENTE = "1.0"
+SCHEMA_VERSION_SERVIDOR = "1.2"
+SCHEMA_VERSION_MINIMO_CLIENTE = "1.0"  # Schema 1.1 (SDK 0.3.x) ainda aceito.
 
 
 def _erro(code: str, message: str, status: int):
