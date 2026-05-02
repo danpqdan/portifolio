@@ -56,6 +56,8 @@ const sdkConfig = {
       import {
         iniciarAnalytics,
         enviarEvento,
+        trackConversion,
+        trackSignup,
         HeatmapUtils,
         WebSocketService,
       } from '@danpqdan/dsplayground-analytics-sdk';
@@ -87,8 +89,15 @@ const sdkConfig = {
           try { heatmap.parar('aba_fechada'); } catch {}
         });
 
-        (window as any).__dsplayground = { iniciarAnalytics, enviarEvento, heatmap };
-        attachCtaTracking(document, enviarEvento);
+        (window as any).__dsplayground = { iniciarAnalytics, enviarEvento, trackConversion, trackSignup, heatmap };
+        attachCtaTracking(document, (nome, props) => {
+          enviarEvento(nome, props);
+          // CTAs de plano no /precos emitem conversao estruturada.
+          const cta = props.cta as string | undefined;
+          if (cta?.startsWith('plano-')) {
+            trackConversion('plan_cta_click', undefined, { plan: cta.slice(6) });
+          }
+        });
       } catch (e) {
         if (sdkConfig.debug) console.warn('SDK falhou ao carregar', e);
       }

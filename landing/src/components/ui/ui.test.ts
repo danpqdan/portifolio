@@ -10,6 +10,7 @@ import { experimental_AstroContainer as AstroContainer } from 'astro/container';
 import { describe, expect, test } from 'vitest';
 
 import Badge from './Badge.astro';
+import Breadcrumbs from './Breadcrumbs.astro';
 import Button from './Button.astro';
 import Card from './Card.astro';
 import ChartCard from './ChartCard.astro';
@@ -528,5 +529,73 @@ describe('Stepper', () => {
     const html = await render(Stepper, { steps, current: 'a' });
     // b e c sao pending → text-slate-400
     expect(html).toContain('text-slate-400');
+  });
+});
+
+describe('Breadcrumbs', () => {
+  test('renderiza nav com aria-label de trilha', async () => {
+    const html = await render(Breadcrumbs, {
+      items: [
+        { href: '/cliente/painel', label: 'Painel' },
+        { label: 'Configurações' },
+      ],
+    });
+    expect(html).toMatch(/<nav[^>]*aria-label="Trilha de navegação"/);
+    expect(html).toMatch(/<ol/);
+  });
+
+  test('item intermediario com href vira <a>', async () => {
+    const html = await render(Breadcrumbs, {
+      items: [
+        { href: '/cliente/painel', label: 'Painel' },
+        { label: 'Atual' },
+      ],
+    });
+    expect(html).toMatch(/<a[^>]*href="\/cliente\/painel"[^>]*>Painel<\/a>/);
+  });
+
+  test('ultimo item sempre renderiza como span com aria-current=page', async () => {
+    const html = await render(Breadcrumbs, {
+      items: [
+        { href: '/cliente/painel', label: 'Painel' },
+        { label: 'Atual' },
+      ],
+    });
+    expect(html).toMatch(/<span[^>]*aria-current="page"[^>]*>Atual<\/span>/);
+  });
+
+  test('separador / aparece entre items mas nao antes do primeiro', async () => {
+    const html = await render(Breadcrumbs, {
+      items: [
+        { href: '/a', label: 'A' },
+        { href: '/b', label: 'B' },
+        { label: 'C' },
+      ],
+    });
+    // 3 items → 2 separadores
+    const separators = (html.match(/aria-hidden="true"[^>]*>\/</g) || []).length;
+    expect(separators).toBe(2);
+  });
+
+  test('inclui JSON-LD BreadcrumbList', async () => {
+    const html = await render(Breadcrumbs, {
+      items: [
+        { href: '/cliente/painel', label: 'Painel' },
+        { label: 'Configurações' },
+      ],
+    });
+    expect(html).toContain('"@type":"BreadcrumbList"');
+    expect(html).toContain('"@type":"ListItem"');
+    expect(html).toContain('"position":1');
+    expect(html).toContain('"position":2');
+  });
+
+  test('item sem href no JSON-LD nao tem campo item', async () => {
+    const html = await render(Breadcrumbs, {
+      items: [{ label: 'Sozinho' }],
+    });
+    expect(html).toContain('"name":"Sozinho"');
+    // ultimo nao tem href -> sem "item" no JSON-LD
+    expect(html).toContain('"position":1,"name":"Sozinho"}]');
   });
 });

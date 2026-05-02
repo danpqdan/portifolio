@@ -14,6 +14,7 @@ import Configuracoes from '~/pages/cliente/configuracoes.astro';
 import Erro404 from '~/pages/404.astro';
 import Erro500 from '~/pages/500.astro';
 import Index from '~/pages/index.astro';
+import Integracoes from '~/pages/integracoes.astro';
 import Onboarding from '~/pages/cliente/onboarding.astro';
 import Painel from '~/pages/cliente/painel.astro';
 import Precos from '~/pages/precos.astro';
@@ -404,5 +405,47 @@ describe('500.astro', () => {
   test('disclosure de issue tracker', async () => {
     const html = await render(Erro500);
     expect(html).toContain('github.com/danpqdan/portifolio/issues');
+  });
+});
+
+describe('integracoes.astro', () => {
+  test('hero "Cole, instale, pronto"', async () => {
+    const html = await render(Integracoes);
+    expect(html).toContain('Cole, instale');
+  });
+
+  test('Tabs com 6 plataformas (html/react/next/astro/wordpress/shopify)', async () => {
+    const html = await render(Integracoes);
+    expect(html).toContain('data-tab-id="html"');
+    expect(html).toContain('data-tab-id="react"');
+    expect(html).toContain('data-tab-id="next"');
+    expect(html).toContain('data-tab-id="astro"');
+    expect(html).toContain('data-tab-id="wordpress"');
+    expect(html).toContain('data-tab-id="shopify"');
+  });
+
+  test('placeholder pk_xxx aparece em todos os snippets', async () => {
+    const html = await render(Integracoes);
+    expect(html).toContain('pk_xxxxxxxxxxxxxxxxxxxx');
+  });
+
+  test('seção REST API lista endpoints chave', async () => {
+    const html = await render(Integracoes);
+    expect(html).toContain('/auth/sdk-token');
+    expect(html).toContain('/cliente/auth/configuracoes');
+    expect(html).toContain('/cliente/exportar/');
+    expect(html).toContain('/health/app');
+  });
+
+  test('seção eventos customizados com exemplo enviarEvento', async () => {
+    const html = await render(Integracoes);
+    expect(html).toContain('enviarEvento');
+    expect(html).toContain('venda_concluida');
+  });
+
+  test('CTAs pra cadastro + GitHub do SDK', async () => {
+    const html = await render(Integracoes);
+    expect(html).toMatch(/data-cta="integracoes-cadastro"/);
+    expect(html).toMatch(/data-cta="integracoes-github"/);
   });
 });
