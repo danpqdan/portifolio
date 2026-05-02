@@ -396,21 +396,30 @@ seguros antes de jumps majors.
 **Acao sugerida P1.5**: adicionar dependabot.yml + step de pip-audit no
 ci.yml em PR proximo.
 
-### P2 — GitHub repo hardening 🟡
-**Por que importa**: branch protection ausente = qualquer push direto na
-main dispara CD sem review. Sem secret scanning, secret commitado por
-acidente vaza.
-**Investigar**:
-- Branch protection na `main`: required status checks, required reviews,
-  dismiss stale reviews, restrict push.
-- GitHub secret scanning + push protection.
-- Dependabot alerts ligado.
-- Code scanning (CodeQL).
-- 2FA obrigatorio para colaboradores.
-- Self-hosted runner: visibilidade do repo (deve ser privado), labels
-  restritos, environment com required reviewers para `production`.
-**Acao sugerida**: configurar tudo via web `Settings > Branches`/`Security`.
-Documentar no `ark/docs/contas-e-acessos.md`.
+### P2 — GitHub repo hardening 🟡 PARCIAL (dependabot.yml feito, resto operador)
+
+**Estado**:
+- ✅ `.github/dependabot.yml` adicionado: pip + npm (frontend/landing) + docker
+  + github-actions, schedule weekly Monday, groups minor/patch, ignore
+  uuid major (breaking change pendente operador).
+- 🟡 Branch protection na `main`: NAO confirmado. Hoje push direto aciona
+  CD sem review.
+- 🟡 Secret scanning + push protection: NAO confirmado.
+- 🟡 CodeQL: NAO confirmado.
+- 🟡 Environment `production` com required reviewer: deploy.yml ja usa
+  `environment: production` (linha 31), mas reviewer NAO configurado
+  (verificar via web).
+- 🟡 2FA obrigatorio: NAO confirmado.
+- 🟡 Visibilidade do repo: NAO confirmado (deve ser PRIVADO pelo
+  self-hosted runner).
+
+**Pendente operador (~30min web)**: runbook detalhado em
+`ark/docs/github-repo-hardening.md` — passos 1-8 com prints de tela
+e validacao pos-config.
+
+**Custo**: depende do plano GitHub. Free tier nao tem secret scanning/
+CodeQL em repo privado. Mitigacao: pre-commit hook com `gitleaks` +
+pip-audit/npm audit no CI (ja proposto em P1.5).
 
 ### P3 — Cloudflare hardening 🟡
 **Por que importa**: CF e a primeira camada de defesa. Default config
