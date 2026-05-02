@@ -14,6 +14,7 @@ class InfluxDBCapturador:
     def __init__(self, lancar_erro=False):
         self.metricas = []
         self.web_vitals = []
+        self.custom_events = []
         self.lancar_erro = lancar_erro
 
     def write_temporal_metrics_async(self, metrica):
@@ -23,6 +24,9 @@ class InfluxDBCapturador:
 
     def write_web_vital_async(self, metrica):
         self.web_vitals.append(metrica)
+
+    def write_custom_event_async(self, metrica):
+        self.custom_events.append(metrica)
 
 
 def payload_valido(id_registro: str | None = None):
@@ -95,7 +99,9 @@ class ServicoIngestaoFluxoFelizTest(unittest.TestCase):
         self.assertEqual(len(capturador.web_vitals), 1)
         self.assertEqual(capturador.web_vitals[0].nome, 'LCP')
 
-    def test_resumo_to_dict_schema_1_1_sucesso(self):
+    def test_resumo_to_dict_schema_1_2_sucesso(self):
+        # Bump 1.1 -> 1.2 acompanha SDK v0.4 (aceita user_id/group_id no envelope).
+        # Backend continua aceitando SDK 1.1 — bump nao quebra clientes antigos.
         resumo = ResumoIngestao(
             status='success',
             id_registro='r1',
@@ -106,7 +112,7 @@ class ServicoIngestaoFluxoFelizTest(unittest.TestCase):
             backpressure_hint='ok',
         )
         self.assertEqual(resumo.to_dict(), {
-            'schema_version': '1.1',
+            'schema_version': '1.2',
             'status': 'success',
             'id_registro': 'r1',
             'tipo_envio': 'temporal',
@@ -162,7 +168,7 @@ class ServicoIngestaoFluxoInvalidoTest(unittest.TestCase):
         self.assertEqual(resumo.status, 'error')
         self.assertEqual(resumo.code, 'INVALID_TIMESTAMP')
 
-    def test_resumo_to_dict_schema_1_1_erro(self):
+    def test_resumo_to_dict_schema_1_2_erro(self):
         resumo = ResumoIngestao(
             status='error',
             code='INVALID_ANALYTICS_PAYLOAD',
@@ -173,7 +179,7 @@ class ServicoIngestaoFluxoInvalidoTest(unittest.TestCase):
             server_time_ms=1714750000000,
         )
         payload = resumo.to_dict()
-        self.assertEqual(payload['schema_version'], '1.1')
+        self.assertEqual(payload['schema_version'], '1.2')
         self.assertEqual(payload['status'], 'error')
         self.assertEqual(payload['code'], 'INVALID_ANALYTICS_PAYLOAD')
         self.assertEqual(payload['fields'], ['id_registro', 'paginas'])
@@ -197,6 +203,126 @@ class ServicoIngestaoResilienciaTest(unittest.TestCase):
         servico = ServicoIngestao(influxdb_service=None)
         resumo = servico.ingerir(session_id='s1', data=payload_valido())
         self.assertEqual(resumo.status, 'success')
+
+
+class ServicoIngestaoUserIdGroupIdTest(unittest.TestCase):
+    """Schema 1.2 (SDK v0.4): user_id / group_id no envelope viajam ate o
+    InfluxDB como user_bucket (tag, 256 bins via sha256) + user_id (field)
+    e simetricamente para group. Decisao D1 opcao C — ver memoria
+    project_api_prefix_redundancia / roadmap SDK v0.4.
+
+    Tests asseguram que cada Metric capturado expoe os 4 campos:
+      - user_bucket (Optional[str], 'b000'..'b255' ou None)
+      - user_id (Optional[str], string opaca exata do envelope)
+      - group_bucket (idem)
+      - group_id (idem)
+    """
+
+    def setUp(self):
+        resetar_idempotencia()
+
+    def test_payload_com_user_id_propaga_pra_metric_temporal(self):
+        cap = InfluxDBCapturador()
+        servico = ServicoIngestao(influxdb_service=cap)
+        payload = payload_valido()
+        payload['user_id'] = 'u-42'
+
+        servico.ingerir(session_id='s1', data=payload)
+
+        self.assertEqual(len(cap.metricas), 1)
+        m = cap.metricas[0]
+        self.assertEqual(m.user_id, 'u-42')
+        self.assertIsNotNone(m.user_bucket)
+        self.assertRegex(m.user_bucket, r'^b\d{3}$')
+
+    def test_payload_com_group_id_propaga_independente(self):
+        cap = InfluxDBCapturador()
+        servico = ServicoIngestao(influxdb_service=cap)
+        payload = payload_valido()
+        payload['group_id'] = 'acme-corp'
+
+        servico.ingerir(session_id='s1', data=payload)
+
+        m = cap.metricas[0]
+        self.assertEqual(m.group_id, 'acme-corp')
+        self.assertIsNotNone(m.group_bucket)
+        self.assertRegex(m.group_bucket, r'^b\d{3}$')
+        # Sem user_id no payload, fields ficam None (nao escrevem nada no Point).
+        self.assertIsNone(m.user_id)
+        self.assertIsNone(m.user_bucket)
+
+    def test_payload_sem_identidade_metric_tem_none(self):
+        cap = InfluxDBCapturador()
+        servico = ServicoIngestao(influxdb_service=cap)
+
+        servico.ingerir(session_id='s1', data=payload_valido())
+
+        m = cap.metricas[0]
+        self.assertIsNone(m.user_id)
+        self.assertIsNone(m.user_bucket)
+        self.assertIsNone(m.group_id)
+        self.assertIsNone(m.group_bucket)
+
+    def test_user_id_propaga_pra_web_vital(self):
+        # web_vital esta no fixture payload_valido (LCP). Tem que carregar
+        # user_id/group_id pra retention de performance por user funcionar.
+        cap = InfluxDBCapturador()
+        servico = ServicoIngestao(influxdb_service=cap)
+        payload = payload_valido()
+        payload['user_id'] = 'u-perf'
+
+        servico.ingerir(session_id='s1', data=payload)
+
+        self.assertEqual(len(cap.web_vitals), 1)
+        wv = cap.web_vitals[0]
+        self.assertEqual(wv.user_id, 'u-perf')
+        self.assertIsNotNone(wv.user_bucket)
+
+    def test_user_id_propaga_pra_custom_event(self):
+        cap = InfluxDBCapturador()
+        servico = ServicoIngestao(influxdb_service=cap)
+        payload = payload_valido()
+        # Adiciona um custom event ao fixture pra exercitar a rota.
+        agora_ms = payload['timestamp_final']
+        payload['paginas']['/'][0]['eventos'].append({
+            'tipo': 'custom',
+            'timestamp': agora_ms - 1000,
+            'dados': {'nome': 'botao_clicado', 'propriedades': {}},
+        })
+        payload['user_id'] = 'u-custom'
+
+        servico.ingerir(session_id='s1', data=payload)
+
+        self.assertEqual(len(cap.custom_events), 1)
+        ce = cap.custom_events[0]
+        self.assertEqual(ce.user_id, 'u-custom')
+        self.assertIsNotNone(ce.user_bucket)
+
+    def test_user_bucket_deterministico_entre_chamadas(self):
+        # Mesmo user_id em ingestoes diferentes gera mesmo bucket — pre-condicao
+        # core pra retention queries acharem todos os pontos do user.
+        cap = InfluxDBCapturador()
+        servico = ServicoIngestao(influxdb_service=cap)
+        for i in range(3):
+            payload = payload_valido(f'reg-{i}')
+            payload['user_id'] = 'u-deterministico'
+            servico.ingerir(session_id='s1', data=payload)
+
+        buckets = {m.user_bucket for m in cap.metricas}
+        self.assertEqual(len(buckets), 1)
+
+    def test_user_id_e_group_id_tem_namespaces_separados(self):
+        # user_id 'X' e group_id 'X' nao devem cair no mesmo bucket — isso
+        # confundiria correlacao na pivotacao por org.
+        from ingestao.derivacoes import derivar_user_bucket, derivar_group_bucket
+        a = derivar_user_bucket('mesma-string')
+        b = derivar_group_bucket('mesma-string')
+        # Pode coincidir por colisao de hash, mas com namespaces diferentes
+        # a probabilidade e ~1/256. Pegamos um caso conhecido.
+        # 'X' fica em buckets diferentes — namespace user: vs group:.
+        # Se este teste flakar por colisao real, trocar a string fixa.
+        self.assertNotEqual(a, b,
+            f"namespaces deveriam separar — colisao acidental? user={a} group={b}")
 
 
 if __name__ == '__main__':
