@@ -99,6 +99,37 @@ class CustomEventMetric:
     group_bucket: Optional[str] = None
 
 
+@dataclass
+class ConversionEventMetric:
+    """Evento de conversao comercial (__purchase/__signup/__conversion)."""
+    session_id: str
+    page_type: str
+    nome: str    # nome original: __purchase, __signup, __conversion
+    tipo: str    # tipo sem __: purchase, signup, ou subtipo de __conversion
+    propriedades: Dict[str, Any]
+    valor: Optional[float] = None
+    moeda: Optional[str] = None
+    plano: Optional[str] = None
+    timestamp: Optional[datetime] = None
+    user_agent: Optional[str] = None
+    ip_address: Optional[str] = None
+    app_id: Optional[str] = None
+    ambiente: Optional[str] = None
+    device_type: Optional[str] = None
+    pais: Optional[str] = None
+    referrer_dominio: Optional[str] = None
+    user_id: Optional[str] = None
+    user_bucket: Optional[str] = None
+    group_id: Optional[str] = None
+    group_bucket: Optional[str] = None
+
+
+# Nomes de eventos SDK internos que NAO devem entrar nos pipelines de storage.
+_EVENTOS_IDENTIDADE = frozenset({"__identify", "__group", "__reset"})
+# Nomes de eventos comerciais: roteados para conversion_events.
+_EVENTOS_CONVERSAO = frozenset({"__purchase", "__signup", "__conversion"})
+
+
 def _aplicar_identidade(point, metric) -> "Point":
     """Aplica tags/fields de identidade (schema 1.2) a um Point ja construido.
 
@@ -267,6 +298,51 @@ class InfluxDBService:
         if not self.enabled:
             return
         self.executor.submit(lambda: self.write_custom_event(metric, bucket=bucket))
+
+    def write_conversion_event(self, metric: ConversionEventMetric, bucket: Optional[str] = None) -> bool:
+        if not self.enabled:
+            return False
+        try:
+            point = (
+                Point("conversion_events")
+                .tag("session_id", metric.session_id)
+                .tag("page_type", metric.page_type)
+                .tag("tipo", metric.tipo)
+                .tag("app_id", metric.app_id)
+                .tag("ambiente", metric.ambiente)
+                .tag("device_type", metric.device_type or "unknown")
+                .tag("pais", metric.pais or "unknown")
+                .tag("referrer_dominio", metric.referrer_dominio or "direto")
+                .field("ip_address", metric.ip_address or "unknown")
+                .field("ocorrencias", 1)
+                .field("user_agent", metric.user_agent or "unknown")
+                .time(metric.timestamp or datetime.now(timezone.utc))
+            )
+            if metric.valor is not None:
+                point = point.field("valor", float(metric.valor))
+            if metric.moeda:
+                point = point.field("moeda", metric.moeda)
+            if metric.plano:
+                point = point.field("plano", metric.plano)
+            for chave, valor in (metric.propriedades or {}).items():
+                chave_sanitizada = f"prop_{chave}"
+                if isinstance(valor, bool):
+                    point = point.field(chave_sanitizada, valor)
+                elif isinstance(valor, (int, float)):
+                    point = point.field(chave_sanitizada, float(valor))
+                elif isinstance(valor, str):
+                    point = point.field(chave_sanitizada, valor)
+            point = _aplicar_identidade(point, metric)
+            self.write_api.write(bucket=bucket or self.bucket, record=point)
+            return True
+        except Exception as e:
+            logging.error(f"Erro ao escrever conversion_events: {str(e)}")
+            return False
+
+    def write_conversion_event_async(self, metric: ConversionEventMetric, bucket: Optional[str] = None):
+        if not self.enabled:
+            return
+        self.executor.submit(lambda: self.write_conversion_event(metric, bucket=bucket))
 
     # ==================== QUERIES ====================
 
@@ -685,6 +761,9 @@ def create_custom_events_from_heatmap(session_id: str, heatmap_data: dict,
             nome = dados.get('nome')
             if not nome:
                 continue
+            # Eventos SDK internos (identidade + comerciais) nao entram aqui.
+            if nome in _EVENTOS_IDENTIDADE or nome in _EVENTOS_CONVERSAO:
+                continue
             propriedades = dados.get('propriedades') or {}
             if not isinstance(propriedades, dict):
                 propriedades = {}
@@ -694,6 +773,86 @@ def create_custom_events_from_heatmap(session_id: str, heatmap_data: dict,
                 page_type=page_type,
                 nome=str(nome),
                 propriedades=propriedades,
+                timestamp=datetime.now(timezone.utc),
+                user_agent=user_agent,
+                ip_address=ip_address,
+                app_id=app_id,
+                ambiente=ambiente,
+                device_type=device_type,
+                pais=pais,
+                referrer_dominio=referrer_dominio,
+                user_id=user_id,
+                user_bucket=user_bucket,
+                group_id=group_id,
+                group_bucket=group_bucket,
+            ))
+
+    return resultado
+
+
+def create_conversion_events_from_heatmap(session_id: str, heatmap_data: dict,
+                                          user_agent: str = None, ip_address: str = None,
+                                          device_type: str = None, pais: str = None,
+                                          referrer_dominio: str = None,
+                                          user_id: str = None, user_bucket: str = None,
+                                          group_id: str = None, group_bucket: str = None,
+                                          ) -> List[ConversionEventMetric]:
+    """Extrai eventos comerciais (__purchase/__signup/__conversion) do heatmap."""
+    resultado: List[ConversionEventMetric] = []
+
+    paginas = {}
+    if isinstance(heatmap_data.get('paginas'), dict):
+        paginas.update(heatmap_data['paginas'])
+
+    app_id = heatmap_data.get('app_id') if isinstance(heatmap_data, dict) else None
+    ambiente = heatmap_data.get('ambiente') if isinstance(heatmap_data, dict) else None
+
+    for page_type, page_data in paginas.items():
+        page_info = _extrair_pagina(page_data)
+        if not page_info:
+            continue
+
+        for evento in page_info.get('eventos', []) or []:
+            if not isinstance(evento, dict) or evento.get('tipo') != 'custom':
+                continue
+            dados = evento.get('dados') or {}
+            nome = dados.get('nome')
+            if nome not in _EVENTOS_CONVERSAO:
+                continue
+            propriedades = dados.get('propriedades') or {}
+            if not isinstance(propriedades, dict):
+                propriedades = {}
+
+            if nome == '__purchase':
+                tipo = 'purchase'
+                raw = propriedades.get('value')
+                valor = float(raw) if isinstance(raw, (int, float)) and not isinstance(raw, bool) else None
+                moeda = str(propriedades['currency']) if propriedades.get('currency') else None
+                plano = None
+            elif nome == '__signup':
+                tipo = 'signup'
+                valor = None
+                moeda = None
+                plano = str(propriedades['plan']) if propriedades.get('plan') else None
+            else:  # __conversion
+                tipo = str(propriedades.get('type', 'conversion')).strip() or 'conversion'
+                raw = propriedades.get('value')
+                valor = float(raw) if isinstance(raw, (int, float)) and not isinstance(raw, bool) else None
+                moeda = None
+                plano = None
+
+            campos_extraidos = {'value', 'currency', 'plan', 'type'}
+            props_extras = {k: v for k, v in propriedades.items() if k not in campos_extraidos}
+
+            resultado.append(ConversionEventMetric(
+                session_id=session_id,
+                page_type=page_type,
+                nome=str(nome),
+                tipo=tipo,
+                propriedades=props_extras,
+                valor=valor,
+                moeda=moeda,
+                plano=plano,
                 timestamp=datetime.now(timezone.utc),
                 user_agent=user_agent,
                 ip_address=ip_address,
