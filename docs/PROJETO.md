@@ -535,13 +535,13 @@ docker exec portifolio-influxdb influx backup /var/lib/influxdb2/backups
 | ✅ ~~**P1**~~ | ~~Endpoint `GET /cliente/exportar`~~ — **feito 2026-05-01**, listagem JSON + download via 302 signed URL R2 (TTL 5min), auth via cookie cliente_session, anti-IDOR via slug derivado do site_id | — | — | — |
 | ✅ ~~**P1**~~ | ~~Email diário com counts agregados de rejeições~~ — **feito 2026-05-02**, `backend/scripts/email_diario.py` + container email-cron opt-in (PRs #57/#58); ativar requer `RESEND_API_KEY` no vault | — | — | — |
 | 🟡 **P1** | Backup offline de credenciais (1Password ou age key + pen drive): vault Ansible, recovery codes, age key dos backups | Recovery em catástrofe | externo + processo | 1-2h |
-| 🟢 **P2** | **Upgrade de plano** (billing Stripe ou MercadoPago — webhook → atualiza `sites.plano` + quotas) | Cliente Pro/Business sem caminho de pagamento | new `backend/billing/` | 5-7d |
+| 🚧 **P2** | **Upgrade de plano** — `POST /billing/checkout` implementado (cria sessao Stripe Checkout via urllib, 7 testes); webhook + plano_service ja prontos. Falta: `STRIPE_API_KEY` + `STRIPE_PRICE_IDS` + `STRIPE_WEBHOOK_SECRET` no vault Ansible para ativar em prod | Cliente Pro/Business sem caminho de pagamento | `backend/billing/routes.py`, `backend/billing/stripe_webhook.py` | vault + deploy |
 | 🟢 **P2** | Onda 1 do contrato SDK↔Backend: cache LRU idempotência + retry exponencial + dead-letter | Onda 2 e 3 dependem | SDK repo + `backend/ingestao/` | 3-5d |
 | 🟢 **P2** | Onda 2: validação timestamp + skew correction + overflow priority | Onda 3 depende | SDK repo | 2-3d |
 | 🟢 **P2** | Onda 3: backpressure dinâmico + schema version negotiation | Coordenação dinâmica em escala | SDK + backend | 2-3d |
 | ✅ ~~**P2**~~ | ~~CORS dinâmico via `sites.dominios_permitidos`~~ — **feito 2026-05-02**, `backend/ingestao/origins_dinamicos.py` consulta `site_dominios` em runtime | — | — | — |
 | ✅ ~~**P2**~~ | ~~Tags derivadas server-side: `device_type`, `pais` (GeoIP), `referrer_dominio`~~ — **feito 2026-05-02**, `backend/ingestao/derivacoes.py` | — | — | — |
-| 🟢 **P2** | Org-per-cliente fim-a-fim no Grafana: `/gate` força membership idempotente | Cliente cai na "Main Org" hoje | `cliente_routes.py:gate()` + Grafana API | 1-2d |
+| ✅ ~~**P2**~~ | ~~Org-per-cliente fim-a-fim no Grafana: `/gate` força membership idempotente~~ — **implementado**, `backend/auth/grafana_sync.py` com `GrafanaSyncService` (TTL cache 1h, idempotente via add_org_user + set_user_current_org); ativado quando `GRAFANA_URL` + creds presentes | — | — | — |
 | 🟢 **P3** | Backend `/metrics` Prometheus-client | Dashboards de operação | `backend/app.py` + scrape config | 1d |
 | 🟢 **P3** | DNS Cloudflare: criar `portifolio.dsplayground.com.br` CNAME proxiado | Subdomínio portfolio pessoal não resolve | painel CF | 5min |
 | 🟢 **P3** | Validação E2E nos 5 cenários de recovery em `ark/teste-ambiente-{a,b}` | SLO interno antes de virar chave comercial | `ark/teste-ambiente-*/` | 1-2d cada |
