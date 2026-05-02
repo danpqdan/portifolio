@@ -437,9 +437,9 @@ describe('500.astro', () => {
     expect(html).toContain('noindex');
   });
 
-  test('disclosure de issue tracker', async () => {
+  test('disclosure de email contato@ (repo privado, sem GitHub publico)', async () => {
     const html = await render(Erro500);
-    expect(html).toContain('github.com/danpqdan/portifolio/issues');
+    expect(html).toContain('mailto:contato@dsplayground.com.br');
   });
 });
 
@@ -681,10 +681,11 @@ describe('changelog.astro', () => {
     expect(html).toContain('manutenção');
   });
 
-  test('CTA pra GitHub commits + sugerir feature', async () => {
+  test('CTA pra mandar sugestão (mailto, sem GitHub — repo privado)', async () => {
     const html = await render(Changelog);
-    expect(html).toMatch(/data-cta="changelog-github"/);
     expect(html).toMatch(/data-cta="changelog-sugerir"/);
+    expect(html).not.toContain('changelog-github');
+    expect(html).not.toMatch(/github\.com\/[^/]+\/portifolio\/commits/);
   });
 
   test('lista features dos PRs recentes (Onboarding, abas, embed)', async () => {
@@ -722,10 +723,10 @@ describe('status.astro', () => {
     expect(html).toMatch(/data-cta="status-embed-detalhe"/);
   });
 
-  test('CTA pra reportar incidente vai pra issue tracker', async () => {
+  test('CTA pra reportar incidente vai pra mailto contato@', async () => {
     const html = await render(Status);
     expect(html).toMatch(/data-cta="status-reportar"/);
-    expect(html).toContain('labels=incident');
+    expect(html).toContain('mailto:contato@dsplayground.com.br');
   });
 
   test('elemento de "ultima verificacao" presente pra hidratar', async () => {
