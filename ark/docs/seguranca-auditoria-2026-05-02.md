@@ -418,20 +418,26 @@ e validacao pos-config.
 CodeQL em repo privado. Mitigacao: pre-commit hook com `gitleaks` +
 pip-audit/npm audit no CI (ja proposto em P1.5).
 
-### P3 — Cloudflare hardening 🟡
-**Por que importa**: CF e a primeira camada de defesa. Default config
-deixa muita coisa sem protecao.
-**Investigar**:
-- Bot Fight Mode ligado? Super Bot Fight Mode (paid)?
-- WAF rules: managed rules ativas? OWASP ruleset?
-- Rate limit no edge (alem do nginx): 100req/min por IP em paths sensiveis?
-- Page rules / custom rules: bloquear paths nao usados (`/wp-admin`, etc).
-- Always Use HTTPS + Automatic HTTPS Rewrites: ON.
-- TLS 1.3 only no edge (CF -> client).
-- Origin pull config: client cert auth pra garantir que so CF chega no
-  origin (compromisso entre simplicidade e seguranca).
-- DNSSEC habilitado.
-**Acao sugerida**: revisar dashboard CF em sessao dedicada.
+### P3 — Cloudflare hardening 🟡 PARCIAL (checklist pronto, operador aplica)
+**Estado**: checklist detalhado em `ark/docs/cloudflare-hardening.md` —
+~30 itens organizados em 9 secoes (SSL/TLS, WAF, Rate limit, DNS, Speed,
+Caching, Workers/Pages, Notifications, Audit Logs). Cada item tem
+checkbox `[ ]` pra marcar quando aplicado + commit do doc.
+
+**Por que e operador-only**: dashboard CF nao tem API stable pra automatizar
+todos os toggles, e mudancas de WAF/firewall em prod precisam revisao
+manual de **Security → Events** logo apos pra detectar trafego legitimo
+bloqueado.
+
+**Quick wins (fazer primeiro, sem custo, baixo risco)**:
+- Always Use HTTPS, HSTS, TLS 1.3 only, Automatic HTTPS Rewrites
+- Cloudflare Managed Ruleset (WAF free tier)
+- Bot Fight Mode
+- DNSSEC
+- HTTP DDoS Attack Alerter (email)
+
+**Item adiado mesmo dentro de P3**: Authenticated Origin Pulls (mTLS
+CF→origin) — alto risco de quebrar trafego se nginx config errar.
 
 ### P4 — Observabilidade de seguranca 🟢
 **Por que importa**: se algo dar errado as 3am, ninguem sabe. Hoje os
