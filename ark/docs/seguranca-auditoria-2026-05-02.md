@@ -445,20 +445,25 @@ logs existem (security.log + nginx access) mas ninguem alerta.
 - Alarmes de cert expiration (origin CF + SSH host keys).
 **Acao sugerida**: configurar Alertmanager + canal de alerta dedicado.
 
-### P5 — Lifecycle de credenciais 🟢
-**Por que importa**: credenciais que nunca rodam acumulam superficie.
-Hoje cada token tem cadencia diferente (ou nenhuma).
-**Investigar**:
-- Cadence formal: postgres (180d), influx admin (180d), admin api (30d),
-  stripe (sob demanda), resend (180d), grafana admin (180d), JWT signing
-  keys (1y).
-- Procedimento documentado pra cada (passos, validacao, rollback).
-- Calendar reminders / cron jobs que abrem PR de "rotacao [token] vence
-  em 7d".
-- Recovery: e se o vault password file (`/opt/portifolio/.vault-password`)
-  for perdido? Backup off-site dele?
-**Acao sugerida**: tabela `ark/docs/credenciais-cadence.md` + cron de
-reminder.
+### P5 — Lifecycle de credenciais 🟡 PARCIAL (doc + cron pronto, rotacoes pendentes)
+**Estado**: cadencia + procedimento por credencial em
+`ark/docs/credenciais-cadence.md`. Tracking estruturado em
+`ark/docs/credenciais-rotacoes.yml` (formato yml com `cadence_days` +
+`last_rotated`). Workflow GHA `credenciais-rotacao-reminder.yml`
+roda dia 1 de cada mes 09:00 UTC e abre issue agregando todas as
+credenciais com `next_due <= today + 7d`.
+
+**11 credenciais pendentes de 1a rotacao** (geram issue na 1a execucao
+do workflow): ADMIN_API_TOKEN, INFLUXDB_TOKEN, flask_secret_key,
+RESEND_API_KEY, R2_credentials, GRAFANA_ADMIN_PASSWORD, NODE_AUTH_TOKEN,
+sdk_jwt_RSA_keys, SSH_host_keys, vault_password_file,
+self_hosted_runner_PAT.
+
+**Pendente**: ainda nao ha backup off-site do `.vault-password` —
+se filesystem do host for perdido, vault inacessivel. Procedimento
+de rotacao do vault em `credenciais-cadence.md` ja inclui passo
+"copiar pra cofre off-site" mas exige acao manual do operador
+(1Password/Bitwarden/cofre fisico).
 
 ### P6 — Postgres + Influx ops 🟢
 - Postgres: pg_hba.conf restrito? Connection limit? `log_statement = ddl`
@@ -504,6 +509,21 @@ reminder.
   ativam kernel `611.49.1` (de `611.47.1`) + 8 outros pacotes. Edge e
   containers validados pos-boot. P1.5 pip-audit no CI e P1 frontend
   uuid dead-dep removido (PRs em revisao).
+- **2026-05-04** — P1 imagens monitoring bumpadas (mesma major):
+  grafana 11.2.0→11.6.14, prometheus v2.54.1→v2.55.1, node-exporter
+  v1.8.2→v1.11.1, crowdsec v1.6.3→v1.6.11. Recreate via
+  `monitoring-up`/`crowdsec-up` validado em runtime.
+- **2026-05-04** — Dependabot pip rodada 1: tzdata 2025.2→2026.2 +
+  21 deps minor/patch (eventlet, socketio/engineio, psycopg, etc).
+  Backend recriado, healthchecks 200.
+- **2026-05-04** — B1 SHAs das Actions pinados (commit beedde2). Supply
+  chain de Actions externas mitigado: 5 actions (`checkout`, `setup-python`,
+  `setup-node`, `setup-buildx`, `build-push`) agora pinadas em commit SHA.
+- **2026-05-04** — P5 lifecycle de credenciais documentado: tabela
+  `ark/docs/credenciais-cadence.md` + tracking `credenciais-rotacoes.yml`
+  + workflow GHA agendado (1o dia do mes 09 UTC) que abre issue se
+  alguma credencial vence em <=7d. 11 credenciais nunca rotacionadas
+  geram issue na 1a execucao — usar como ponto de partida.
 
 ---
 
