@@ -421,6 +421,18 @@ try:
         ttl_segundos=int(os.environ.get("CORS_DINAMICO_TTL_SEGUNDOS", "60")),
     )
 
+    # Housekeeping de embed_jwt_revogados — best-effort. TTL_MAX do JWT
+    # embed e 24h hoje; mantemos 48h de retencao pra cobrir clock-skew
+    # e re-rotacoes proximas. Nao quebra boot se falhar.
+    try:
+        _apagados = _tenants_repo_singleton.purgar_embed_jwt_revogados_antigos(retencao_horas=48)
+        if _apagados:
+            log_safe(security_logger, 'info',
+                     f"[BOOT] embed_jwt_revogados housekeeping: apagados={_apagados}")
+    except Exception as _e:
+        log_safe(security_logger, 'warning',
+                 f"[BOOT] housekeeping embed_jwt_revogados falhou: {type(_e).__name__}")
+
     log_safe(security_logger, 'info', "[SUCCESS] Auth multi-tenant inicializado")
 except Exception as e:
     log_safe(security_logger, 'error', f"[ERROR] Falha ao inicializar auth: {str(e)}")
@@ -975,6 +987,80 @@ def admin_sessao_apagar(session_id):
         "session_id": session_id,
         "apagado": sucesso,
     })
+
+
+@api_bp.route("/admin/embed/revogar", methods=["POST"])
+@limiter.limit("20 per minute")
+def admin_embed_revogar():
+    """Revoga um jti de embed JWT — completa item A5 da auditoria.
+
+    Body JSON: {"jti": "<uuid>", "motivo": "<texto opcional>"}
+    Idempotente: ON CONFLICT DO NOTHING. Verificacao em /embed/dados ja
+    consulta `embed_jwt_revogados`, entao revogacao e instantanea.
+    """
+    ok, motivo_auth = _verificar_token_admin()
+    if not ok:
+        _registrar_audit('embed_revogar', '', f'auth_falhou:{motivo_auth}')
+        return jsonify({"status": "error", "code": "UNAUTHORIZED", "message": motivo_auth}), 401
+
+    body = request.get_json(silent=True) or {}
+    jti = (body.get('jti') or '').strip()
+    motivo = (body.get('motivo') or '').strip() or None
+
+    if not jti or len(jti) > 64:
+        _registrar_audit('embed_revogar', jti, 'jti_invalido')
+        return jsonify({"status": "error", "code": "BAD_REQUEST",
+                        "message": "campo `jti` obrigatorio (1..64 chars)"}), 400
+
+    try:
+        _tenants_repo_singleton.revogar_jti_embed(jti, motivo=motivo)
+    except Exception as erro:
+        _registrar_audit('embed_revogar', jti, f'erro_repo:{type(erro).__name__}')
+        return jsonify({"status": "error", "code": "INTERNAL"}), 500
+
+    _registrar_audit('embed_revogar', jti, f'ok motivo={motivo or "-"}')
+    return jsonify({"status": "success", "jti": jti, "revogado": True})
+
+
+@api_bp.route("/admin/embed/housekeeping", methods=["POST"])
+@limiter.limit("6 per minute")
+def admin_embed_housekeeping():
+    """Apaga linhas antigas de embed_jwt_revogados (default >48h).
+
+    Body JSON: {"retencao_horas": 48}  (opcional, range 24..720).
+    Pode ser chamado por systemd timer no host pra rodar diariamente:
+
+      curl -X POST -H "Authorization: Bearer $ADMIN_API_TOKEN" \\
+           https://api.dsplayground.com.br/admin/embed/housekeeping
+
+    No boot do backend ja roda 1x best-effort.
+    """
+    ok, motivo_auth = _verificar_token_admin()
+    if not ok:
+        _registrar_audit('embed_housekeeping', '', f'auth_falhou:{motivo_auth}')
+        return jsonify({"status": "error", "code": "UNAUTHORIZED", "message": motivo_auth}), 401
+
+    body = request.get_json(silent=True) or {}
+    retencao = body.get('retencao_horas', 48)
+    try:
+        retencao = int(retencao)
+    except (TypeError, ValueError):
+        return jsonify({"status": "error", "code": "BAD_REQUEST",
+                        "message": "retencao_horas deve ser inteiro"}), 400
+    if not (24 <= retencao <= 720):
+        return jsonify({"status": "error", "code": "BAD_REQUEST",
+                        "message": "retencao_horas deve estar entre 24 e 720"}), 400
+
+    try:
+        apagados = _tenants_repo_singleton.purgar_embed_jwt_revogados_antigos(
+            retencao_horas=retencao,
+        )
+    except Exception as erro:
+        _registrar_audit('embed_housekeeping', '', f'erro_repo:{type(erro).__name__}')
+        return jsonify({"status": "error", "code": "INTERNAL"}), 500
+
+    _registrar_audit('embed_housekeeping', '', f'ok apagados={apagados} retencao_h={retencao}')
+    return jsonify({"status": "success", "apagados": apagados, "retencao_horas": retencao})
 
 
 # ✅ REGISTRAR BLUEPRINT
