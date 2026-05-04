@@ -96,8 +96,21 @@ Origem: auditoria automatica + revisao manual em branch
 - Claim `jti` (UUID4) em emissao + `options.require`. Tabela
   `embed_jwt_revogados (jti PK)` + `repo.jti_embed_esta_revogado()` em
   `/embed/dados`. TTL curto continua primeira defesa. Commit: `ee231b5`.
-- **TODO**: criar `POST /admin/embed/revogar` + cron de housekeeping
-  (entradas com `revogado_em > exp+24h`).
+- **TODO** (resolvido 2026-05-04): `POST /admin/embed/revogar` +
+  housekeeping criados.
+  - Endpoint admin `POST /admin/embed/revogar` aceita `{jti, motivo?}`,
+    valida ADMIN_API_TOKEN, chama `repo.revogar_jti_embed`. Idempotente
+    via ON CONFLICT DO NOTHING.
+  - Endpoint admin `POST /admin/embed/housekeeping` aceita
+    `{retencao_horas: 48}` (range 24..720), chama
+    `repo.purgar_embed_jwt_revogados_antigos`. Boot do backend roda
+    1x best-effort.
+  - Systemd timer `embed-housekeeping.timer` (04:30 UTC daily) +
+    `embed-housekeeping.service` em `ark/systemd/` — instalar com
+    `sudo cp ark/systemd/embed-housekeeping.* /etc/systemd/system/ &&
+     sudo systemctl daemon-reload && sudo systemctl enable --now
+     embed-housekeeping.timer`.
+  - Tests em `backend/test_admin_embed_revogar.py` (4/4 pass).
 
 #### A6. Network isolation no compose ⏸ ADIADO
 - **Razao**: monitoring/crowdsec usam `portifolio_default external: true`.
