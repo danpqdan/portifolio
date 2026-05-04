@@ -116,6 +116,11 @@ class TenantsRepo(Protocol):
     # revogacao embed jwt
     def jti_embed_esta_revogado(self, jti: str) -> bool: ...
     def revogar_jti_embed(self, jti: str, *, motivo: Optional[str] = None) -> None: ...
+    def purgar_embed_jwt_revogados_antigos(self, retencao_horas: int = 48) -> int: ...
+    """Apaga linhas de embed_jwt_revogados com revogado_em < now - retencao_horas.
+    Retorna quantidade apagada. Chamado no boot do backend (best-effort) e em
+    POST /admin/embed/housekeeping. Default 48h cobre TTL_MAX do JWT embed
+    (24h hoje) com folga."""
 
 
 # ======================================================================
@@ -408,6 +413,15 @@ class SqliteTenantsRepo:
                 "INSERT OR IGNORE INTO embed_jwt_revogados (jti, motivo) VALUES (?, ?)",
                 (jti, motivo),
             )
+
+    def purgar_embed_jwt_revogados_antigos(self, retencao_horas=48):
+        with self._lock, self._connect() as conn:
+            cur = conn.execute(
+                "DELETE FROM embed_jwt_revogados "
+                "WHERE revogado_em < datetime('now', ? || ' hours')",
+                (f'-{int(retencao_horas)}',),
+            )
+            return cur.rowcount or 0
 
 
 def _row_to_site(row: sqlite3.Row) -> Site:
@@ -732,6 +746,15 @@ class PostgresTenantsRepo:
                 "ON CONFLICT (jti) DO NOTHING",
                 (jti, motivo),
             )
+
+    def purgar_embed_jwt_revogados_antigos(self, retencao_horas=48):
+        with self._conn() as conn, conn.cursor() as cur:
+            cur.execute(
+                "DELETE FROM embed_jwt_revogados "
+                "WHERE revogado_em < NOW() - (%s || ' hours')::interval",
+                (str(int(retencao_horas)),),
+            )
+            return cur.rowcount or 0
 
 
 def _dict_row():
