@@ -433,17 +433,38 @@ deixa muita coisa sem protecao.
 - DNSSEC habilitado.
 **Acao sugerida**: revisar dashboard CF em sessao dedicada.
 
-### P4 — Observabilidade de seguranca 🟢
-**Por que importa**: se algo dar errado as 3am, ninguem sabe. Hoje os
-logs existem (security.log + nginx access) mas ninguem alerta.
-**Investigar**:
-- Alertmanager (Prometheus) configurado? Recebe email/Slack/Telegram?
-- CrowdSec metrics no Grafana (decisions/h, alertas/h)?
-- Backend `_LogScrubFilter` joga em security.log — quem le?
-- Cron diario de "report de auditoria": brute force tentativas, admin
-  endpoint hits, embed JWT revoked etc.
-- Alarmes de cert expiration (origin CF + SSH host keys).
-**Acao sugerida**: configurar Alertmanager + canal de alerta dedicado.
+### P4 — Observabilidade de seguranca 🟡 PARCIAL (Alertmanager + 5 regras prontas, falta operador rodar ansible-apply + recreate monitoring)
+**Estado**:
+- Alertmanager v0.32.1 adicionado em `ark/monitoring/docker-compose.monitoring.yml`.
+- Config em `ark/monitoring/alertmanager/alertmanager.yml`: route default
+  + sub-rota critical com repeat agressivo (1h vs 4h), inhibit rule pra
+  silenciar alertas redundantes quando InstanceDown firing.
+- Templates Slack em `ark/monitoring/alertmanager/templates/slack.tmpl`
+  (formato compacto, severity colorido).
+- 5 regras Prometheus em `ark/monitoring/prometheus/rules/alerts.yml`:
+  `InstanceDown`, `HostHighDiskUsage` (>85%/10min),
+  `HostHighMemoryUsage` (>90%/5min), `HostHighCpuLoad` (>90%/15min),
+  `HostFilesystemReadOnly`.
+- Canal de alerta: Slack `#alerts-prod` via Incoming Webhook.
+  Validado end-to-end em 2026-05-04 (smoke direto + alertmanager
+  efemero disparou alerta — chegou no canal com formatacao correta).
+- Vault: `slack_webhook_alerts` adicionado.
+- Role Ansible `monitoring` ganha task que escreve
+  `ark/monitoring/alertmanager/slack_webhook.url` (gitignored, mode
+  0644 porque alertmanager roda como UID 65534).
+
+**Pendente operador (~5min)**:
+1. `make -f ark/Makefile ansible-apply` — escreve `slack_webhook.url`.
+2. `docker compose -f ark/monitoring/docker-compose.monitoring.yml up -d`
+   — sobe o container alertmanager + recria prometheus pra carregar rules.
+3. Validar com smoke test (curl no `/api/v2/alerts`) — procedimento
+   completo no `ark/monitoring/README.md` secao Alertmanager.
+
+**Ainda nao coberto (proxima rodada)**:
+- Alertas de aplicacao via `/metrics` do backend (D.2 plano-backend).
+- Alertas baseados em CrowdSec metrics.
+- Cert expiration (origin CF e 2041, SSH host keys nunca rotacionadas).
+- Cron diario de "report de auditoria" (brute force, admin hits).
 
 ### P5 — Lifecycle de credenciais 🟢
 **Por que importa**: credenciais que nunca rodam acumulam superficie.
