@@ -346,27 +346,24 @@ Fix via `npm audit fix --force` instala uuid@14 (**breaking change**).
 geralmente `uuid.v4()` que continua compativel) e fazer upgrade num PR
 dedicado com testes de build. Landing: 0 vulns.
 
-#### Host RHEL 🟡 PENDENTE OPERADOR (precisa reboot)
-`dnf updateinfo --security` listou 9 advisories Importante/Seg pendentes:
+#### Host RHEL ✅ APLICADO (2026-05-04)
+9 RLSAs pendentes resolvidos via `dnf upgrade --security -y` + reboot:
 
 ```
-RLSA-2026:8921   kernel + kernel-core + kernel-modules
-RLSA-2026:10949  python3 + python3-libs
-RLSA-2026:11504  PackageKit + PackageKit-glib
-RLSA-2026:10708  gdk-pixbuf2
-RLSA-2026:11510  vim-minimal + vim-filesystem
-RLSA-2026:9692   webkit2gtk3-jsc
+RLSA-2026:8921   kernel-core 5.14.0-611.47.1 → 611.49.1
+RLSA-2026:10949  python3 + python3-libs 3.9.25-3.el9_7.2 → 3.el9_7.3
+RLSA-2026:11504  PackageKit + PackageKit-glib 1.2.6-1.el9 → 1.2.6-2.el9_7
+RLSA-2026:10708  gdk-pixbuf2 2.42.6-6.el9_6 → 2.42.6-6.el9_7.1
+RLSA-2026:11510  vim-minimal + vim-filesystem 8.2.2637-23.el9_7.2 → .3
+RLSA-2026:9692   webkit2gtk3-jsc 2.50.4-1 → 2.52.3-0.el9_7.1
 ```
 
-**Operador**: agendar janela com aviso, rodar:
-```bash
-sudo dnf upgrade --security -y
-sudo dnf needs-restarting -r  # 1 = reboot necessario
-sudo systemctl reboot
-```
-
-Apos reboot, validar containers sobem (`docker compose ps`),
-smoke test (`bash ark/scripts/agent-smoke.sh`), CrowdSec ativo.
+Pos-reboot validado:
+- `uname -r` → `5.14.0-611.49.1.el9_7.x86_64` ✅
+- 10 containers com `restart: unless-stopped` subiram automaticamente ✅
+- `/health/app`, `/health/influxdb`, `/health/socketio` → 200 ✅
+- Edge `https://api.dsplayground.com.br/health/app` + `portifolio.X/` → 200 ✅
+- Kernels retidos no GRUB pra rollback: `611.41.1`, `611.47.1` (alem do default `611.49.1`).
 
 #### Imagens base do monitoring 🟡 PENDENTE OPERADOR (avaliar versoes)
 3 imagens com mais de 8 meses (criadas Jul-Sep 2024):
@@ -503,6 +500,10 @@ reminder.
 - **2026-05-02 tarde** — Rodada 2: SSH hardening (host config), Postgres
   role split (`56dd027` + `e600805`). Senha Postgres rotacionada (vault).
 - **2026-05-02 tarde** — Doc consolidado com proximos passos P0-P7.
+- **2026-05-04** — P1 Host RHEL aplicado: `dnf upgrade --security -y` + reboot
+  ativam kernel `611.49.1` (de `611.47.1`) + 8 outros pacotes. Edge e
+  containers validados pos-boot. P1.5 pip-audit no CI e P1 frontend
+  uuid dead-dep removido (PRs em revisao).
 
 ---
 
