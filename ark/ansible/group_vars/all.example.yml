@@ -139,6 +139,17 @@ vite_publishable_key: ""
 grafana_admin_user: admin
 grafana_admin_password: trocar-em-producao
 
+# Slack Incoming Webhook usado pelo Alertmanager pra postar alertas
+# em #alerts-prod. Setup:
+#   1. https://api.slack.com/apps → Create New App → From scratch
+#   2. Features → Incoming Webhooks → Activate ON
+#   3. Add New Webhook to Workspace → escolhe canal #alerts-prod
+#   4. Copia a URL (formato https://hooks.slack.com/services/T.../B.../...)
+#   5. Cola aqui (vault encriptado).
+# Vazio = Alertmanager nao envia notificacoes (containers sobem, mas
+# alertas firing nao chegam em ninguem).
+slack_webhook_alerts: ""
+
 # === SSH / Firewall (Rocky 9 usa firewalld, nao UFW) ===
 # A porta SSH veio definida pelo provedor (HostGator: 22022).
 # Se mudar, atualize tambem aqui e no inventory.

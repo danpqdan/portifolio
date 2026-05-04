@@ -4,7 +4,8 @@ Stack opt-in de observabilidade. Sobe separada do `docker-compose.yml` do app, c
 
 ## Componentes
 
-- **Prometheus** — coleta metricas a cada 15s do backend e do node-exporter.
+- **Prometheus** — coleta metricas a cada 15s do backend e do node-exporter; avalia regras em `prometheus/rules/*.yml` e dispara alertas pro Alertmanager.
+- **Alertmanager** — recebe alertas firing do Prometheus, agrupa, deduplica, encaminha pra Slack `#alerts-prod` via Incoming Webhook (P4 audit).
 - **Grafana** — provisionamento automatico de datasource Prometheus + InfluxDB.
 - **node-exporter** — metricas de host (CPU, memoria, disco).
 
@@ -64,6 +65,49 @@ GF_USERS_AUTO_ASSIGN_ORG_ROLE: Viewer
 ```
 
 Quando o nginx propaga `X-WEBAUTH-USER=<site_id>`, o Grafana auto-cria um user com `username=<site_id>` e role Viewer. Sem o header (acesso direto via `grafana.dsplayground.com.br`), Grafana cai pro login form admin (porque `GF_AUTH_DISABLE_LOGIN_FORM=false`).
+
+## Alertmanager → Slack
+
+Pipeline de alerta: regra Prometheus dispara → Alertmanager agrupa →
+posta no canal `#alerts-prod` via Slack Incoming Webhook.
+
+Regras iniciais (ver `prometheus/rules/alerts.yml`):
+- `InstanceDown` (severity=critical, for=2m) — qualquer container scrape.
+- `HostHighDiskUsage` (>85% por 10min, warning).
+- `HostHighMemoryUsage` (>90% por 5min, warning).
+- `HostHighCpuLoad` (>90% por 15min, warning).
+- `HostFilesystemReadOnly` (FS virou ro, critical).
+
+### Setup do webhook (uma vez por workspace)
+
+1. https://api.slack.com/apps → **Create New App** → From scratch
+2. **Features → Incoming Webhooks** → toggle **Activate**
+3. **Add New Webhook to Workspace** → escolhe `#alerts-prod`
+4. Copia a URL (formato `https://hooks.slack.com/services/T.../B.../...`)
+5. Cola no vault Ansible: `ansible-vault edit ark/ansible/group_vars/all.yml`
+   → `slack_webhook_alerts: "https://hooks.slack.com/services/..."`
+6. `make -f ark/Makefile ansible-apply` — role `monitoring` cria
+   `ark/monitoring/alertmanager/slack_webhook.url` (gitignored, mode
+   `0644` porque alertmanager roda como `nobody` UID 65534 e nao tem
+   acesso ao group `analytics` do host).
+7. Recreate do alertmanager pra recarregar config:
+   `docker compose -f ark/monitoring/docker-compose.monitoring.yml up -d`
+
+### Validacao
+
+```bash
+# config valida?
+docker exec portifolio-alertmanager amtool check-config /etc/alertmanager/alertmanager.yml
+docker exec portifolio-prometheus promtool check rules /etc/prometheus/rules/alerts.yml
+
+# disparar alerta de teste manual:
+curl -X POST http://127.0.0.1:9093/api/v2/alerts \
+  -H 'Content-Type: application/json' \
+  -d '[{"labels":{"alertname":"TesteSmoke","severity":"warning","instance":"manual"},
+       "annotations":{"summary":"smoke test","description":"ignorar"}}]'
+
+# em ate ~30s (group_wait), aparece em #alerts-prod
+```
 
 ## Producao
 
