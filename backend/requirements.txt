@@ -35,7 +35,7 @@ python-dateutil==2.9.0.post0
 python-dotenv==1.2.2
 python-engineio==4.13.1
 python-socketio==5.16.1
-pytz==2025.2
+pytz==2026.2
 reactivex==4.1.0
 rich==14.2.0
 APScheduler==3.11.2
