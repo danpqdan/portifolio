@@ -127,7 +127,12 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
-          pip install pytest ruff moto
+          pip install pytest ruff moto pip-audit
+      - name: pip-audit (falha em qualquer CVE conhecido)
+        # Audita o requirements.txt (nao o ambiente instalado), pra capturar
+        # CVEs antes do pin entrar em prod. Item P1.5 do
+        # ark/docs/seguranca-auditoria-2026-05-02.md.
+        run: pip-audit --strict --requirement requirements.txt
       - name: Ruff (lint — nao bloqueante ate configurar regras)
         run: ruff check . || true
       - name: Pytest (tests sem dependencias externas)
