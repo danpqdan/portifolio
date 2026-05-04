@@ -18,6 +18,7 @@ ark/ansible/group_vars/all.yml
 
 # Monitoring (.env com senha real)
 ark/monitoring/.env
+ark/monitoring/alertmanager/slack_webhook.url
 ark/crowdsec/.env
 
 # Editor

@@ -18,6 +18,20 @@
     group: analytics
     mode: "0640"
 
+- name: Criar arquivo slack_webhook.url do Alertmanager
+  # Bind-mounted como /etc/alertmanager/slack_webhook.url no container.
+  # Alertmanager lê via `slack_api_url_file` no alertmanager.yml.
+  # Mode 0644 porque o container roda como nobody (UID 65534) — 0640
+  # com group=analytics (GID 10001 do host) nao seria legivel ja que
+  # `analytics` nao existe dentro do container. URL Slack tem blast
+  # radius limitado (so posta no canal, nao expoe segredo critico).
+  copy:
+    content: "{{ slack_webhook_alerts | default('') }}"
+    dest: "{{ repo_dir }}/ark/monitoring/alertmanager/slack_webhook.url"
+    owner: "{{ deploy_user }}"
+    group: analytics
+    mode: "0644"
+
 - name: Subir Prometheus + Grafana + node-exporter
   community.docker.docker_compose_v2:
     project_src: "{{ repo_dir }}/ark/monitoring"
