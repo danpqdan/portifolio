@@ -1,6 +1,6 @@
 services:
   crowdsec:
-    image: crowdsecurity/crowdsec:v1.6.3
+    image: crowdsecurity/crowdsec:v1.6.11
     container_name: portifolio-crowdsec
     restart: unless-stopped
     environment:
