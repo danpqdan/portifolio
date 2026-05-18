@@ -38,7 +38,7 @@ ENV VITE_API_URL=$VITE_API_URL \
 RUN npm run build
 
 # ============== Stage 2: runtime servindo dist/ via nginx ==============
-FROM nginx:1.29-alpine AS runtime
+FROM nginx:1.31-alpine AS runtime
 
 RUN rm -rf /usr/share/nginx/html/*
 COPY --from=build /app/dist /usr/share/nginx/html
