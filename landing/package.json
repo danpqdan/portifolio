@@ -15,17 +15,17 @@
   },
   "dependencies": {
     "@danpqdan/dsplayground-analytics-sdk": "^0.4.0",
-    "@tailwindcss/vite": "^4.2.4",
+    "@tailwindcss/vite": "^4.3.1",
     "astro": "^6.2.1",
     "tailwindcss": "^4.2.4"
   },
   "devDependencies": {
     "@astrojs/check": "^0.9.9",
     "@types/node": "^22.7.5",
-    "happy-dom": "^20.9.0",
+    "happy-dom": "^20.10.6",
     "typescript": "^6.0.3",
     "vitest": "^3.2.4",
-    "wrangler": "^4.87.0"
+    "wrangler": "^4.105.0"
   },
   "overrides": {
     "yaml": "^2.8.3"
